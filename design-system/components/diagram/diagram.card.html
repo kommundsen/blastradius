@@ -1,0 +1,68 @@
+<!-- @dsCard group="Components" viewport="700x420" subtitle="Canvas, EdgeLayer, Edge, DiagramNode — the C4 grammar" name="Diagram" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css">
+<style>body{padding:0;font-size:var(--text-sm)}
+.mono{font-family:var(--font-mono);font-size:var(--text-2xs)}
+.note{font-size:var(--text-xs);margin:0;padding:10px 14px}</style></head><body>
+
+<div class="canvas" style="height:330px">
+  <div class="canvas-camera" style="--camera-scale:1">
+    <svg class="edge-layer" aria-hidden="true">
+      <defs>
+        <marker id="br-arrow" viewBox="0 0 10 10" refX="9.5" refY="5"
+                markerWidth="8" markerHeight="8" orient="auto-start-reverse" markerUnits="strokeWidth">
+          <path class="edge-arrow" d="M1.5,1.5 L9,5 L1.5,8.5"/>
+        </marker>
+      </defs>
+
+      <!-- directed -->
+      <path class="edge" d="M110,101 L110,140"/>
+      <text class="edge-label" x="116" y="124" text-anchor="start">HTTPS</text>
+
+      <!-- orthogonal, bidirectional -->
+      <path class="edge is-bidirectional" d="M261,166 L310,166 L310,90 L359,90"/>
+      <text class="edge-label" x="310" y="124" text-anchor="middle">reads / writes</text>
+
+      <!-- secondary, undirected -->
+      <path class="edge is-secondary is-undirected" d="M186,199 L186,246"/>
+      <text class="edge-label" x="192" y="228" text-anchor="start">implied</text>
+
+      <!-- added -->
+      <path class="edge is-added" d="M261,186 L419,246"/>
+      <text class="edge-label" x="340" y="208" text-anchor="middle">RESP</text>
+    </svg>
+
+    <div class="node is-person" style="left:40px;top:40px;width:140px">
+      <span class="node-kicker">Person</span><span class="node-title">Customer</span>
+    </div>
+
+    <div class="node is-container is-active" style="left:110px;top:140px;width:150px">
+      <span class="node-kicker">Container · Go</span><span class="node-title">API</span><span class="node-meta">8 components</span>
+    </div>
+
+    <div class="node is-container" style="left:360px;top:60px;width:150px">
+      <span class="node-kicker">Container · Postgres</span><span class="node-title">Database</span>
+    </div>
+
+    <div class="node is-container is-added" style="left:420px;top:246px;width:150px">
+      <span class="node-badge" title="Added in this change"><span aria-hidden="true">+</span><span class="sr-only">Added in this change</span></span>
+      <span class="node-kicker">Container · Redis</span><span class="node-title">Cache</span>
+    </div>
+
+    <div class="node is-system is-external" style="left:110px;top:246px;width:150px">
+      <span class="node-kicker">External system</span><span class="node-title">Mainframe</span>
+    </div>
+
+    <div class="node is-component is-invalid" style="left:560px;top:150px;width:120px">
+      <span class="node-badge" title="Invalid — see model errors"><span aria-hidden="true">!</span><span class="sr-only">Invalid — see model errors</span></span>
+      <span class="node-kicker">Component</span><span class="node-title">Router</span>
+    </div>
+  </div>
+</div>
+
+<p class="note text-muted">Two independent axes. <b style="font-weight:500">Type</b> is C4 kind, encoded by geometry
+so it survives L1 zoom: <span class="mono">is-person</span> (head), <span class="mono">is-container</span> (spine),
+<span class="mono">is-component</span> (fill), <span class="mono">is-external</span> (dashed, shadowless).
+<b style="font-weight:500">Status</b> is git and validation state, encoded by colour <i>plus</i> a glyph badge.
+Edges are SVG paths with a real arrowhead — a C4 relationship is directed — and use
+<span class="mono">vector-effect: non-scaling-stroke</span>, so a hairline stays one device pixel at any zoom.</p>
+</body></html>

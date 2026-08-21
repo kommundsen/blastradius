@@ -1,0 +1,67 @@
+<!-- @dsCard group="Components" viewport="700x420" subtitle="Button, ButtonGroup, Tag, Input, Segmented, Card, Dialog" name="Core" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../../styles.css">
+<style>body{padding:18px;font-size:var(--text-sm)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.mono{font-family:var(--font-mono);font-size:var(--text-2xs)}
+.note{font-size:var(--text-xs);margin:14px 0 0}</style></head><body>
+
+<div class="row">
+  <button class="btn btn-primary">Share</button>
+  <button class="btn btn-secondary">History</button>
+  <button class="btn btn-ghost">Reply</button>
+  <button class="btn btn-danger">Discard</button>
+  <button class="btn btn-secondary" disabled>Disabled</button>
+  <span class="btn-group">
+    <button class="btn" aria-label="Zoom out">−</button>
+    <button class="btn">100%</button>
+    <button class="btn" aria-label="Zoom in">+</button>
+  </span>
+</div>
+
+<div class="row">
+  <span class="tag tag-accent">synced</span>
+  <span class="tag tag-neutral" style="font-family:var(--font-mono)">⎇ main</span>
+  <span class="tag tag-outline">L2</span>
+  <span class="tag tag-success">2 added</span>
+  <span class="tag tag-warning">1 changed</span>
+  <span class="tag tag-danger">merge conflict</span>
+</div>
+
+<div class="row" style="align-items:flex-start">
+  <span class="seg" role="radiogroup" aria-label="Detail level">
+    <label class="seg-opt"><input type="radio" name="lvl">L1</label>
+    <label class="seg-opt is-active"><input type="radio" name="lvl" checked>L2</label>
+    <label class="seg-opt"><input type="radio" name="lvl">L3</label>
+    <label class="seg-opt"><input type="radio" name="lvl">L4</label>
+  </span>
+  <div class="field" style="width:180px"><label for="mn">Model name</label>
+    <input id="mn" class="input" value="internet-banking"></div>
+  <div class="field" style="width:180px"><label for="rp">Repository</label>
+    <input id="rp" class="input is-invalid" aria-invalid="true" aria-describedby="rp-e" value="acme/arch">
+    <span id="rp-e" class="field-error">Not a git remote</span></div>
+</div>
+
+<div style="display:flex;gap:18px;align-items:flex-start">
+  <div class="card blueprint" style="flex:1">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <span class="card-kicker">Container</span>
+    <span class="card-title">API Application</span>
+    <p class="card-body">Handles authentication and transaction routing.</p>
+    <span class="card-meta">Go · 8 components</span>
+  </div>
+  <div class="dialog blueprint" style="flex:1;width:auto">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <span class="dialog-title">Discard changes?</span>
+    <div class="dialog-body">3 uncommitted edits to model.yaml will be lost.</div>
+    <div class="dialog-actions">
+      <button class="btn btn-secondary">Cancel</button>
+      <button class="btn btn-danger">Discard</button>
+    </div>
+  </div>
+</div>
+
+<p class="note text-muted">Hover moves one ramp step, press two — the same rule reads darker in light and lighter in
+dark, because the ramp is mirrored. <span class="mono">Segmented</span> is single-select and renders real radios;
+grouped commands like zoom use <span class="mono">ButtonGroup</span>. Semantic tags and field errors always carry a
+glyph, never colour alone.</p>
+</body></html>

@@ -1,0 +1,406 @@
+{
+  "plugins": [
+    "react",
+    "import"
+  ],
+  "rules": {
+    "react/forbid-elements": [
+      "warn",
+      {
+        "forbid": []
+      }
+    ],
+    "no-restricted-imports": [
+      "warn",
+      {
+        "patterns": [
+          {
+            "group": [
+              "components/core/**",
+              "components/diagram/**"
+            ],
+            "message": "Import design-system components from 'index.js', not component internals."
+          }
+        ]
+      }
+    ],
+    "no-restricted-syntax": [
+      "warn",
+      {
+        "selector": "Literal[value=/#[0-9a-fA-F]{3,8}\\b/]",
+        "message": "Raw hex color — use a design-system color token via var()."
+      },
+      {
+        "selector": "Literal[value=/\\b\\d+px\\b/]",
+        "message": "Raw px value — use a design-system token via var(). Sizes: --text-2xs..--text-3xl. Space: --space-1..--space-8. Controls: --control-h/--control-px/--row-py."
+      },
+      {
+        "selector": "Literal[value=/font-family\\s*:\\s*(?!['\\\"]?(?:Barlow|Barlow Condensed))/i]",
+        "message": "Font not provided by the design system. Available: Barlow, Barlow Condensed."
+      },
+      {
+        "selector": "Literal[value=/border-radius\\s*:\\s*(?!0)/]",
+        "message": "Square corners are the brand. Use var(--radius), which is 0."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Button'] > JSXAttribute > JSXIdentifier[name!=/^(?:block|children|className|disabled|icon|key|onClick|ref|style|variant)$/]",
+        "message": "<Button> doesn't accept that prop. Declared props: variant, icon, block, disabled, onClick, children."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='ButtonGroup'] > JSXAttribute > JSXIdentifier[name!=/^(?:children|className|key|ref|style)$/]",
+        "message": "<ButtonGroup> doesn't accept that prop. Declared props: children."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Canvas'] > JSXAttribute > JSXIdentifier[name!=/^(?:children|className|key|overlay|ref|scale|style|theme|x|y)$/]",
+        "message": "<Canvas> doesn't accept that prop. Declared props: theme, scale, x, y, overlay, style, children."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Card'] > JSXAttribute > JSXIdentifier[name!=/^(?:blueprint|children|className|key|kicker|meta|ref|style|title)$/]",
+        "message": "<Card> doesn't accept that prop. Declared props: kicker, title, meta, blueprint, children."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='DiagramNode'] > JSXAttribute > JSXIdentifier[name!=/^(?:active|children|className|external|key|kicker|meta|onSelect|ref|status|style|title|type|width|x|y)$/]",
+        "message": "<DiagramNode> doesn't accept that prop. Declared props: kicker, title, meta, type, status, external, active, x, y, width, style, onSelect."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Dialog'] > JSXAttribute > JSXIdentifier[name!=/^(?:actions|children|className|key|onDismiss|ref|style|title)$/]",
+        "message": "<Dialog> doesn't accept that prop. Declared props: title, actions, onDismiss, children."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Edge'] > JSXAttribute > JSXIdentifier[name!=/^(?:active|children|className|direction|from|key|label|labelOffset|onSelect|ref|routing|secondary|status|style|to|waypoints)$/]",
+        "message": "<Edge> doesn't accept that prop. Declared props: from, to, waypoints, routing, direction, secondary, active, status, label, labelOffset, onSelect."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='EdgeLayer'] > JSXAttribute > JSXIdentifier[name!=/^(?:children|className|key|ref|style)$/]",
+        "message": "<EdgeLayer> doesn't accept that prop. Declared props: children."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Input'] > JSXAttribute > JSXIdentifier[name!=/^(?:children|className|error|id|key|label|multiline|onChange|placeholder|ref|style|value)$/]",
+        "message": "<Input> doesn't accept that prop. Declared props: label, multiline, error, id, placeholder, value, onChange."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Segmented'] > JSXAttribute > JSXIdentifier[name!=/^(?:children|className|key|label|name|onChange|options|ref|style|value)$/]",
+        "message": "<Segmented> doesn't accept that prop. Declared props: options, value, onChange, name, label."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Tag'] > JSXAttribute > JSXIdentifier[name!=/^(?:children|className|key|ref|style|variant)$/]",
+        "message": "<Tag> doesn't accept that prop. Declared props: variant, children."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Button'] > JSXAttribute[name.name='variant'] > Literal[value!=/^(?:primary|secondary|ghost|danger)$/]",
+        "message": "<Button> variant must be one of 'primary' | 'secondary' | 'ghost' | 'danger'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Canvas'] > JSXAttribute[name.name='theme'] > Literal[value!=/^(?:light|dark)$/]",
+        "message": "<Canvas> theme must be one of 'light' | 'dark'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='DiagramNode'] > JSXAttribute[name.name='status'] > Literal[value!=/^(?:added|removed|changed|conflict|invalid)$/]",
+        "message": "<DiagramNode> status must be one of 'added' | 'removed' | 'changed' | 'conflict' | 'invalid'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='DiagramNode'] > JSXAttribute[name.name='type'] > Literal[value!=/^(?:person|system|container|component)$/]",
+        "message": "<DiagramNode> type must be one of 'person' | 'system' | 'container' | 'component'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Edge'] > JSXAttribute[name.name='direction'] > Literal[value!=/^(?:forward|both|none)$/]",
+        "message": "<Edge> direction must be one of 'forward' | 'both' | 'none'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Edge'] > JSXAttribute[name.name='routing'] > Literal[value!=/^(?:straight|orthogonal)$/]",
+        "message": "<Edge> routing must be one of 'straight' | 'orthogonal'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Edge'] > JSXAttribute[name.name='status'] > Literal[value!=/^(?:added|removed)$/]",
+        "message": "<Edge> status must be one of 'added' | 'removed'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Tag'] > JSXAttribute[name.name='variant'] > Literal[value!=/^(?:accent|neutral|outline|danger|warning|success)$/]",
+        "message": "<Tag> variant must be one of 'accent' | 'neutral' | 'outline' | 'danger' | 'warning' | 'success'."
+      },
+      {
+        "selector": "JSXOpeningElement[name.name='Edge']:not(:has(JSXAttribute[name.name='from']))",
+        "message": "<Edge> needs `from` and `to` points. The x/length/angle form was removed — edges are SVG paths now."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/index.js"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
+  "x-omelette": {
+    "components": {
+      "Button": {
+        "replaces": []
+      },
+      "ButtonGroup": {
+        "replaces": []
+      },
+      "Canvas": {
+        "replaces": []
+      },
+      "Card": {
+        "replaces": []
+      },
+      "DiagramNode": {
+        "replaces": []
+      },
+      "Dialog": {
+        "replaces": []
+      },
+      "Edge": {
+        "replaces": []
+      },
+      "EdgeLayer": {
+        "replaces": []
+      },
+      "Input": {
+        "replaces": []
+      },
+      "Segmented": {
+        "replaces": []
+      },
+      "Tag": {
+        "replaces": []
+      }
+    },
+    "tokens": [
+      "--bar-py",
+      "--canvas-bg",
+      "--canvas-dot",
+      "--canvas-min",
+      "--code-bg",
+      "--code-comment",
+      "--code-highlight",
+      "--code-key",
+      "--color-accent",
+      "--color-accent-100",
+      "--color-accent-200",
+      "--color-accent-300",
+      "--color-accent-400",
+      "--color-accent-500",
+      "--color-accent-600",
+      "--color-accent-700",
+      "--color-accent-800",
+      "--color-accent-900",
+      "--color-accent-hover",
+      "--color-accent-ink",
+      "--color-accent-line",
+      "--color-accent-press",
+      "--color-bg",
+      "--color-danger",
+      "--color-danger-tint",
+      "--color-divider",
+      "--color-neutral-100",
+      "--color-neutral-200",
+      "--color-neutral-300",
+      "--color-neutral-400",
+      "--color-neutral-500",
+      "--color-neutral-600",
+      "--color-neutral-700",
+      "--color-neutral-800",
+      "--color-neutral-900",
+      "--color-on-accent",
+      "--color-success",
+      "--color-success-tint",
+      "--color-surface",
+      "--color-text",
+      "--color-text-faint",
+      "--color-text-muted",
+      "--color-warning",
+      "--color-warning-tint",
+      "--control-h",
+      "--control-px",
+      "--control-py",
+      "--diff-added",
+      "--diff-added-tint",
+      "--diff-changed",
+      "--diff-changed-tint",
+      "--diff-conflict",
+      "--diff-removed",
+      "--diff-removed-tint",
+      "--duration-base",
+      "--duration-camera",
+      "--duration-fast",
+      "--duration-instant",
+      "--duration-slow",
+      "--ease-camera",
+      "--ease-exit",
+      "--ease-standard",
+      "--edge-stroke",
+      "--edge-stroke-secondary",
+      "--font-body",
+      "--font-heading",
+      "--font-heading-weight",
+      "--font-mono",
+      "--leading-body",
+      "--leading-code",
+      "--leading-heading",
+      "--leading-tight",
+      "--node-border",
+      "--node-border-active",
+      "--node-external",
+      "--node-fill",
+      "--node-fill-active",
+      "--panel-nav-max",
+      "--panel-nav-min",
+      "--panel-nav-w",
+      "--panel-py",
+      "--panel-side-max",
+      "--panel-side-min",
+      "--panel-side-w",
+      "--radius",
+      "--row-py",
+      "--shadow-lg",
+      "--shadow-md",
+      "--shadow-node",
+      "--shadow-node-active",
+      "--shadow-sm",
+      "--space-1",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-6",
+      "--space-8",
+      "--text-2xl",
+      "--text-2xs",
+      "--text-3xl",
+      "--text-base",
+      "--text-lg",
+      "--text-md",
+      "--text-mono",
+      "--text-sm",
+      "--text-ui",
+      "--text-xl",
+      "--text-xs",
+      "--tracking-heading",
+      "--tracking-label",
+      "--tracking-wide",
+      "--transition-camera",
+      "--transition-ui",
+      "--z-canvas",
+      "--z-dialog",
+      "--z-edge",
+      "--z-node",
+      "--z-node-active",
+      "--z-overlay",
+      "--z-panel",
+      "--z-toast"
+    ],
+    "tokenKinds": {
+      "--bar-py": "spacing",
+      "--canvas-bg": "color",
+      "--canvas-dot": "color",
+      "--canvas-min": "spacing",
+      "--code-bg": "color",
+      "--code-comment": "color",
+      "--code-highlight": "color",
+      "--code-key": "color",
+      "--color-accent": "color",
+      "--color-accent-100": "color",
+      "--color-accent-200": "color",
+      "--color-accent-300": "color",
+      "--color-accent-400": "color",
+      "--color-accent-500": "color",
+      "--color-accent-600": "color",
+      "--color-accent-700": "color",
+      "--color-accent-800": "color",
+      "--color-accent-900": "color",
+      "--color-accent-hover": "color",
+      "--color-accent-ink": "color",
+      "--color-accent-line": "color",
+      "--color-accent-press": "color",
+      "--color-bg": "color",
+      "--color-danger": "color",
+      "--color-danger-tint": "color",
+      "--color-divider": "color",
+      "--color-neutral-100": "color",
+      "--color-neutral-200": "color",
+      "--color-neutral-300": "color",
+      "--color-neutral-400": "color",
+      "--color-neutral-500": "color",
+      "--color-neutral-600": "color",
+      "--color-neutral-700": "color",
+      "--color-neutral-800": "color",
+      "--color-neutral-900": "color",
+      "--color-on-accent": "color",
+      "--color-success": "color",
+      "--color-success-tint": "color",
+      "--color-surface": "color",
+      "--color-text": "color",
+      "--color-text-faint": "color",
+      "--color-text-muted": "color",
+      "--color-warning": "color",
+      "--color-warning-tint": "color",
+      "--control-h": "spacing",
+      "--control-px": "spacing",
+      "--control-py": "spacing",
+      "--diff-added": "color",
+      "--diff-added-tint": "color",
+      "--diff-changed": "color",
+      "--diff-changed-tint": "color",
+      "--diff-conflict": "color",
+      "--diff-removed": "color",
+      "--diff-removed-tint": "color",
+      "--edge-stroke": "color",
+      "--edge-stroke-secondary": "color",
+      "--font-body": "font",
+      "--font-heading": "font",
+      "--font-heading-weight": "font",
+      "--font-mono": "font",
+      "--leading-body": "font",
+      "--leading-code": "font",
+      "--leading-heading": "font",
+      "--leading-tight": "font",
+      "--node-border": "color",
+      "--node-border-active": "color",
+      "--node-external": "color",
+      "--node-fill": "color",
+      "--node-fill-active": "color",
+      "--panel-nav-max": "spacing",
+      "--panel-nav-min": "spacing",
+      "--panel-nav-w": "spacing",
+      "--panel-py": "spacing",
+      "--panel-side-max": "spacing",
+      "--panel-side-min": "spacing",
+      "--panel-side-w": "spacing",
+      "--radius": "radius",
+      "--row-py": "spacing",
+      "--shadow-lg": "shadow",
+      "--shadow-md": "shadow",
+      "--shadow-node": "shadow",
+      "--shadow-node-active": "shadow",
+      "--shadow-sm": "shadow",
+      "--space-1": "spacing",
+      "--space-2": "spacing",
+      "--space-3": "spacing",
+      "--space-4": "spacing",
+      "--space-6": "spacing",
+      "--space-8": "spacing",
+      "--text-2xl": "font",
+      "--text-2xs": "font",
+      "--text-3xl": "font",
+      "--text-base": "font",
+      "--text-lg": "font",
+      "--text-md": "font",
+      "--text-mono": "font",
+      "--text-sm": "font",
+      "--text-ui": "font",
+      "--text-xl": "font",
+      "--text-xs": "font",
+      "--tracking-heading": "font",
+      "--tracking-label": "font",
+      "--tracking-wide": "font"
+    },
+    "fontFamilies": [
+      "Barlow",
+      "Barlow Condensed"
+    ]
+  }
+}

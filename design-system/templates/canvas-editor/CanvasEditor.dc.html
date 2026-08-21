@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Canvas editor" description="The Blastradius model canvas — L2 containers, uncommitted git diff, and the YAML model side by side" -->
+<helmet><script src="./ds-base.js"></script></helmet>
+<div class="app" data-density="comfortable" style="width:1200px;height:640px">
+
+  <header class="app-bar">
+    <img src="../../assets/mark.svg" width="14" height="14" alt="">
+    <span class="app-bar-title text-muted" style="font-size:var(--text-sm)">Acme Bank / <b style="font-weight:500;color:var(--color-text)">Internet Banking</b> / Containers</span>
+    <span class="seg" role="radiogroup" aria-label="Detail level">
+      <label class="seg-opt"><input type="radio" name="lvl">L1</label>
+      <label class="seg-opt is-active"><input type="radio" name="lvl" checked>L2</label>
+      <label class="seg-opt"><input type="radio" name="lvl">L3</label>
+      <label class="seg-opt"><input type="radio" name="lvl">L4</label>
+    </span>
+    <span class="tag tag-neutral bar-drop-3" style="font-family:var(--font-mono)">⎇ main</span>
+    <span class="tag tag-success bar-drop-1">1 added</span>
+    <span class="tag tag-warning bar-drop-1">1 changed</span>
+    <span class="app-bar-spacer"></span>
+    <button class="btn btn-secondary bar-drop-2">History</button>
+    <button class="btn btn-primary">Share</button>
+  </header>
+
+  <div class="app-body" data-nav="open" data-side="open">
+
+    <nav class="panel panel-nav">
+      <div class="panel-body">
+        <span class="tree-label">Model</span>
+        <button class="tree-row">◦ Customer</button>
+        <button class="tree-row is-active">▸ Internet Banking</button>
+        <button class="tree-row is-child">Web App</button>
+        <button class="tree-row is-child" style="color:var(--color-accent-800)">API Application</button>
+        <button class="tree-row is-child">Database</button>
+        <button class="tree-row is-child is-added">+ Session Cache</button>
+        <button class="tree-row">◦ Mainframe</button>
+      </div>
+      <div class="panel-grip" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize model panel"></div>
+    </nav>
+
+    <div class="canvas">
+      <div class="canvas-camera" style="--camera-scale:1">
+
+        <svg class="edge-layer" aria-hidden="true">
+          <defs>
+            <marker id="br-arrow" viewBox="0 0 10 10" refX="9.5" refY="5"
+                    markerWidth="8" markerHeight="8" orient="auto-start-reverse" markerUnits="strokeWidth">
+              <path class="edge-arrow" d="M1.5,1.5 L9,5 L1.5,8.5"/>
+            </marker>
+          </defs>
+          <path class="edge" d="M110,121 L136,179"/>
+          <text class="edge-label" x="105" y="152" text-anchor="end">HTTPS</text>
+
+          <path class="edge" d="M211,207 L289,285"/>
+          <text class="edge-label" x="256" y="238" text-anchor="middle">JSON / HTTPS</text>
+
+          <path class="edge" d="M451,276 L556,210"/>
+          <text class="edge-label" x="505" y="230" text-anchor="middle">SQL / TCP</text>
+
+          <path class="edge is-added" d="M451,309 L535,373"/>
+          <text class="edge-label" x="500" y="332" text-anchor="middle">RESP</text>
+
+          <path class="edge is-secondary" d="M322,325 L322,453"/>
+          <text class="edge-label" x="328" y="394" text-anchor="start">XML / HTTPS</text>
+        </svg>
+
+        <div class="node is-person" style="left:40px;top:60px;width:140px">
+          <span class="node-kicker">Person</span><span class="node-title">Customer</span>
+        </div>
+
+        <div class="node is-container" style="left:60px;top:180px;width:150px">
+          <span class="node-kicker">Container · React</span><span class="node-title">Web App</span>
+        </div>
+
+        <div class="node is-container is-active is-changed" style="left:290px;top:250px;width:160px">
+          <span class="node-badge" title="Modified in this change"><span aria-hidden="true">~</span><span class="sr-only">Modified in this change</span></span>
+          <span class="node-kicker">Container · Go</span><span class="node-title">API Application</span><span class="node-meta">8 components</span>
+        </div>
+
+        <div class="node is-container" style="left:510px;top:150px;width:150px">
+          <span class="node-kicker">Container · Postgres</span><span class="node-title">Database</span>
+        </div>
+
+        <div class="node is-container is-added" style="left:500px;top:374px;width:150px">
+          <span class="node-badge" title="Added in this change"><span aria-hidden="true">+</span><span class="sr-only">Added in this change</span></span>
+          <span class="node-kicker">Container · Redis</span><span class="node-title">Session Cache</span>
+        </div>
+
+        <div class="node is-system is-external" style="left:250px;top:455px;width:150px">
+          <span class="node-kicker">External system</span><span class="node-title">Mainframe</span>
+        </div>
+
+      </div>
+
+      <div class="canvas-overlay">
+        <div style="position:absolute;left:var(--space-4);bottom:var(--space-4);display:flex;gap:var(--space-3);align-items:center">
+          <span class="btn-group">
+            <button class="btn" aria-label="Zoom out">−</button>
+            <button class="btn">100%</button>
+            <button class="btn" aria-label="Zoom in">+</button>
+          </span>
+          <span class="tag tag-accent">Double-click a container to dive to L3</span>
+        </div>
+      </div>
+    </div>
+
+    <aside class="panel panel-side">
+      <div class="panel-grip" role="separator" aria-orientation="vertical" tabindex="0" aria-label="Resize model source panel"></div>
+      <div class="panel-head">
+        <span class="panel-title">model.yaml</span>
+        <span class="tag tag-accent" style="margin-left:auto">synced</span>
+      </div>
+      <div class="panel-body is-flush">
+<pre class="code" style="min-height:100%"><span class="k">internet-banking:</span>
+  <span class="k">containers:</span>
+    <span class="k">web-app:</span>   { tech: React }
+<span class="hl">    <span class="k">api:</span>       { tech: Go }
+</span>    <span class="k">database:</span>  { tech: Postgres }
+<span class="add">    <span class="k">cache:</span>     { tech: Redis }
+</span>  <span class="k">relations:</span>
+    - api -&gt; database   <span class="c"># SQL / TCP</span>
+<span class="add">    - api -&gt; cache      <span class="c"># RESP</span>
+</span>    - api -&gt; <span class="err">mainfram</span>  <span class="c"># unknown element</span>
+<span class="k">views:</span>
+  <span class="k">containers:</span>
+    <span class="k">layout:</span>     <span class="c"># auto unless pinned</span>
+<span class="hl">      <span class="k">api:</span> [5, 2]
+</span></pre>
+      </div>
+      <div class="panel-foot">
+        <span class="tag tag-danger">line 11 · unknown element “mainfram”</span>
+      </div>
+    </aside>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

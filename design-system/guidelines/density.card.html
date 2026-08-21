@@ -1,0 +1,60 @@
+<!-- @dsCard group="Layout" viewport="700x330" subtitle="A resizable window needs a size contract and a density setting" name="App shell & density" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../styles.css">
+<style>body{padding:18px;font-size:var(--text-sm)}
+.mono{font-family:var(--font-mono);font-size:var(--text-2xs)}
+.note{font-size:var(--text-xs);margin:12px 0 0}
+.demo{border:1px solid var(--color-divider);margin-bottom:8px}
+.demo .panel-head{padding-left:var(--space-3)}</style></head><body>
+
+<div style="display:flex;gap:12px">
+  <div style="flex:1" data-density="compact">
+    <div class="demo">
+      <div class="panel-head"><span class="panel-title">compact</span></div>
+      <div style="padding:var(--space-2);display:flex;gap:6px;align-items:center">
+        <button class="btn btn-primary">Share</button>
+        <span class="btn-group"><button class="btn">−</button><button class="btn">+</button></span>
+      </div>
+      <button class="tree-row is-active">▸ Internet Banking</button>
+      <button class="tree-row is-child">Web App</button>
+    </div>
+    <span class="mono text-muted">--control-h: 30px</span>
+  </div>
+
+  <div style="flex:1">
+    <div class="demo">
+      <div class="panel-head"><span class="panel-title">comfortable</span></div>
+      <div style="padding:var(--space-2);display:flex;gap:6px;align-items:center">
+        <button class="btn btn-primary">Share</button>
+        <span class="btn-group"><button class="btn">−</button><button class="btn">+</button></span>
+      </div>
+      <button class="tree-row is-active">▸ Internet Banking</button>
+      <button class="tree-row is-child">Web App</button>
+    </div>
+    <span class="mono text-muted">--control-h: 36px · default</span>
+  </div>
+
+  <div style="flex:1" data-density="spacious">
+    <div class="demo">
+      <div class="panel-head"><span class="panel-title">spacious</span></div>
+      <div style="padding:var(--space-2);display:flex;gap:6px;align-items:center">
+        <button class="btn btn-primary">Share</button>
+        <span class="btn-group"><button class="btn">−</button><button class="btn">+</button></span>
+      </div>
+      <button class="tree-row is-active">▸ Internet Banking</button>
+      <button class="tree-row is-child">Web App</button>
+    </div>
+    <span class="mono text-muted">--control-h: 42px</span>
+  </div>
+</div>
+
+<p class="note text-muted">Density changes <b style="font-weight:500">rhythm</b> — control height, row padding,
+gutters — and deliberately not type size: legibility should not depend on how tightly the user packs their panels,
+and the AA audit assumes a fixed type scale. The steps are discrete values, not a scalar multiplier, which would
+reintroduce the fractional pixels the whole-pixel spacing rebase removed.</p>
+
+<p class="note text-muted">The shell is <span class="mono">.app &gt; .app-bar + .app-body &gt; .panel-nav | .canvas | .panel-side</span>.
+Panels clamp between a min and a max; the canvas never yields below
+<span class="mono">--canvas-min</span> (360px). <span class="mono">.app-body</span> is the query container, so panels
+respond to the <b style="font-weight:500">window</b>, not the viewport — at 800px the source panel floats over the
+canvas instead of stealing width, at 560px the model tree does too.</p>
+</body></html>

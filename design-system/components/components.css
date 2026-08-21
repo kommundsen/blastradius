@@ -1,0 +1,360 @@
+/* Blastradius — component classes. Square-cornered blueprint objects; the primary
+   button is the one solid fill.
+
+   No raw font-size, letter-spacing, or radius values appear below — everything
+   resolves through a token, which is what _adherence.oxlintrc.json has always
+   required of consumers. */
+
+/* — blueprint frame + registration marks — */
+.blueprint { position: relative; border: 1px solid var(--color-divider); border-radius: var(--radius); }
+.blueprint > .corner { position: absolute; width: 11px; height: 11px;
+  color: var(--color-text-muted); }
+.blueprint > .corner::before, .blueprint > .corner::after { content: ""; position: absolute; background: currentColor; }
+.blueprint > .corner::before { left: 5px; top: 0; width: 1px; height: 100%; }
+.blueprint > .corner::after  { top: 5px; left: 0; width: 100%; height: 1px; }
+.blueprint > .corner.tl { top: -6px; left: -6px; }
+.blueprint > .corner.tr { top: -6px; right: -6px; }
+.blueprint > .corner.bl { bottom: -6px; left: -6px; }
+.blueprint > .corner.br { bottom: -6px; right: -6px; }
+/* Corners straddle the frame at -6px, so no ancestor may clip them.
+   Do NOT put .blueprint and .duotone on the same element — wrap instead:
+   <div class="blueprint">…<figure class="duotone"><img></figure></div> */
+
+.duotone { position: relative; overflow: hidden; }
+.duotone::after { content:""; position:absolute; inset:0; pointer-events:none;
+  background: var(--color-accent); mix-blend-mode: color; }
+
+/* — buttons — */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  cursor: pointer; text-decoration: none; font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight); font-size: var(--text-ui); line-height: var(--leading-tight);
+  color: var(--color-text); background: transparent; border: 1px solid var(--color-divider);
+  min-height: var(--control-h); padding: var(--control-py) var(--control-px);
+  border-radius: var(--radius); transition: var(--transition-ui); }
+.btn svg { display: block; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+/* Hover moves one ramp step toward more contrast, press moves two. Because the dark
+   ramp is mirrored, that reads as "darker" in light and "lighter" in dark — one rule,
+   correct in both. The old accent/accent-600 pair differed by 3 values in one channel
+   and was invisible. */
+.btn-primary { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-on-accent); }
+.btn-primary:hover { background: var(--color-accent-hover); border-color: var(--color-accent-hover); }
+.btn-primary:active { background: var(--color-accent-press); border-color: var(--color-accent-press); }
+.btn-secondary:hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
+.btn-secondary:active { background: color-mix(in srgb, var(--color-text) 14%, transparent); }
+.btn-ghost { color: var(--color-accent-ink); border-color: transparent; padding-inline: var(--space-1); }
+.btn-ghost:hover { background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
+.btn-ghost:active { background: color-mix(in srgb, var(--color-accent) 20%, transparent); }
+.btn-danger { color: var(--color-danger); border-color: var(--color-danger); }
+.btn-danger:hover { background: var(--color-danger-tint); }
+.btn-icon { width: var(--control-h); height: var(--control-h); padding: 0; }
+.btn-block { width: 100%; }
+
+/* — forms — */
+.field > label { display: block; font-size: var(--text-sm); margin-bottom: 5px;
+  color: var(--color-text-muted); }
+.input { width: 100%; min-height: var(--control-h); padding: var(--control-py) var(--space-3);
+  font: inherit; font-size: var(--text-ui);
+  color: var(--color-text); caret-color: var(--color-accent); background: var(--color-surface);
+  border: 1px solid var(--color-divider); border-radius: var(--radius);
+  transition: var(--transition-ui); }
+.input:hover { border-color: var(--color-text-muted); }
+.input:focus-visible { border-color: var(--color-accent); outline-offset: 0; }
+.input.is-invalid { border-color: var(--color-danger); background: var(--color-danger-tint); }
+.field-error { display: flex; align-items: center; gap: 5px; margin-top: 4px;
+  font-size: var(--text-xs); color: var(--color-danger); }
+.field-error::before { content: "!"; font-weight: 700; }  /* status is never colour alone */
+textarea.input { min-height: 90px; resize: vertical; }
+.radio { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: var(--text-ui); }
+.radio input, .seg-opt input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+.radio .dot { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 1.5px solid var(--color-divider); }
+.radio:hover .dot { border-color: var(--color-accent); }
+.radio input:checked + .dot { border-color: var(--color-accent); background: var(--color-accent);
+  box-shadow: inset 0 0 0 4px var(--color-bg); }
+.radio input:focus-visible + .dot { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* Segmented = single-select (L1-L4, view modes). It is NOT a toolbar.
+   For grouped actions such as zoom -/100%/+ use .btn-group, below. */
+.seg { display: inline-flex; overflow: hidden; border: 1px solid var(--color-divider); border-radius: var(--radius); }
+.seg-opt { display: inline-flex; align-items: center; gap: 6px; min-height: var(--control-h);
+  padding: var(--control-py) var(--space-3); font-size: var(--text-sm); cursor: pointer;
+  transition: var(--transition-ui); }
+.seg-opt + .seg-opt { border-left: 1px solid var(--color-divider); }
+.seg-opt:has(input:checked), .seg-opt.is-active { background: var(--color-accent); color: var(--color-on-accent); }
+.seg-opt:not(:has(input:checked)):not(.is-active):hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
+.seg-opt:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+
+.btn-group { display: inline-flex; border: 1px solid var(--color-divider); background: var(--color-surface); }
+.btn-group > .btn { border: 0; border-radius: var(--radius);
+  padding: var(--control-py) var(--space-3); font-size: var(--text-sm); }
+.btn-group > .btn + .btn { border-left: 1px solid var(--color-divider); }
+
+/* — cards — */
+.card { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3);
+  border-radius: var(--radius); background: transparent; border: 1px solid var(--color-divider); }
+.card-kicker { font-size: var(--text-2xs); letter-spacing: var(--tracking-label);
+  text-transform: uppercase; color: var(--color-accent-ink); }
+.card-title { font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: var(--text-md); line-height: var(--leading-tight); }
+.card-body { margin: 0; font-size: var(--text-sm); color: var(--color-text-muted); flex: 1; }
+.card-meta { display: flex; align-items: center; gap: 6px; font-size: var(--text-xs);
+  color: var(--color-text-muted); }
+.elev-sm { box-shadow: var(--shadow-sm); } .elev-md { box-shadow: var(--shadow-md); } .elev-lg { box-shadow: var(--shadow-lg); }
+
+/* — tags — */
+.tag { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-xs);
+  padding: 3px 10px; border-radius: var(--radius); }
+.tag-accent { background: var(--color-accent-100); color: var(--color-accent-800); }
+.tag-neutral { background: var(--color-neutral-100); color: var(--color-neutral-800); }
+.tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent-ink); }
+.tag-danger { background: var(--color-danger-tint); color: var(--color-danger); }
+.tag-warning { background: var(--color-warning-tint); color: var(--color-warning); }
+.tag-success { background: var(--color-success-tint); color: var(--color-success); }
+/* Semantic tags carry a leading glyph so the state survives greyscale and colour-blindness. */
+.tag-danger::before { content: "!"; font-weight: 700; }
+.tag-warning::before { content: "~"; font-weight: 700; }
+.tag-success::before { content: "\2713"; }
+
+/* — navigation — */
+.nav { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3) var(--space-4); }
+.nav-brand { font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: var(--text-lg); letter-spacing: var(--tracking-wide); text-transform: uppercase; margin-right: auto; }
+.nav a { color: inherit; text-decoration: none; font-size: var(--text-ui); transition: var(--transition-ui); }
+.nav a:hover, .nav a[aria-current='page'] { color: var(--color-accent-ink); }
+
+/* — tables — */
+.table { width: 100%; border-collapse: collapse; font-size: var(--text-ui); }
+.table th { text-align: left; font-size: var(--text-xs); letter-spacing: var(--tracking-label);
+  text-transform: uppercase; color: var(--color-text-muted); padding: var(--space-2);
+  border-bottom: 1px solid var(--color-divider); }
+.table td { padding: var(--space-2); border-bottom: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent); }
+.table tbody tr:hover { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
+
+/* — dialog — */
+.dialog-backdrop { position: fixed; inset: 0; z-index: var(--z-dialog); display: grid; place-items: center;
+  padding: var(--space-6); background: color-mix(in srgb, #1d1f20 55%, transparent); }
+.dialog { width: min(440px, 100%); display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-6); border-radius: var(--radius); background: var(--color-bg);
+  border: 1px solid var(--color-divider); box-shadow: var(--shadow-lg); }
+.dialog-title { font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: var(--text-lg); letter-spacing: var(--tracking-heading); text-transform: uppercase; }
+.dialog-body { font-size: var(--text-ui); color: var(--color-text-muted); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-2); }
+
+/* ══ Blastradius app shell — a resizable desktop window ═══════════════════════
+   The reference screen used to be a stack of inline styles at a fixed 1200x640.
+   These are the classes it should have had.
+
+     <div class="app" data-density="comfortable">
+       <header class="app-bar">…</header>
+       <div class="app-body" data-nav="open" data-side="open">
+         <nav class="panel panel-nav">…</nav>
+         <div class="canvas">…</div>
+         <aside class="panel panel-side">…</aside>
+       </div>
+     </div>
+
+   .app-body is the query container, so panels respond to the WINDOW, not the
+   viewport — correct for a desktop app that can be resized, split, or snapped. */
+
+.app { display: flex; flex-direction: column; min-width: 0; height: 100%;
+  background: var(--color-bg); color: var(--color-text);
+  container-type: inline-size; container-name: appwin; }
+.app-bar { display: flex; align-items: center; flex-wrap: nowrap; gap: var(--space-4); flex: none;
+  min-width: 0; padding: var(--bar-py) var(--space-4); border-bottom: 1px solid var(--color-divider); }
+.app-bar-spacer { margin-left: auto; }
+/* Bar items hold their size; the breadcrumb is the one elastic item and truncates
+   rather than pushing the bar wide. Order matters here — both selectors have the same
+   specificity, so the elastic rule has to come second to win. */
+.app-bar > * { flex: none; }
+.app-bar > .app-bar-title { flex: 0 1 auto; min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+
+/* Bar items declare how readily they may be dropped as the window narrows, lowest first.
+   Without this the bar simply overflows: a 4-step level switcher, three status chips and
+   two buttons cannot coexist at 480px. */
+@container appwin (max-width: 980px) { .app-bar .bar-drop-1 { display: none; } }
+@container appwin (max-width: 820px) { .app-bar .bar-drop-2 { display: none; } }
+@container appwin (max-width: 680px) { .app-bar .bar-drop-3 { display: none; } }
+.app-body { flex: 1; min-height: 0; display: flex; position: relative;
+  container-type: inline-size; container-name: app; }
+
+/* Panels size themselves between their min and max; --panel-*-w is runtime state. */
+.panel { display: flex; flex-direction: column; min-height: 0; min-width: 0; flex: none; }
+.panel-nav  { width: clamp(var(--panel-nav-min), var(--panel-nav-w), var(--panel-nav-max));
+  border-right: 1px solid var(--color-divider); }
+.panel-side { width: clamp(var(--panel-side-min), var(--panel-side-w), var(--panel-side-max));
+  border-left: 1px solid var(--color-divider); }
+/* The canvas is the one region that never yields width. */
+.app-body > .canvas { flex: 1; min-width: var(--canvas-min); }
+
+/* Recessed chrome strip — this is what --color-surface is FOR. It reads as inset
+   against the ground, which is why inputs share it. */
+.panel-head, .panel-foot { display: flex; align-items: center; gap: var(--space-2); flex: none;
+  padding: var(--bar-py) var(--space-3); background: var(--color-surface); }
+.panel-head { border-bottom: 1px solid var(--color-divider); }
+.panel-foot { border-top: 1px solid var(--color-divider); }
+.panel-title { font-size: var(--text-2xs); letter-spacing: var(--tracking-label);
+  text-transform: uppercase; font-weight: 600; color: var(--color-text-muted); }
+.panel-body { flex: 1; min-height: 0; overflow: auto; padding: var(--panel-py) 0; }
+.panel-body.is-flush { padding: 0; }
+
+/* Drag-to-resize grip. Sits on the panel edge; JS writes --panel-*-w. */
+.panel-grip { position: absolute; top: 0; bottom: 0; width: 5px; cursor: col-resize;
+  z-index: var(--z-panel); background: transparent; }
+.panel-grip:hover, .panel-grip:focus-visible { background: color-mix(in srgb, var(--color-accent) 40%, transparent); }
+.panel-nav > .panel-grip { right: -3px; }
+.panel-side > .panel-grip { left: -3px; }
+
+/* Model tree */
+.tree-label { display: block; padding: 0 var(--space-4) var(--space-2); font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-label); text-transform: uppercase; font-weight: 600;
+  color: var(--color-text-muted); }
+.tree-row { display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
+  padding: var(--row-py) var(--space-4); font: inherit; font-size: var(--text-sm);
+  color: var(--color-text-muted); background: none; border: 0; cursor: default;
+  transition: var(--transition-ui); }
+.tree-row.is-child { padding-left: 28px; }
+.tree-row:hover { background: color-mix(in srgb, var(--color-text) 5%, transparent); }
+.tree-row.is-active { background: var(--color-accent-100); color: var(--color-accent-800);
+  box-shadow: inset -2px 0 var(--color-accent); }
+.tree-row.is-added   { color: var(--color-success); }
+.tree-row.is-removed { color: var(--color-danger); text-decoration: line-through; }
+
+/* Responsive. The breakpoints are the panel minimums added up — they cannot be tokens,
+   because a @container condition may not read a custom property.
+     800px = nav 168 + canvas 360 + side 260, rounded up
+     560px = nav 168 + canvas 360, rounded up
+   Below each, the panel stops stealing width and floats over the canvas instead. */
+@container app (max-width: 800px) {
+  .panel-side { position: absolute; top: 0; right: 0; bottom: 0; z-index: var(--z-panel);
+    background: var(--color-bg); box-shadow: var(--shadow-lg); }
+  .app-body[data-side="closed"] > .panel-side { display: none; }
+}
+@container app (max-width: 560px) {
+  .panel-nav { position: absolute; top: 0; left: 0; bottom: 0; z-index: var(--z-panel);
+    background: var(--color-bg); box-shadow: var(--shadow-lg); }
+  .app-body[data-nav="closed"] > .panel-nav { display: none; }
+}
+
+/* ══ Blastradius app layer — the diagram grammar ══════════════════════════════
+   Substrate: nodes are DOM, edges are SVG. Both live on one transformed camera
+   layer so a single transform moves the whole model.
+
+     <div class="canvas">                      viewport: clips, paints ground
+       <div class="canvas-camera" style="--camera-scale:1; transform:…">
+         <svg class="edge-layer">…</svg>       relations
+         <div class="node">…</div>             elements
+         <span class="edge-label screen-space">…</span>
+       </div>
+       <div class="canvas-overlay">…</div>     zoom control, hints — screen-space
+     </div>
+
+   JS owns two things: the transform on .canvas-camera, and --camera-scale set to
+   the same scale factor. Everything below reads --camera-scale; nothing else needs to. */
+
+.canvas { position: relative; overflow: hidden; background: var(--canvas-bg);
+  z-index: var(--z-canvas); }
+
+.canvas-camera { position: absolute; inset: 0; transform-origin: 0 0;
+  transition: var(--transition-camera); will-change: transform;
+  /* The dot grid rides the camera — a blueprint grid belongs to the drawing,
+     not to the screen. Below ~0.5x, JS should swap the pitch to 4x and re-render
+     rather than let the dots collapse into a wash. */
+  background-image: radial-gradient(var(--canvas-dot) 1px, transparent 1px);
+  background-size: var(--canvas-dot-pitch, 26px) var(--canvas-dot-pitch, 26px); }
+
+.canvas-overlay { position: absolute; inset: 0; pointer-events: none; z-index: var(--z-overlay); }
+.canvas-overlay > * { pointer-events: auto; }
+
+/* THE ZOOM RULE, stated once: everything inside .canvas-camera is part of the drawing
+   and scales with it — node titles, kickers, edge labels, badges. Everything in
+   .canvas-overlay is chrome and stays screen-constant. There is no third case.
+   .screen-space is the escape hatch for drag handles and resize grips, which must
+   stay a fixed pointer target regardless of zoom. */
+.screen-space { transform: scale(calc(1 / var(--camera-scale, 1))); transform-origin: center; }
+
+/* — nodes: crisp boxes hovering just above the canvas — */
+.node { position: absolute; z-index: var(--z-node);
+  display: flex; flex-direction: column; justify-content: center; gap: 1px;
+  padding: 10px; background: var(--node-fill); border: 1px solid var(--node-border);
+  border-radius: var(--radius); box-shadow: var(--shadow-node);
+  transition: var(--transition-ui); }
+.node-kicker { font-size: var(--text-2xs); letter-spacing: var(--tracking-label);
+  text-transform: uppercase; font-family: var(--font-body); color: var(--code-key); }
+.node-title { font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: var(--text-md); line-height: var(--leading-tight); text-transform: uppercase; }
+.node-meta { font-size: var(--text-2xs); color: var(--color-text-muted); }
+
+.node.is-active { z-index: var(--z-node-active); background: var(--node-fill-active);
+  border: 1.5px solid var(--node-border-active); box-shadow: var(--shadow-node-active); }
+.node:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+
+/* C4 element types. Encoded by geometry, not colour — colour is spoken for by diff
+   status, and a node must stay readable at L1 where it is 90px wide. */
+.node.is-system    { }                                        /* software system — the base box */
+.node.is-container { border-left-width: 3px; }                /* the spine */
+.node.is-component { background: var(--color-neutral-200); }  /* one level in from its container */
+.node.is-person    { border-top-width: 3px; }
+.node.is-person::before { content: ""; position: absolute; left: 50%; top: -7px;
+  width: 11px; height: 11px; margin-left: -5.5px; border-radius: 50%;
+  border: 1.5px solid var(--node-border); background: var(--node-fill); }
+.node.is-external  { background: transparent; border: 1px dashed var(--node-external); box-shadow: none; }
+.node.is-external .node-kicker { color: var(--color-text-muted); }
+.node.is-external .node-title  { color: var(--color-text-muted); }
+
+/* Git diff + validation. Every state pairs a colour with a glyph badge, so the
+   model stays readable in greyscale, in print, and for colour-blind users. */
+.node-badge { position: absolute; top: -8px; right: -8px; z-index: 1;
+  display: grid; place-items: center; width: 16px; height: 16px;
+  font-family: var(--font-body); font-size: var(--text-2xs); font-weight: 700; line-height: 1;
+  color: var(--color-bg); background: var(--color-text); }
+.node.is-added    { border-color: var(--diff-added);   background: var(--diff-added-tint); }
+.node.is-added    > .node-badge { background: var(--diff-added); }
+.node.is-removed  { border-color: var(--diff-removed); background: var(--diff-removed-tint);
+                    border-style: dashed; opacity: .75; }
+.node.is-removed  > .node-badge { background: var(--diff-removed); }
+.node.is-changed  { border-color: var(--diff-changed); background: var(--diff-changed-tint); }
+.node.is-changed  > .node-badge { background: var(--diff-changed); }
+.node.is-invalid  { border-color: var(--color-danger); }
+.node.is-invalid  > .node-badge { background: var(--color-danger); }
+.node.is-conflict { border-color: var(--diff-conflict); border-width: 1.5px;
+  background: repeating-linear-gradient(135deg,
+    var(--diff-removed-tint) 0 6px, transparent 6px 12px), var(--node-fill); }
+.node.is-conflict > .node-badge { background: var(--diff-conflict); }
+
+/* — edges: SVG relations. Directed, because a C4 relationship always has a direction. — */
+.edge-layer { position: absolute; inset: 0; overflow: visible; pointer-events: none;
+  z-index: var(--z-edge); }
+/* Every .edge-layer must carry these markers in its own <defs> — SVG markers do
+   not cross document fragments. See Edge.prompt.md for the copy-paste block. */
+.edge { fill: none; stroke: var(--edge-stroke); stroke-width: 1;
+  vector-effect: non-scaling-stroke;   /* 1 device px at every zoom — hairlines never vanish */
+  marker-end: url(#br-arrow); }
+.edge.is-secondary { stroke: var(--edge-stroke-secondary); stroke-dasharray: 4 3; }
+.edge.is-bidirectional { marker-start: url(#br-arrow); }  /* orient="auto-start-reverse" flips it */
+.edge.is-undirected { marker-end: none; }
+.edge.is-added   { stroke: var(--diff-added); }
+.edge.is-removed { stroke: var(--diff-removed); stroke-dasharray: 3 3; }
+.edge.is-active  { stroke: var(--color-accent); stroke-width: 1.5; }
+.edge-arrow { fill: none; stroke: context-stroke; stroke-width: 1; vector-effect: non-scaling-stroke; }
+/* Fat invisible twin under each .edge — a 1px line is not a click target. */
+.edge-hit { fill: none; stroke: transparent; stroke-width: 12; pointer-events: stroke; cursor: pointer; }
+
+/* Protocol chips are SVG text stroked with the canvas ground — paint-order puts the
+   stroke underneath, so the label knocks a clean hole in the dot grid without needing
+   a separate HTML layer to stay in register with the path. */
+.edge-label { font-family: var(--font-body); font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-wide); fill: var(--color-text-muted);
+  stroke: var(--canvas-bg); stroke-width: 4px; paint-order: stroke fill;
+  stroke-linejoin: round; user-select: none; }
+
+/* — code panel: the YAML model — */
+.code { margin: 0; padding: 16px; font-family: var(--font-mono); font-size: var(--text-mono);
+  line-height: var(--leading-code); color: var(--color-text); background: var(--code-bg); overflow: auto; }
+.code .k { color: var(--code-key); }
+.code .c { color: var(--code-comment); }
+.code .hl { background: var(--code-highlight); }
+.code .add { background: var(--diff-added-tint); box-shadow: inset 2px 0 var(--diff-added); }
+.code .del { background: var(--diff-removed-tint); box-shadow: inset 2px 0 var(--diff-removed); }
+.code .err { text-decoration: underline wavy var(--color-danger); text-underline-offset: 3px; }

@@ -1,0 +1,156 @@
+/* Blastradius — color tokens.
+   Steel-blueprint scheme. Every text/background pair below meets WCAG AA (4.5:1);
+   every border/graphic pair meets 3:1. Ratios noted where they are load-bearing.
+
+   Ramp direction is SEMANTIC, not lightness-absolute:
+     100 = faintest tint (fills, surfaces)  ->  900 = strongest (heavy text)
+   Dark theme mirrors the ramp, so -600/-700/-800 mean the same THING in both themes
+   and interaction states move the same direction (toward more contrast) in both. */
+
+:root {
+  --color-bg: #f2f2f3;
+  /* Recessed, not raised. Everything in this system sits ON the ground; --color-surface
+     is for the things that sit slightly INTO it — input wells, panel headers and footers,
+     button-group troughs. Cards and panels stay transparent: the blueprint is a line
+     drawing, so surfaces are cut, never stacked. */
+  --color-surface: #e9e9ea;
+  --color-text: #1d1f20;
+  --color-divider: color-mix(in srgb, #1d1f20 16%, transparent);
+
+  /* Text roles — use these, never an ad-hoc color-mix percentage. */
+  --color-text-muted: color-mix(in srgb, #1d1f20 65%, transparent);  /* 4.8:1 — safe for body text */
+  --color-text-faint: color-mix(in srgb, #1d1f20 45%, transparent);  /* decorative / non-text ONLY */
+
+  /* Neutral ramp */
+  --color-neutral-100: #f5f5f8; --color-neutral-200: #e7e7ea; --color-neutral-300: #d4d4d7;
+  --color-neutral-400: #b7b7ba; --color-neutral-500: #98989b; --color-neutral-600: #7a7a7d;
+  --color-neutral-700: #5d5d60; --color-neutral-800: #424244; --color-neutral-900: #2b2b2d;
+
+  /* Accent ramp — steel, hue ~210. Darkened from the original #5980a6 so that
+     white-on-accent clears AA; the hue is unchanged. */
+  --color-accent-100: #eef4fa; --color-accent-200: #d9e6f1; --color-accent-300: #bacfe2;
+  --color-accent-400: #93b0cb; --color-accent-500: #6b8dae; --color-accent-600: #496b8d;
+  --color-accent-700: #3a5672; --color-accent-800: #2a3f54; --color-accent-900: #1b2937;
+
+  /* Accent roles — split so "the brand fill" and "accent-coloured text" can differ per theme. */
+  --color-accent:       var(--color-accent-600);  /* fills, focus ring, selection    */
+  --color-accent-hover: var(--color-accent-700);  /* one step toward more contrast   */
+  --color-accent-press: var(--color-accent-800);  /* two steps                       */
+  --color-accent-ink:   var(--color-accent-700);  /* accent as TEXT — 6.7:1 on bg    */
+  --color-accent-line:  var(--color-accent-600);  /* hairlines, node borders — 4.9:1 */
+  --color-on-accent:    var(--color-bg);          /* text on an accent fill — 4.9:1  */
+
+  /* Semantic — desaturated to sit inside the blueprint world rather than shout over it.
+     Three hues only. Introduced because diff status and model validation cannot be
+     encoded by one steel accent alone. */
+  --color-danger:  #a3423c;  --color-danger-tint:  #f7e9e8;   /* 5.4:1 on bg */
+  --color-warning: #7d5c22;  --color-warning-tint: #f5eedd;   /* 5.4:1 on bg */
+  --color-success: #3f7350;  --color-success-tint: #e6f0e9;   /* 4.9:1 on bg */
+
+  /* App aliases — the diagram/model layer speaks only these. */
+  --canvas-bg: var(--color-bg);
+  --canvas-dot: color-mix(in srgb, var(--color-accent) 28%, transparent);
+  --node-border: var(--color-accent-line);
+  --node-border-active: var(--color-accent);
+  --node-fill: var(--color-neutral-100);
+  --node-fill-active: var(--color-accent-100);
+  --node-external: var(--color-neutral-600);
+  --edge-stroke: var(--color-accent-line);
+  --edge-stroke-secondary: color-mix(in srgb, var(--color-accent) 80%, transparent);  /* 3.3:1 — the dash carries the distinction, not fading below the graphic threshold */
+  --code-bg: var(--color-neutral-100);
+  --code-key: var(--color-accent-ink);
+  --code-comment: var(--color-neutral-700);
+  --code-highlight: var(--color-accent-100);
+
+  /* Git / diff — what a versioned model looks like when it changes. */
+  --diff-added:    var(--color-success);  --diff-added-tint:    var(--color-success-tint);
+  --diff-removed:  var(--color-danger);   --diff-removed-tint:  var(--color-danger-tint);
+  --diff-changed:  var(--color-warning);  --diff-changed-tint:  var(--color-warning-tint);
+  --diff-conflict: var(--color-danger);
+}
+
+/* Explicit light reset — lets a light subtree live inside a dark app.
+   The original had no way back once [data-theme="dark"] was set. */
+[data-theme="light"] {
+  --color-bg: #f2f2f3; --color-surface: #e9e9ea; --color-text: #1d1f20;
+  --color-divider: color-mix(in srgb, #1d1f20 16%, transparent);
+  --color-text-muted: color-mix(in srgb, #1d1f20 65%, transparent);
+  --color-text-faint: color-mix(in srgb, #1d1f20 45%, transparent);
+  --color-neutral-100: #f5f5f8; --color-neutral-200: #e7e7ea; --color-neutral-300: #d4d4d7;
+  --color-neutral-400: #b7b7ba; --color-neutral-500: #98989b; --color-neutral-600: #7a7a7d;
+  --color-neutral-700: #5d5d60; --color-neutral-800: #424244; --color-neutral-900: #2b2b2d;
+  --color-accent-100: #eef4fa; --color-accent-200: #d9e6f1; --color-accent-300: #bacfe2;
+  --color-accent-400: #93b0cb; --color-accent-500: #6b8dae; --color-accent-600: #496b8d;
+  --color-accent-700: #3a5672; --color-accent-800: #2a3f54; --color-accent-900: #1b2937;
+  --color-accent-ink: var(--color-accent-700); --color-accent-line: var(--color-accent-600);
+  --color-danger:  #a3423c; --color-danger-tint:  #f7e9e8;
+  --color-warning: #7d5c22; --color-warning-tint: #f5eedd;
+  --color-success: #3f7350; --color-success-tint: #e6f0e9;
+  --node-fill: var(--color-neutral-100);
+  --node-external: var(--color-neutral-600);
+  --code-bg: var(--color-neutral-100);
+  --code-comment: var(--color-neutral-700);
+  --code-highlight: var(--color-accent-100);
+  color-scheme: light;
+}
+
+/* Dark theme — EVERY ramp step is remapped (400-700 were previously left at their
+   light values) and every step is a distinct value (600/700 were previously the
+   same hex, which made :hover and :active identical). */
+[data-theme="dark"] {
+  --color-bg: #1d1f20; --color-surface: #2b2b2d; --color-text: #f2f2f3;
+  --color-divider: color-mix(in srgb, #f2f2f3 16%, transparent);
+  --color-text-muted: color-mix(in srgb, #f2f2f3 72%, transparent);
+  --color-text-faint: color-mix(in srgb, #f2f2f3 50%, transparent);
+
+  --color-neutral-100: #242527; --color-neutral-200: #2b2b2d; --color-neutral-300: #3a3a3c;
+  --color-neutral-400: #4f4f52; --color-neutral-500: #6e6e71; --color-neutral-600: #929295;
+  --color-neutral-700: #b3b3b6; --color-neutral-800: #d4d4d7; --color-neutral-900: #f5f5f8;
+
+  --color-accent-100: #22303f; --color-accent-200: #2b3f53; --color-accent-300: #375168;
+  --color-accent-400: #4a6b87; --color-accent-500: #6a8fad; --color-accent-600: #94bce3;
+  --color-accent-700: #aecfec; --color-accent-800: #c9e0f4; --color-accent-900: #e6f1fb;
+
+  --color-accent-ink:  var(--color-accent-700);  /* text on dark ground */
+  --color-accent-line: var(--color-accent-500);  /* borders — 3.9:1 on node fill, not glaring */
+
+  --color-danger:  #e08c86;  --color-danger-tint:  #3a2523;
+  --color-warning: #d9b26a;  --color-warning-tint: #37301d;
+  --color-success: #8ec19e;  --color-success-tint: #22332a;
+
+  --canvas-dot: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  --node-fill: #22303f; --node-fill-active: #2c455d;
+  --node-external: var(--color-neutral-600);
+  --code-bg: #181a1b; --code-comment: var(--color-neutral-700);
+  --code-highlight: color-mix(in srgb, var(--color-accent) 14%, transparent);
+
+  color-scheme: dark;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* Desktop app: follow the OS unless an explicit data-theme overrides it. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg: #1d1f20; --color-surface: #2b2b2d; --color-text: #f2f2f3;
+    --color-divider: color-mix(in srgb, #f2f2f3 16%, transparent);
+    --color-text-muted: color-mix(in srgb, #f2f2f3 72%, transparent);
+    --color-text-faint: color-mix(in srgb, #f2f2f3 50%, transparent);
+    --color-neutral-100: #242527; --color-neutral-200: #2b2b2d; --color-neutral-300: #3a3a3c;
+    --color-neutral-400: #4f4f52; --color-neutral-500: #6e6e71; --color-neutral-600: #929295;
+    --color-neutral-700: #b3b3b6; --color-neutral-800: #d4d4d7; --color-neutral-900: #f5f5f8;
+    --color-accent-100: #22303f; --color-accent-200: #2b3f53; --color-accent-300: #375168;
+    --color-accent-400: #4a6b87; --color-accent-500: #6a8fad; --color-accent-600: #94bce3;
+    --color-accent-700: #aecfec; --color-accent-800: #c9e0f4; --color-accent-900: #e6f1fb;
+    --color-accent-ink: var(--color-accent-700); --color-accent-line: var(--color-accent-500);
+    --color-danger:  #e08c86; --color-danger-tint:  #3a2523;
+    --color-warning: #d9b26a; --color-warning-tint: #37301d;
+    --color-success: #8ec19e; --color-success-tint: #22332a;
+    --canvas-dot: color-mix(in srgb, var(--color-accent) 22%, transparent);
+    --node-fill: #22303f; --node-fill-active: #2c455d;
+    --node-external: var(--color-neutral-600);
+    --code-bg: #181a1b; --code-comment: var(--color-neutral-700);
+    --code-highlight: color-mix(in srgb, var(--color-accent) 14%, transparent);
+    color-scheme: dark;
+  }
+}

@@ -1,0 +1,40 @@
+/* Blastradius — type tokens. Barlow Condensed over Barlow; monospace carries the model.
+
+   The scale replaces 16 ad-hoc font-size values with 10 steps. Nothing in the system
+   sets a raw px font-size any more, which is what the adherence linter has always
+   demanded and the system previously made impossible.
+
+   9px is gone: --text-2xs (10px) is the floor. Below that, condensed uppercase at
+   canvas zoom levels below 1.0 is unreadable. */
+:root {
+  --font-heading: "Barlow Condensed", system-ui, sans-serif;
+  --font-heading-weight: 600;
+  --font-body: "Barlow", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Size scale */
+  --text-2xs:  10px;  /* node kickers, edge labels, micro chrome labels */
+  --text-xs:   11px;  /* meta lines, tags, table headers                */
+  --text-sm:   13px;  /* dense UI, card body, h6                        */
+  --text-ui:   14px;  /* the control size — buttons, inputs, nav        */
+  --text-base: 15px;  /* body                                          */
+  --text-md:   17px;  /* card titles, h5                                */
+  --text-lg:   20px;  /* h4, dialog titles, brand wordmark              */
+  --text-xl:   25px;  /* h3 */
+  --text-2xl:  32px;  /* h2 */
+  --text-3xl:  42px;  /* h1 */
+
+  /* Mono is optically smaller at the same px — bump it one notch when set beside sans. */
+  --text-mono: 12px;
+
+  /* Line heights */
+  --leading-heading: 1.12;
+  --leading-tight:   1.2;
+  --leading-body:    1.55;
+  --leading-code:    1.8;
+
+  /* Tracking — three roles, replacing five ad-hoc em values. */
+  --tracking-label:   .1em;      /* uppercase micro-labels (kickers, table th, h6) */
+  --tracking-wide:    .04em;     /* wordmark, edge labels                          */
+  --tracking-heading: -0.015em;  /* large condensed headings                       */
+}
