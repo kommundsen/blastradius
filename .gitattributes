@@ -1,0 +1,7 @@
+# The design-system bundle stores sha256(source)[:12] per component file, so a CRLF
+# checkout would silently invalidate every hash. Keep the whole tree LF.
+* text=auto eol=lf
+
+*.woff2 binary
+*.png   binary
+*.jpg   binary
