@@ -15,7 +15,7 @@ fn repo_docs_workspace_is_valid() {
     }
     assert!(!has_errors(&diags));
     assert_eq!(ws.elements.len(), 20, "element count changed — update this test with the model");
-    assert_eq!(ws.docs.len(), 16, "registered doc count changed");
+    assert_eq!(ws.docs.len(), 17, "registered doc count changed");
     assert_eq!(ws.views.len(), 2);
     // exactly one frontmatter-less file (docs/README.md), no warnings
     assert_eq!(diags.iter().filter(|d| d.severity == Severity::Info).count(), 1);

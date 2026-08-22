@@ -29,6 +29,19 @@ jobs:
           node-version: "22"
       - name: Layout determinism (ADR-0006)
         run: node --test ui/tests/determinism.test.mjs
+      - name: Install Playwright WebKit
+        run: |
+          npm ci
+          npx playwright install --with-deps webkit
+      - name: WebKit rendering gate (ADR-0011)
+        run: npx playwright test
+      - name: Upload WebKit screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webkit-screenshots
+          path: test-results/*.png
+          if-no-files-found: ignore
 
   app:
     strategy:

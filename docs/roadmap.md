@@ -29,7 +29,12 @@ docs panel with element↔doc navigation. File watcher: external edits
 re-render live. No editing of any kind.
 
 **Exit:** open `docs/`, fly the model of Blastradius, click ADR-0007 from the
-git-service node. Screenshot suite green on all three OS WebViews.
+git-service node — verified on a native window. Rendering verified in WebKit,
+the constraining engine, via the Playwright suite in CI (ADR-0011 — a native
+three-OS screenshot suite is unachievable: tauri-driver has no macOS support);
+the shell compiles on all three OSes in the CI matrix. Native macOS/Linux
+window verification is deferred to Phase 5 packaging, when that hardware is in
+the loop anyway.
 
 ## Phase 2 — Git awareness
 
@@ -64,7 +69,14 @@ every merge; import corpus hits the PRD's 80% clean-import bar.
 
 Onboarding (`init` scaffold + in-app template), packaging/signing/updates for
 three platforms, performance budgets enforced (spec/sync-engine.md), a11y
-audit against the design system's AA contract, docs site.
+audit against the design system's AA contract, docs site. Named debts from
+earlier phases land here, not silently:
+
+- **Semantic dive choreography** — the camera glides *into* the dived node and
+  *out of* the risen one (the motion spec's continuous-zoom intent), replacing
+  Phase 1's fit-to-view transitions.
+- **Native-window verification on macOS and Linux** (ADR-0011), alongside
+  signing and installers.
 
 **Exit:** a platform engineer who has never seen the product reaches a
 rendered model of their own repo in under 5 minutes (PRD metric), unassisted.

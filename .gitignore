@@ -16,5 +16,9 @@ Desktop.ini
 .idea/
 *.swp
 
+# Playwright
+test-results/
+playwright-report/
+
 # Local scratch
 *.local
