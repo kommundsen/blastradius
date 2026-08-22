@@ -1,0 +1,27 @@
+# The dogfood gate (docs/prd.md): docs/ must always be a valid Blastradius
+# workspace. Until the Phase 0 parser ships `blastradius validate`, the
+# stand-in validator enforces spec/model-format.md section 6 on every push.
+name: validate-docs
+
+on:
+  push:
+    paths:
+      - "docs/**"
+      - "tools/validate-docs.py"
+      - ".github/workflows/validate-docs.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "tools/validate-docs.py"
+      - ".github/workflows/validate-docs.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml
+      - run: python tools/validate-docs.py docs
