@@ -19,6 +19,7 @@ fn main() -> ExitCode {
             None => usage(),
         },
         Some("export") => export(&args[1..]),
+        Some("init") => init(&args[1..]),
         Some("import") => match (args.get(1), args.get(2)) {
             (Some(dsl), Some(out)) => import(dsl, out),
             _ => usage(),
@@ -228,6 +229,64 @@ fn export(args: &[String]) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Scaffold a starter workspace (Phase 5 onboarding). Refuses to touch a
+/// folder that already has a manifest; never overwrites any existing file.
+fn init(args: &[String]) -> ExitCode {
+    let mut dir = None;
+    let mut name = None;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--name" => name = it.next().cloned(),
+            other => dir = Some(other.to_string()),
+        }
+    }
+    let dir = dir.unwrap_or_else(|| ".".to_string());
+    let root = Path::new(&dir);
+    if root.join("workspace.yaml").is_file() {
+        eprintln!("{dir}: already a Blastradius workspace (workspace.yaml exists)");
+        return ExitCode::from(2);
+    }
+    let name = name.unwrap_or_else(|| {
+        root.canonicalize()
+            .ok()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .unwrap_or_else(|| "My System".to_string())
+    });
+    for (rel, text) in blastradius_core::scaffold::starter_workspace(&name) {
+        let path = root.join(&rel);
+        if path.exists() {
+            eprintln!("{rel}: exists — refusing to overwrite");
+            return ExitCode::from(2);
+        }
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Err(e) = std::fs::write(&path, text) {
+            eprintln!("cannot write {rel}: {e}");
+            return ExitCode::FAILURE;
+        }
+        println!("  created {rel}");
+    }
+    let (ws, diags) = blastradius_core::load_workspace(root);
+    if has_errors(&diags) {
+        for d in &diags {
+            eprintln!("{d}");
+        }
+        eprintln!("scaffold does not validate — this is a bug, please report it");
+        return ExitCode::FAILURE;
+    }
+    println!(
+        "{}: {} elements, {} views — next:
+  blastradius-app {dir}    # open it in the app
+  blastradius validate {dir}",
+        ws.name,
+        ws.elements.len(),
+        ws.views.len()
+    );
+    ExitCode::SUCCESS
 }
 
 /// One-way Structurizr DSL import with fidelity report (ADR-0002).
