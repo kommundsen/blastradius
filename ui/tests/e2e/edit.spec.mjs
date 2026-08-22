@@ -30,6 +30,9 @@ test('rename via inspector, then undo', async ({ page }) => {
 
 test('create element via dialog with id preview', async ({ page }) => {
   await node(page, 'Blastradius').dblclick(); // L2
+  // the dive glide takes --duration-camera; +Element is level-dependent, so
+  // wait for arrival before opening the dialog (caught as a CI-only race)
+  await expect(page.locator('#breadcrumb')).toContainText('Containers');
   await page.locator('#add-btn').click();
   await page.locator('#dlg-name').fill('Plugin Host');
   await expect(page.locator('#dlg-id')).toHaveValue('plugin-host');
