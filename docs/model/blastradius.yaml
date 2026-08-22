@@ -34,7 +34,12 @@ containers:
   cli:
     name: CLI
     tech: Rust
-    description: "`blastradius validate` and `blastradius diff` — the headless attachment point for CI (ADR-0005); enforces the dogfood gate on this folder."
+    description: "`blastradius init/validate/diff/export/import` — the headless attachment point for CI (ADR-0005); enforces the dogfood gate on this folder."
+    components:
+      mcp-server:
+        name: MCP Server
+        tech: Rust
+        description: "`blastradius mcp` — newline-delimited JSON-RPC over stdio (ADR-0012). Task-shaped read tools (blast_radius, element, model_diff, doc) plus writes routed through the sync engine's format-preserving splices."
 
   core:
     name: Core

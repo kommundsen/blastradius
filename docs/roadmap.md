@@ -125,12 +125,9 @@ diff rendering in CI, L4 source-derived elements, deployment views, headless
 SVG/PNG export via a node script over ui/js/layout.js (spec/export.md v1
 boundary).
 
-**MCP server** (candidate, raised 2026-08-22): `blastradius mcp` as a CLI
-subcommand — a stdio MCP server over the core library so coding agents
-(Claude Code et al.) can query the model instead of parsing snapshot JSON.
-Task-shaped read tools first (element/relation lookup, blast-radius impact
-of a change, semantic diff vs a ref, "which ADRs/specs govern this
-element" via docs-as-model-objects); writes second, routed through the
-sync engine so agent edits are CST-preserving splices, never YAML
-re-serialization. ADR-0005's library-first design makes this a third head
-on the same core; needs its own ADR before building.
+**MCP server** — raised as a candidate 2026-08-22 and **shipped the same
+day** (ADR-0012, spec/mcp-server.md): `blastradius mcp` serves ten tools
+over stdio; reads are task-shaped (blast_radius, element, model_diff, doc),
+writes route through the sync engine's CST-preserving splices with shared
+undo. Building it surfaced and fixed two latent core bugs (system rename,
+silently-dropped context-file relations).

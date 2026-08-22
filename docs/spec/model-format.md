@@ -94,10 +94,14 @@ relations:
 Rules:
 
 - `name` defaults to the titleized id. `tech`, `description` optional.
-- `relations` may appear at system level (as above) or nested under a
-  container (then `from` defaults to that container). `from`/`to` accept bare
-  ids (context), sibling ids, or dotted paths; cross-system references use
-  full paths from the root.
+- `relations` may appear at system level (as above), nested under a
+  container (then `from` defaults to that container), or in a **context
+  file** (endpoints are then absolute — bare context ids or dotted paths;
+  there is no scope). `from`/`to` accept bare ids (context), sibling ids, or
+  dotted paths; cross-system references use full paths from the root.
+  Context-file relations were silently dropped by the parser before
+  2026-08-22 even though the sync engine wrote person-relations there — a
+  data-loss bug found by the MCP test suite; both surfaces now agree.
 - Relations are **directed** (`from` → `to`). `direction: both | none`
   overrides; omitted means forward — an undirected relation is a deliberate
   choice, mirroring the canvas grammar.

@@ -20,6 +20,13 @@ fn main() -> ExitCode {
         },
         Some("export") => export(&args[1..]),
         Some("init") => init(&args[1..]),
+        Some("mcp") => match blastradius_cli::mcp::serve(args.get(1).map(String::as_str)) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("{e}");
+                ExitCode::from(2)
+            }
+        },
         Some("import") => match (args.get(1), args.get(2)) {
             (Some(dsl), Some(out)) => import(dsl, out),
             _ => usage(),
@@ -30,7 +37,7 @@ fn main() -> ExitCode {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage:\n  blastradius validate [workspace-dir]\n  blastradius diff <base-dir> <current-dir>\n  blastradius snapshot [workspace-dir]"
+        "usage:\n  blastradius init [dir] [--name <name>]\n  blastradius validate [workspace-dir]\n  blastradius diff <base-dir> <current-dir>\n  blastradius gitdiff <dir> [base-ref] [cur-ref]\n  blastradius snapshot [workspace-dir]\n  blastradius export <dir> -o <file.html> [--with-doc-bodies]\n  blastradius import <workspace.dsl> <out-dir>\n  blastradius mcp [workspace-dir]"
     );
     ExitCode::from(2)
 }

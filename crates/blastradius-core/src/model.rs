@@ -124,4 +124,17 @@ impl Workspace {
         }
         None
     }
+
+    /// Relations with both endpoints resolved to dotted ids (spec §3 sibling
+    /// resolution). Unresolvable relations — already reported as diagnostics —
+    /// are skipped.
+    pub fn resolved_relations(&self) -> Vec<(ElementId, ElementId, &Relation)> {
+        self.relations
+            .iter()
+            .filter_map(|r| {
+                let scope = r.scope.as_deref();
+                Some((self.resolve(&r.from, scope)?, self.resolve(&r.to, scope)?, r))
+            })
+            .collect()
+    }
 }

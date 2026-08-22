@@ -21,6 +21,9 @@ pub enum Operation {
     Pin { view: Option<String>, level: String, scope: Option<String>, id: String, x: i64, y: i64 },
     /// Rename = set `name:` — the id is immutable (ADR-0003).
     Rename { id: String, name: String },
+    /// Set a scalar field on an element (whitelisted: name, description,
+    /// tech). The MCP surface and future inspector fields route here.
+    SetField { id: String, field: String, value: String },
     /// Create an element under a parent (None = context person/external).
     Create { parent: Option<String>, id: String, name: String, kind: String },
     /// Delete an element; relations referencing it and its layout pins are
@@ -374,6 +377,16 @@ impl SyncEngine {
                 let text = self.files.get(&rel).ok_or("file not cached")?;
                 let chain_refs: Vec<&str> = chain.iter().map(String::as_str).collect();
                 let after = splice::set_field(text, &chain_refs, "name", name)?;
+                Ok(vec![self.change(&rel, after)])
+            }
+            Operation::SetField { id, field, value } => {
+                if !matches!(field.as_str(), "name" | "description" | "tech") {
+                    return Err(format!("field {field:?} is not editable on an element"));
+                }
+                let (rel, chain) = self.element_chain(id)?;
+                let text = self.files.get(&rel).ok_or("file not cached")?;
+                let chain_refs: Vec<&str> = chain.iter().map(String::as_str).collect();
+                let after = splice::set_field(text, &chain_refs, field, value)?;
                 Ok(vec![self.change(&rel, after)])
             }
             Operation::Create { parent, id, name, kind } => {
@@ -1038,6 +1051,7 @@ fn op_label(op: &Operation) -> String {
     match op {
         Operation::Pin { id, x, y, .. } => format!("pin {id} at [{x}, {y}]"),
         Operation::Rename { id, name } => format!("rename {id} to {name:?}"),
+        Operation::SetField { id, field, value } => format!("set {field} on {id} to {value:?}"),
         Operation::Create { id, kind, .. } => format!("create {kind} {id}"),
         Operation::Delete { id } => format!("delete {id}"),
         Operation::AddRelation { from, to, .. } => format!("relate {from} -> {to}"),

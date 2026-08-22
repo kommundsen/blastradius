@@ -327,3 +327,46 @@ layout:
     let (_, diags) = blastradius_core::load_workspace(&t.dir);
     assert!(!blastradius_core::diagnostics::has_errors(&diags));
 }
+
+#[test]
+fn rename_a_system_touches_the_root_mapping() {
+    // regression: system rename went through set_field with an empty chain,
+    // which errored "[] not found" — masked by the frontend mock until the
+    // MCP work exercised the real path
+    let (t, mut e) = setup("sys-rename");
+    e.apply(Operation::Rename { id: "shop".into(), name: "Shop 2".into() }).unwrap();
+    let text = read(&t.dir, "model/shop.yaml");
+    assert!(text.contains("name: Shop 2"), "{text}");
+    assert!(text.contains("# The shop system — hand-maintained, mind the comments."),
+        "comments survive: {text}");
+    e.undo().unwrap();
+    assert_eq!(read(&t.dir, "model/shop.yaml"), SHOP);
+}
+
+#[test]
+fn set_field_writes_description_and_tech() {
+    let (t, mut e) = setup("set-field");
+    // insert a missing field on a container...
+    e.apply(Operation::SetField {
+        id: "shop.web".into(), field: "description".into(),
+        value: "The storefront SPA".into(),
+    }).unwrap();
+    // ...replace an existing one, preserving the aligned inline comment
+    e.apply(Operation::SetField {
+        id: "shop.web".into(), field: "tech".into(), value: "Preact".into(),
+    }).unwrap();
+    let text = read(&t.dir, "model/shop.yaml");
+    assert!(text.contains("description: The storefront SPA"), "{text}");
+    assert!(text.contains("tech: Preact # SPA"), "comment survives: {text}");
+    // whitelist enforced
+    let err = e.apply(Operation::SetField {
+        id: "shop.web".into(), field: "id".into(), value: "nope".into(),
+    }).unwrap_err();
+    assert!(err.contains("not editable"), "{err}");
+    // description on a *system* lands in the root header block
+    e.apply(Operation::SetField {
+        id: "shop".into(), field: "description".into(), value: "Sells things".into(),
+    }).unwrap();
+    let text = read(&t.dir, "model/shop.yaml");
+    assert!(text.contains("name: Shop\ndescription: Sells things"), "{text}");
+}

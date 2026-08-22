@@ -136,9 +136,32 @@ pub fn yaml_scalar(value: &str) -> String {
 /// Preserves an inline `# comment` after the value. Handles one-line flow
 /// mappings (`web: { tech: React }`) textually.
 pub fn set_field(text: &str, chain: &[&str], field: &str, value: &str) -> Result<String, String> {
-    let owner = find_entry(text, chain)?.ok_or_else(|| format!("{chain:?} not found"))?;
     let scalar = yaml_scalar(value);
     let lines = lines_of(text);
+
+    // Empty chain = the file's root mapping (a system file's own fields —
+    // renaming a system lands here). Replace in place, or insert after the
+    // last root-level scalar so the header block reads as hand-written.
+    if chain.is_empty() {
+        if let Some(f) = find_entry(text, &[field])? {
+            return Ok(replace_field_line(&lines, f.key_line - 1, field, &scalar));
+        }
+        let root = parse(text)?;
+        let map = as_map(&root).ok_or("root is not a mapping")?;
+        let mut after_line = 1;
+        for (k, v) in map.iter() {
+            if matches!(v, marked_yaml::Node::Scalar(_)) {
+                if let Some(m) = k.span().start() {
+                    after_line = after_line.max(m.line());
+                }
+            }
+        }
+        let mut out: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
+        out.insert(after_line, format!("{field}: {scalar}\n"));
+        return Ok(out.concat());
+    }
+
+    let owner = find_entry(text, chain)?.ok_or_else(|| format!("{chain:?} not found"))?;
 
     if owner.inline {
         // one-line flow mapping: edit within the braces on the key line
@@ -174,19 +197,7 @@ pub fn set_field(text: &str, chain: &[&str], field: &str, value: &str) -> Result
     let mut sub = chain.to_vec();
     sub.push(field);
     if let Some(f) = find_entry(text, &sub)? {
-        let idx = f.key_line - 1;
-        let line = lines[idx];
-        let eol = line.trim_end_matches(['\r', '\n']);
-        let nl = &line[eol.len()..];
-        // replace value, keep trailing comment
-        let key_pat = format!("{field}:");
-        let kpos = eol.find(&key_pat).ok_or("field key not on its line")?;
-        let after = &eol[kpos + key_pat.len()..];
-        let comment = after.find(" #").map(|p| &after[p..]).unwrap_or("");
-        let new_line = format!("{}{} {}{}{}", &eol[..kpos], key_pat, scalar, comment, nl);
-        let mut out: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
-        out[idx] = new_line;
-        Ok(out.concat())
+        Ok(replace_field_line(&lines, f.key_line - 1, field, &scalar))
     } else {
         // insert as first line under the owner key
         let child_indent = child_indent_for(&lines, owner);
@@ -195,6 +206,22 @@ pub fn set_field(text: &str, chain: &[&str], field: &str, value: &str) -> Result
         out.insert(owner.key_line, insert); // after the key line (1-based -> index)
         Ok(out.concat())
     }
+}
+
+/// Replace the value on an existing `field:` line, preserving indentation
+/// and any trailing comment.
+fn replace_field_line(lines: &[&str], idx: usize, field: &str, scalar: &str) -> String {
+    let line = lines[idx];
+    let eol = line.trim_end_matches(['\r', '\n']);
+    let nl = &line[eol.len()..];
+    let key_pat = format!("{field}:");
+    let kpos = eol.find(&key_pat).unwrap_or(0);
+    let after = &eol[kpos + key_pat.len()..];
+    let comment = after.find(" #").map(|p| &after[p..]).unwrap_or("");
+    let new_line = format!("{}{} {}{}{}", &eol[..kpos], key_pat, scalar, comment, nl);
+    let mut out: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
+    out[idx] = new_line;
+    out.concat()
 }
 
 /// Position of `field: value` inside a one-line flow mapping, as byte range.

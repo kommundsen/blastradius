@@ -60,8 +60,10 @@ vendored; the WebView is the OS one).
    [Evergreen runtime](https://developer.microsoft.com/microsoft-edge/webview2/).
 5. **Smart App Control** (Windows 11): it blocks freshly compiled cargo build
    scripts (unsigned binaries), so Rust development effectively requires it
-   off — Windows Security → App & browser control. Note that re-enabling it
-   later requires a Windows reset; this is a one-way door.
+   off — Windows Security → App & browser control. Since the April 2026
+   cumulative update (KB5083769) it can be re-enabled from the same place;
+   on builds without that update, re-enabling still requires a Windows
+   reset.
 
 **macOS (13+):**
 
@@ -144,10 +146,26 @@ blastradius gitdiff <dir> [base] [cur]      semantic diff from git history
 blastradius snapshot [dir]                  renderer snapshot as JSON
 blastradius export <dir> -o out.html        self-contained interactive HTML
 blastradius import <file.dsl> <out-dir>     one-way Structurizr DSL import
+blastradius mcp [dir]                       MCP server over stdio (ADR-0012)
 ```
 
 (Substitute `cargo run -q -p blastradius-cli --` for `blastradius` when
 running from the repo.)
+
+## Coding agents (MCP)
+
+The model is queryable by coding agents: `blastradius mcp <workspace-dir>`
+serves ten tools over stdio (MCP) — orientation, search, per-element detail,
+**blast_radius** impact analysis, validation, semantic git diff, doc bodies,
+and edits that go through the sync engine so they are format-preserving and
+undoable. Register with Claude Code:
+
+```bash
+claude mcp add blastradius -- blastradius mcp path/to/workspace
+```
+
+Details in [docs/spec/mcp-server.md](docs/spec/mcp-server.md) and
+[ADR-0012](docs/adr/0012-mcp-server.md).
 
 ## Frontend development
 

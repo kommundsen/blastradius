@@ -62,6 +62,13 @@ pub fn parse_model_file(
     if has_context {
         parse_context_section(map, "people", ElementKind::Person, rel, ws, diags);
         parse_context_section(map, "external", ElementKind::External, rel, ws, diags);
+        // Context files may relate their people/externals to systems (spec §3);
+        // endpoints are absolute ids, there is no scope. The sync engine has
+        // always *written* person-relations here — the parser dropping them
+        // silently was a data-loss bug found by the MCP test suite.
+        if let Some(rels) = map.get_node("relations") {
+            parse_relations(rels, rel, None, None, ws, diags);
+        }
     } else {
         parse_system(map, rel, ws, diags);
     }
@@ -170,7 +177,7 @@ fn parse_system(map: &MarkedMappingNode, rel: &str, ws: &mut Workspace, diags: &
                 }
                 // container-scoped relations: `from` defaults to the container (spec §3)
                 if let Some(rels) = cmap.get_node("relations") {
-                    parse_relations(rels, rel, &sid, Some(&cid), ws, diags);
+                    parse_relations(rels, rel, Some(&sid), Some(&cid), ws, diags);
                 }
             }
         }
@@ -180,14 +187,14 @@ fn parse_system(map: &MarkedMappingNode, rel: &str, ws: &mut Workspace, diags: &
     }
 
     if let Some(rels) = map.get_node("relations") {
-        parse_relations(rels, rel, &sid, None, ws, diags);
+        parse_relations(rels, rel, Some(&sid), None, ws, diags);
     }
 }
 
 fn parse_relations(
     node: &Node,
     rel: &str,
-    system: &str,
+    system: Option<&str>,
     default_from: Option<&str>,
     ws: &mut Workspace,
     diags: &mut Vec<Diagnostic>,
@@ -232,7 +239,7 @@ fn parse_relations(
             direction,
             file: rel.to_string(),
             line,
-            scope: Some(system.to_string()),
+            scope: system.map(str::to_string),
         });
     }
 }
