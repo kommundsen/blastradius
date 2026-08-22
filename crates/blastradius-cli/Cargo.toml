@@ -11,3 +11,4 @@ path = "src/main.rs"
 
 [dependencies]
 blastradius-core = { path = "../blastradius-core" }
+serde_json = "1"

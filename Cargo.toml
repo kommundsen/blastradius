@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/blastradius-core", "crates/blastradius-cli"]
+members = ["crates/blastradius-core", "crates/blastradius-cli", "crates/blastradius-app"]
 
 [workspace.package]
 version = "0.1.0"

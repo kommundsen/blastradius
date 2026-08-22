@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Main window: core IPC + events only. No fs, shell, or network surface — the WebView renders; the Core owns the machine (ADR-0005).","local":true,"windows":["main"],"permissions":["core:default"]}}

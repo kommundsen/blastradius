@@ -1,0 +1,32 @@
+/* Blastradius — spacing, radius, elevation, stacking.
+
+   The 0.85x density scale is rebased onto whole pixels. The previous values
+   (3.4 / 6.8 / 10.2 / 13.6 / 20.4 / 27.2) put every edge on a subpixel boundary,
+   which is precisely wrong for a system built on 1px hairlines. */
+:root {
+  --space-1: 3px;  --space-2: 7px;  --space-3: 10px;
+  --space-4: 14px; --space-6: 20px; --space-8: 27px;
+
+  /* Square is the brand. One token, value 0 — the previous --radius-sm/md/lg
+     existed only to be overridden to 0 by every component, which invited misuse. */
+  --radius: 0;
+
+  /* Chrome elevation */
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2b2b2d 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2b2b2d 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2b2b2d 22%, transparent);
+
+  /* Nodes hover just above the canvas — crisp box, faint throw */
+  --shadow-node: 0 8px 16px color-mix(in srgb, #1d1f20 16%, transparent);
+  --shadow-node-active: 0 10px 22px color-mix(in srgb, #1d1f20 20%, transparent);
+
+  /* Stacking order. The canvas has real layers; DOM order is not a specification. */
+  --z-canvas:       0;
+  --z-edge:        10;
+  --z-node:        20;
+  --z-node-active: 30;
+  --z-overlay:    100;  /* zoom control, hints, minimap  */
+  --z-panel:      200;  /* sidebars, inspector           */
+  --z-dialog:    1000;
+  --z-toast:     1100;
+}

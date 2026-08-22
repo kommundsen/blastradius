@@ -1,0 +1,36 @@
+/* Blastradius — motion tokens.
+
+   The product's signature interaction is a continuous map-style zoom between
+   C4 levels. It previously had no spec at all: no duration, no easing, nothing
+   an implementer could read. These are that spec.
+
+   Rule: the camera is the only thing allowed to take longer than 260ms.
+   Everything else in the UI is either instant or --duration-base. No bounces,
+   no crossfades between levels — the camera glides and the model stays put. */
+:root {
+  --duration-instant: 0ms;
+  --duration-fast:   90ms;   /* hover, press, focus ring          */
+  --duration-base:  160ms;   /* panel toggles, tag/chip changes   */
+  --duration-slow:  260ms;   /* dialog in, inspector slide        */
+  --duration-camera: 520ms;  /* L(n) -> L(n±1) zoom               */
+
+  --ease-standard: cubic-bezier(.2, 0, 0, 1);      /* enters and state changes */
+  --ease-exit:     cubic-bezier(.4, 0, 1, 1);      /* leaves                   */
+  --ease-camera:   cubic-bezier(.22, .61, .36, 1); /* decelerating glide       */
+
+  /* Composed: apply to the canvas transform, nothing else. */
+  --transition-camera: transform var(--duration-camera) var(--ease-camera);
+  --transition-ui: background-color var(--duration-fast) var(--ease-standard),
+                   border-color var(--duration-fast) var(--ease-standard),
+                   color var(--duration-fast) var(--ease-standard),
+                   opacity var(--duration-fast) var(--ease-standard);
+}
+
+/* A zoom that cannot be opted out of is a vestibular hazard. When motion is
+   reduced the camera cuts instead of glides — the destination is identical. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms; --duration-base: 0ms;
+    --duration-slow: 0ms; --duration-camera: 0ms;
+  }
+}

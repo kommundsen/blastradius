@@ -18,8 +18,10 @@ validates it on every push.
 ## Repository layout
 
 ```
-crates/blastradius-core/   Rust library: workspace loading, validation, semantic diff
-crates/blastradius-cli/    `blastradius` binary: validate, diff
+crates/blastradius-core/   Rust library: workspace loading, validation, semantic diff, snapshot
+crates/blastradius-cli/    `blastradius` binary: validate, diff, snapshot
+crates/blastradius-app/    Tauri desktop shell (Phase 1: read-only canvas)
+ui/                        WebView frontend — vanilla ES modules, no bundler
 design-system/             tokens, components, specimen cards (plain CSS + JSX refs)
 docs/                      product docs + the dogfood workspace
 ```
@@ -70,10 +72,32 @@ cargo build                    # everything
 cargo test                     # unit + seeded-fault + conformance suites
 cargo run -p blastradius-cli -- validate docs
 cargo run -p blastradius-cli -- diff <base-workspace> <current-workspace>
+cargo run -p blastradius-app -- docs      # the desktop app on the dogfood workspace
+node --test ui/tests/determinism.test.mjs # ELK layout determinism (needs Node >= 20)
 ```
 
+## Frontend development
+
+`ui/` is plain ES modules — no bundler, no node_modules. Open it in any static
+server and it runs against `ui/mock/snapshot.json` instead of Tauri IPC, so the
+whole frontend is developable in a browser. Regenerate the mock after model
+changes:
+
+```
+cargo run -p blastradius-cli -- snapshot docs > ui/mock/snapshot.json
+```
+
+`ui/ds/` is a build-artifact copy of `design-system/` — edit the design system,
+then run `python tools/sync-ds.py`. `ui/vendor/` holds elkjs (EPL-2.0) and
+marked (MIT).
+
+One Windows note: **Smart App Control** blocks freshly compiled cargo build
+scripts (unsigned binaries). Rust development on Windows effectively requires
+it off — it can only be disabled in Windows Security, and re-enabling requires
+a reset.
+
 `validate docs` is the dogfood gate and runs in CI
-([.github/workflows/validate-docs.yml](.github/workflows/validate-docs.yml));
+([.github/workflows/ci.yml](.github/workflows/ci.yml));
 the conformance test (`crates/blastradius-core/tests/conformance.rs`) asserts
 the same thing from inside the test suite, so `cargo test` alone catches a
 broken workspace.

@@ -1,0 +1,71 @@
+/* App-specific chrome on top of the design system. Anything reusable here
+   should graduate into design-system/components — this file is for glue. */
+
+html, body { height: 100%; }
+body { margin: 0; overflow: hidden; }
+.app { height: 100%; }
+
+/* canvas fills, camera sized by layout */
+#canvas { outline-offset: -2px; }
+#camera { transition: var(--transition-camera); }
+#camera.no-anim { transition: none; }
+#edge-layer { width: 100%; height: 100%; }
+
+.overlay-bl { position: absolute; left: var(--space-4); bottom: var(--space-4);
+  display: flex; gap: var(--space-3); align-items: center; }
+
+/* nodes are buttons (keyboard reachable) but keep the design-system look */
+.node { cursor: default; text-align: left; }
+.node:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+
+/* disabled level option */
+.seg-opt.is-disabled { opacity: .45; cursor: not-allowed; }
+
+/* sidebar tree rows reuse .tree-row; add kind glyphs */
+.tree-row .glyph { width: 1em; display: inline-block; text-align: center; }
+
+/* inspector */
+.side-empty { padding: 0 var(--space-3); font-size: var(--text-sm); }
+.insp { padding: 0 var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
+.insp-kicker { font-size: var(--text-2xs); letter-spacing: var(--tracking-label);
+  text-transform: uppercase; color: var(--color-accent-ink); }
+.insp-title { font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: var(--text-lg); line-height: var(--leading-tight); text-transform: uppercase; }
+.insp-desc { font-size: var(--text-sm); color: var(--color-text-muted); margin: 0; }
+.insp-section { margin-top: var(--space-2); font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-label); text-transform: uppercase; font-weight: 600;
+  color: var(--color-text-muted); }
+.insp-rel { font-size: var(--text-sm); padding: 2px 0; }
+.insp-rel .proto { color: var(--color-text-muted); font-size: var(--text-xs); }
+.doc-link { display: flex; align-items: center; gap: var(--space-2);
+  width: 100%; text-align: left; font: inherit; font-size: var(--text-sm);
+  padding: var(--row-py) 0; background: none; border: 0; cursor: pointer;
+  color: var(--color-accent-ink); }
+.doc-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* doc reader */
+.doc-body { padding: 0 var(--space-3) var(--space-4); font-size: var(--text-sm);
+  line-height: var(--leading-body); overflow-wrap: break-word; }
+.doc-body h1 { font-size: var(--text-lg); margin-top: var(--space-3); }
+.doc-body h2 { font-size: var(--text-md); margin-top: var(--space-3); }
+.doc-body h3 { font-size: var(--text-base); }
+.doc-body pre { background: var(--code-bg); padding: var(--space-2);
+  overflow-x: auto; font-size: var(--text-2xs); }
+.doc-body code { font-size: 0.9em; }
+.doc-body table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
+.doc-body th, .doc-body td { border-bottom: 1px solid var(--color-divider);
+  padding: var(--space-1); text-align: left; }
+.doc-meta { display: flex; gap: var(--space-2); align-items: center;
+  padding: var(--space-2) var(--space-3) 0; flex-wrap: wrap; }
+.doc-elements { padding: 0 var(--space-3); }
+
+/* diagnostics banner */
+#diag-chips { display: inline-flex; gap: var(--space-2); }
+.diag-list { position: absolute; top: 0; right: 0; z-index: var(--z-panel);
+  max-width: 480px; max-height: 50%; overflow: auto; background: var(--color-bg);
+  border: 1px solid var(--color-danger); box-shadow: var(--shadow-lg);
+  padding: var(--space-3); font-size: var(--text-xs); font-family: var(--font-mono); }
+.diag-list div + div { margin-top: var(--space-1); }
+
+/* the hidden attribute must always win over component display rules */
+[hidden] { display: none !important; }

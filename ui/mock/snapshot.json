@@ -1,0 +1,460 @@
+{
+  "name": "Blastradius",
+  "elements": [
+    {
+      "id": "architect",
+      "kind": "person",
+      "name": "Platform Architect",
+      "description": "Owns architecture documentation for their team; models systems, reviews model PRs, presents exports."
+    },
+    {
+      "id": "blastradius",
+      "kind": "system",
+      "name": "Blastradius",
+      "description": "Local-first desktop app for interactive, git-versioned C4 architecture models."
+    },
+    {
+      "id": "blastradius.cli",
+      "kind": "container",
+      "parent": "blastradius",
+      "name": "CLI",
+      "tech": "Rust",
+      "description": "`blastradius validate` and `blastradius diff` — the headless attachment point for CI (ADR-0005); enforces the dogfood gate on this folder."
+    },
+    {
+      "id": "blastradius.core",
+      "kind": "container",
+      "parent": "blastradius",
+      "name": "Core",
+      "tech": "Rust",
+      "description": "The domain. Library-first — the CLI and CI attach here without a WebView."
+    },
+    {
+      "id": "blastradius.core.exporter",
+      "kind": "component",
+      "parent": "blastradius.core",
+      "name": "Exporter",
+      "description": "Self-contained HTML snapshot, SVG/PNG assembly; headless-capable for CI (ADR-0009)."
+    },
+    {
+      "id": "blastradius.core.git-service",
+      "kind": "component",
+      "parent": "blastradius.core",
+      "name": "Git Service",
+      "tech": "git2 / libgit2",
+      "description": "Read-only repository access — status, revision materialisation for diff, conflict stages, history (ADR-0007)."
+    },
+    {
+      "id": "blastradius.core.importer",
+      "kind": "component",
+      "parent": "blastradius.core",
+      "name": "Structurizr Importer",
+      "description": "One-way DSL import with fidelity report (ADR-0002)."
+    },
+    {
+      "id": "blastradius.core.model-service",
+      "kind": "component",
+      "parent": "blastradius.core",
+      "name": "Model Service",
+      "description": "Workspace loading, schema parse and validation, doc registry, semantic model diff (spec/model-format.md)."
+    },
+    {
+      "id": "blastradius.core.sync-engine",
+      "kind": "component",
+      "parent": "blastradius.core",
+      "name": "Sync Engine",
+      "description": "Arbiter between canvas, panel, and external editors; CST-preserving writes, staleness, shared undo (ADR-0008)."
+    },
+    {
+      "id": "blastradius.core.watcher",
+      "kind": "component",
+      "parent": "blastradius.core",
+      "name": "File Watcher",
+      "tech": "notify",
+      "description": "External-edit detection; feeds the sync engine's single inbound path; echo suppression by content hash."
+    },
+    {
+      "id": "blastradius.shell",
+      "kind": "container",
+      "parent": "blastradius",
+      "name": "App Shell",
+      "tech": "Tauri 2",
+      "description": "Window, menus, packaging, updates; hosts the WebView and the Core; owns the IPC boundary (ADR-0005)."
+    },
+    {
+      "id": "blastradius.ui",
+      "kind": "container",
+      "parent": "blastradius",
+      "name": "Canvas UI",
+      "tech": "WebView · design system",
+      "description": "All rendering and interaction. Owns no domain state; every edit is proposed to the Core as a transaction."
+    },
+    {
+      "id": "blastradius.ui.canvas",
+      "kind": "component",
+      "parent": "blastradius.ui",
+      "name": "Canvas",
+      "tech": "SVG + DOM camera layer",
+      "description": "Zooming diagram surface — nodes, edges, diff states, continuous L1→L3 camera."
+    },
+    {
+      "id": "blastradius.ui.docs-panel",
+      "kind": "component",
+      "parent": "blastradius.ui",
+      "name": "Docs Panel",
+      "tech": "markdown renderer",
+      "description": "Renders typed documents; element ↔ document navigation (ADR-0010)."
+    },
+    {
+      "id": "blastradius.ui.layout-worker",
+      "kind": "component",
+      "parent": "blastradius.ui",
+      "name": "Layout Worker",
+      "tech": "elkjs · web worker",
+      "description": "Deterministic layered layout with pinning constraints and stability hints (ADR-0006)."
+    },
+    {
+      "id": "blastradius.ui.yaml-panel",
+      "kind": "component",
+      "parent": "blastradius.ui",
+      "name": "YAML Panel",
+      "tech": "CodeMirror",
+      "description": "In-app text editor with inline validation; a peer surface to the canvas, not a viewer."
+    },
+    {
+      "id": "external-editor",
+      "kind": "external",
+      "name": "External Editor",
+      "description": "VS Code, vim, anything. Edits workspace files concurrently with the app; reconciled by the sync engine.",
+      "external": true
+    },
+    {
+      "id": "git-repo",
+      "kind": "external",
+      "name": "Git Repository",
+      "description": "The team's repo. Holds the workspace; carries history, branches, and merge conflicts. Written only by the user's own git tooling (ADR-0007).",
+      "external": true
+    },
+    {
+      "id": "reviewer",
+      "kind": "person",
+      "name": "Reviewer",
+      "description": "Reads model diffs in PRs and exported HTML; may never install the app."
+    },
+    {
+      "id": "structurizr-workspace",
+      "kind": "external",
+      "name": "Structurizr Workspace",
+      "description": "Existing Structurizr DSL model; one-way import source (ADR-0002).",
+      "external": true
+    }
+  ],
+  "relations": [
+    {
+      "from": "architect",
+      "to": "blastradius.ui",
+      "label": "models the system",
+      "direction": "forward"
+    },
+    {
+      "from": "reviewer",
+      "to": "blastradius",
+      "label": "reads exported HTML & PR diffs",
+      "direction": "forward"
+    },
+    {
+      "from": "blastradius.ui.canvas",
+      "to": "blastradius.core.sync-engine",
+      "label": "edit operations",
+      "protocol": "Tauri IPC",
+      "direction": "forward"
+    },
+    {
+      "from": "blastradius.ui.yaml-panel",
+      "to": "blastradius.core.sync-engine",
+      "label": "buffer updates",
+      "protocol": "Tauri IPC",
+      "direction": "forward"
+    },
+    {
+      "from": "blastradius.ui.docs-panel",
+      "to": "blastradius.core.model-service",
+      "label": "doc queries",
+      "protocol": "Tauri IPC",
+      "direction": "forward"
+    },
+    {
+      "from": "blastradius.cli",
+      "to": "blastradius.core.model-service",
+      "label": "validate · diff",
+      "protocol": "library call",
+      "direction": "forward"
+    },
+    {
+      "from": "blastradius.ui.canvas",
+      "to": "blastradius.ui.layout-worker",
+      "label": "layout requests",
+      "protocol": "postMessage",
+      "direction": "forward"
+    },
+    {
+      "from": "blastradius.core.model-service",
+      "to": "blastradius.core.sync-engine",
+      "label": "parse results",
+      "direction": "forward"
+    },
+    {
+      "from": "blastradius.core.watcher",
+      "to": "blastradius.core.sync-engine",
+      "label": "external change events",
+      "direction": "forward"
+    },
+    {
+      "from": "blastradius.core.sync-engine",
+      "to": "git-repo",
+      "label": "reads & writes workspace files",
+      "protocol": "fs",
+      "direction": "forward"
+    },
+    {
+      "from": "blastradius.core.git-service",
+      "to": "git-repo",
+      "label": "status · blobs · history",
+      "protocol": "libgit2",
+      "direction": "forward"
+    },
+    {
+      "from": "external-editor",
+      "to": "git-repo",
+      "label": "concurrent edits",
+      "direction": "both"
+    },
+    {
+      "from": "blastradius.core.importer",
+      "to": "structurizr-workspace",
+      "label": "one-way import",
+      "direction": "forward"
+    }
+  ],
+  "views": [
+    {
+      "id": "containers",
+      "name": "Containers",
+      "scope": "blastradius",
+      "level": "L2",
+      "layout": {
+        "core": [
+          12.0,
+          5.0
+        ],
+        "shell": [
+          8.0,
+          1.0
+        ],
+        "ui": [
+          4.0,
+          5.0
+        ]
+      },
+      "include_context": true
+    },
+    {
+      "id": "core-components",
+      "name": "Core Components",
+      "scope": "blastradius.core",
+      "level": "L3",
+      "layout": {},
+      "include_context": false
+    }
+  ],
+  "docs": [
+    {
+      "id": "adr-0001",
+      "type": "adr",
+      "status": "accepted",
+      "elements": [
+        "blastradius"
+      ],
+      "file": "adr/0001-record-architecture-decisions.md",
+      "title": "ADR-0001: Record architecture decisions, and make them model objects",
+      "body": "# ADR-0001: Record architecture decisions, and make them model objects\n\n## Status\nAccepted — 2026-08-22\n\n## Context\nBlastradius exists because architecture knowledge rots when it lives outside\nthe repo and outside review. Its own decisions must not be exempt.\n\n## Decision\nDecisions are recorded as ADRs in `docs/adr/`, one file per decision,\nnumbered, immutable once accepted (superseded, never edited into a different\ndecision). Each ADR carries frontmatter registering it in the docs model with\ntyped links to the elements it governs (see ADR-0010). The format is\nlightweight MADR: Status, Context, Decision, Consequences.\n\n## Consequences\n- A decision that names no element is a smell — either an element is missing\n  from the model or the decision is not architectural.\n- The app will render ADR ↔ element links; broken links fail validation, so\n  deleting an element without addressing its ADRs is a visible error.\n"
+    },
+    {
+      "id": "adr-0002",
+      "type": "adr",
+      "status": "accepted",
+      "elements": [
+        "blastradius.core.model-service",
+        "blastradius.core.importer"
+      ],
+      "file": "adr/0002-bespoke-schema-with-structurizr-import.md",
+      "title": "ADR-0002: Bespoke YAML schema, with a one-way Structurizr importer",
+      "body": "# ADR-0002: Bespoke YAML schema, with a one-way Structurizr importer\n\n## Status\nAccepted — 2026-08-22\n\n## Context\nStructurizr DSL is the incumbent text format for C4 models. Adopting it\nwholesale would give instant compatibility — and would also inherit its\nsingle-workspace-file assumption, its identity scheme, and view semantics\ndesigned for server-side rendering. Our schema is judged first by what a PR\ndiff looks like (PRD principle 2) and must carry first-class documents\n(ADR-0010); neither survives contact with DSL compatibility.\n\n## Decision\nDesign a bespoke YAML schema (normative spec: `spec/model-format.md`)\noptimised for hand-editing, git diffs, and stable identity. Ship a **one-way\nimporter** from Structurizr DSL that produces a Blastradius workspace plus a\n**fidelity report**: every construct that did not map is listed in the output,\nnever silently dropped.\n\n## Consequences\n- New users who have Structurizr workspaces get a migration path; we get\n  schema freedom.\n- No export back to Structurizr; the importer is an on-ramp, not a bridge.\n  Round-tripping is explicitly a non-goal.\n- The importer is a real v1 deliverable with its own test corpus of public\n  Structurizr workspaces (PRD metric: ≥ 80% import cleanly).\n"
+    },
+    {
+      "id": "adr-0003",
+      "type": "adr",
+      "status": "accepted",
+      "elements": [
+        "blastradius.core.model-service"
+      ],
+      "file": "adr/0003-stable-element-identity.md",
+      "title": "ADR-0003: Stable element ids, separate display names",
+      "body": "# ADR-0003: Stable element ids, separate display names\n\n## Status\nAccepted — 2026-08-22\n\n## Context\nRelations, view layouts, doc links, and git history all reference elements. If\nthe reference key is the display name, a rename rewrites every referencing\nline, severs line-history, and breaks any link the app did not know about.\nThis decision is effectively permanent: changing identity schemes later breaks\nevery workspace in existence.\n\n## Decision\nEvery element has an **immutable id** — its YAML key, a lowercase slug\n(`[a-z0-9-]+`), unique among siblings, globally addressed by dotted path\n(`blastradius.core.sync-engine`). Display name is a `name:` field, defaulting\nto the titleized id when absent. All references — relations, layouts, doc\nfrontmatter — use ids only.\n\nRename is therefore a one-line diff by construction. The app never offers to\nchange an id; the canvas rename affordance edits `name:`.\n\n## Consequences\n- Renames are safe from any editor, not just the app — no refactor tooling\n  needed for the common case.\n- Ids are forever: a badly chosen id (`api2`, `new-service`) survives its\n  embarrassment. Mitigation: the create-element dialog derives the id from the\n  first-typed name and shows it for one-time confirmation.\n- Hand-authors must not reuse a deleted element's id for a *different* concept\n  while old branches reference it; the git diff surface treats same-id as\n  same-element. Documented in the schema spec; not machine-enforced in v1.\n"
+    },
+    {
+      "id": "adr-0004",
+      "type": "adr",
+      "status": "accepted",
+      "elements": [
+        "blastradius.core.model-service"
+      ],
+      "file": "adr/0004-workspace-file-layout.md",
+      "title": "ADR-0004: Multi-file workspace; model, views, and docs never share a file",
+      "body": "# ADR-0004: Multi-file workspace; model, views, and docs never share a file\n\n## Status\nAccepted — 2026-08-22\n\n## Context\nA single `model.yaml` does not survive a real system: hundreds of elements in\none file guarantee merge conflicts between unrelated teams, and mixing layout\n(`api: [5, 2]`) with semantics (`api: { tech: Go }`) means every dragged node\ndirties the semantic file — PR reviewers cannot tell \"added a database\" from\n\"nudged a box\".\n\n## Decision\nA workspace is a folder with a `workspace.yaml` manifest declaring include\nglobs for three separate concerns:\n\n- `model/` — semantic files. One file per software system (people and external\n  systems in `context.yaml`). Splitting further (per-container files) is\n  allowed by glob but not default.\n- `views/` — view definitions and pinned layout. Layout coordinates never\n  appear in a model file.\n- docs — markdown discovered by glob, registered via frontmatter (ADR-0010).\n\nA semantic edit and a layout edit therefore always land in different files,\nand typically different PR hunks.\n\n**L4 in v1:** the level exists in navigation (the zoom has a floor below L3\nthat renders \"not modelled\"), but code-level elements are out of scope.\nHand-authored code models rot in days; source-derived ones need per-language\ntooling. Deferred, not rejected.\n\n## Consequences\n- Reviewers can approve semantic changes and skim layout changes separately.\n- Cross-file references (relations to another system's containers) use dotted\n  ids; the model service resolves them at load and reports dangling ids as\n  validation errors.\n- The manifest is the single entry point: \"open workspace\" means \"open the\n  folder containing `workspace.yaml`\".\n"
+    },
+    {
+      "id": "adr-0005",
+      "type": "adr",
+      "status": "accepted",
+      "elements": [
+        "blastradius.shell"
+      ],
+      "file": "adr/0005-tauri-runtime.md",
+      "title": "ADR-0005: Tauri, with a Rust core",
+      "body": "# ADR-0005: Tauri, with a Rust core\n\n## Status\nAccepted — 2026-08-22\n\n## Context\nThe app is local-first and filesystem-heavy: parse and validate YAML across\nmany files, watch for external edits, run libgit2-grade git queries, and stay\nresponsive while doing all of it. Electron gives one known Chromium everywhere\nat the cost of ~150MB installers and a Node backend; Tauri gives ~10MB\ninstallers and a Rust backend at the cost of per-platform WebViews.\n\n## Decision\nTauri 2.x. The core domain logic — model parsing/validation, sync engine\narbitration, git service, file watching, exporters — lives in Rust and is\nexposed to the WebView over typed IPC commands. The WebView owns rendering\nonly: canvas, panels, the ELK layout worker (ADR-0006).\n\nThe WebView-divergence risk is contained deliberately: the design system is\nplain CSS + SVG with no Chromium-only features, and CI runs a screenshot suite\non all three platforms.\n\n## Consequences\n- git2 (libgit2 bindings), serde_yaml, and notify give us native-speed git,\n  parsing, and watching without a JS bridge in the hot path.\n- The IPC boundary is a real API surface and gets a spec section\n  (spec/sync-engine.md) — it is also where a future CLI (`blastradius init`,\n  headless export for CI) attaches, since the Rust core is a library first.\n- WebKit (macOS) is the constraining renderer; features land only when they\n  pass there.\n"
+    },
+    {
+      "id": "adr-0006",
+      "type": "adr",
+      "status": "accepted",
+      "elements": [
+        "blastradius.ui.layout-worker"
+      ],
+      "file": "adr/0006-deterministic-layout.md",
+      "title": "ADR-0006: Deterministic ELK layout with per-node pinning",
+      "body": "# ADR-0006: Deterministic ELK layout with per-node pinning\n\n## Status\nAccepted — 2026-08-22\n\n## Context\n\"Auto unless pinned\" only works if auto-layout is **deterministic**: the same\nmodel must produce the identical diagram on every machine, every run —\notherwise every checkout renders differently and pinned coordinates are\nmeaningless. Layout must also be *stable enough* that adding one element does\nnot reshuffle the whole diagram (which would make visual diffs useless).\n\n## Decision\nelkjs (ELK layered algorithm) running in a web worker in the WebView. Inputs\nare ordered canonically (model file order, then id) and the algorithm is\nseeded with fixed options, giving run-to-run determinism. Pinned nodes come\nfrom the views file as fixed-position constraints; unpinned nodes flow around\nthem.\n\nStability strategy: on model change, the previous computed positions are fed\nback as soft \"interactive\" hints, so unpinned nodes prefer staying near where\nthey were. Pinning remains the guaranteed escape hatch — \"pin what you care\nabout\" is a documented workflow, not a workaround.\n\n## Consequences\n- Layout runs in the WebView, not the Rust core — elkjs is the only mature ELK\n  binding, and layout is a rendering concern. The core stays layout-ignorant;\n  exports reuse the same worker.\n- Grid units in views files are logical (canvas grid cells, 26px at 1×), not\n  raw pixels, so pinned layouts survive density/zoom changes.\n- Layered layout fits the hierarchical C4 style; force-directed and manual\n  free-form modes are explicitly out of v1.\n"
+    },
+    {
+      "id": "adr-0007",
+      "type": "adr",
+      "status": "accepted",
+      "elements": [
+        "blastradius.core.git-service"
+      ],
+      "file": "adr/0007-git-integration.md",
+      "title": "ADR-0007: Embedded libgit2; git optional; semantic diff over text diff",
+      "body": "# ADR-0007: Embedded libgit2; git optional; semantic diff over text diff\n\n## Status\nAccepted — 2026-08-22\n\n## Context\nGit awareness is a core differentiator (PRD): branch state in the chrome,\nper-element diff on the canvas, conflict flagging. Options were shelling out\nto the user's `git` (fidelity, but a runtime dependency and process overhead\nper query) or embedding libgit2 via the git2 Rust crate (no dependency, fast\nin-process reads, bounded write surface).\n\n## Decision\nEmbed **git2** in the Rust core. v1 uses it read-only: status, branch,\nahead/behind, reading blobs at arbitrary revisions for diffing, conflict\ndetection. The app performs no commits, merges, or pushes in v1 — the user's\nown git tooling owns writes.\n\n**Git is optional.** A workspace outside any repository works fully; git\nsurfaces (status chip, diff mode, conflict states) are simply absent, not\ndegraded into errors.\n\n**Diff is semantic, not textual.** The git service loads the model at the base\nrevision and at working tree, and the model service diffs the two *element\ngraphs*: added / removed / changed elements and relations, exposed to the\ncanvas as the `is-added / is-removed / is-changed` states the design system\nalready defines. Layout-only changes (views files) are excluded from the\ndefault diff and available behind a toggle — a moved box is not an\narchitecture change.\n\n## Consequences\n- No dependency on a system git binary; works on a clean machine.\n- Diffing two revisions means parsing the model twice; model loading must be\n  fast and side-effect-free (constrains model-service design).\n- Conflict handling in v1 is detect-and-display: conflicted files render the\n  design system's `is-conflict` state on affected elements, with both\n  versions viewable read-only. Resolution happens in the user's merge tool —\n  in-app resolution is a named v2 candidate, not a silent gap.\n"
+    },
+    {
+      "id": "adr-0008",
+      "type": "adr",
+      "status": "accepted",
+      "elements": [
+        "blastradius.core.sync-engine"
+      ],
+      "file": "adr/0008-bidirectional-sync.md",
+      "title": "ADR-0008: Bidirectional sync — files are truth, edits are transactions",
+      "body": "# ADR-0008: Bidirectional sync — files are truth, edits are transactions\n\n## Status\nAccepted — 2026-08-22\n\n## Context\nv1 is a full bidirectional editor: the same model is editable on the canvas,\nin the in-app YAML panel, and in any external editor simultaneously. Naive\ntwo-way binding produces feedback loops, lost keystrokes, and corrupted files.\nThis is the hardest subsystem in v1 and needs its rules fixed before code.\n\n## Decision\nThe **files are the single source of truth**; every editing surface is a view\nthat proposes transactions against them. The sync engine (Rust core)\narbitrates:\n\n- **Canvas edits** commit at operation boundaries — drop (not drag), dialog\n  confirm, delete — as targeted AST edits to the owning file, preserving\n  untouched formatting and comments. Never a full-file re-serialize.\n- **Text edits** (in-app panel or external, via the watcher) parse on idle\n  (~150ms debounce). A valid parse updates the model and re-renders. An\n  invalid parse keeps the canvas on the **last valid model**, marked stale,\n  with the error surfaced inline (`.err`) and in the panel footer — the canvas\n  never goes blank because the user is mid-keystroke.\n- **Canvas is read-only while stale**: editing a picture of a file that no\n  longer parses would fork truth. Fix the text (or undo it) and editing\n  resumes.\n- Undo is a single history of file-level transactions, shared by all surfaces\n  — undoing a canvas drag after a YAML edit undoes the YAML edit first,\n  exactly like a text editor with two panes.\n\n## Consequences\n- Comment- and format-preserving YAML editing requires a CST-based editor\n  (tree-sitter-yaml or equivalent) rather than serde round-tripping — a\n  significant, named engineering cost (spec/sync-engine.md).\n- External and internal edits get one code path (watcher event vs buffer\n  event), which kills the classic echo-loop bug by design.\n- The transaction log gives crash recovery and an audit trail nearly for free.\n"
+    },
+    {
+      "id": "adr-0009",
+      "type": "adr",
+      "status": "accepted",
+      "elements": [
+        "blastradius.core.exporter"
+      ],
+      "file": "adr/0009-share-is-export.md",
+      "title": "ADR-0009: Share = self-contained HTML export (+ PNG/SVG); hosted links are v2",
+      "body": "# ADR-0009: Share = self-contained HTML export (+ PNG/SVG); hosted links are v2\n\n## Status\nAccepted — 2026-08-22\n\n## Context\n\"Share\" is the primary button of the entire UI and must mean something in a\nlocal-first app with no server. A hosted link service is the obvious v2\nrevenue surface, but it drags auth, storage, and a privacy story into v1.\n\n## Decision\nv1 Share produces:\n\n1. **A single self-contained interactive HTML file** — the full model,\n   zoomable L1→L3, both themes, vendored fonts inlined, zero network\n   requests. Openable from disk, attachable to a PR, publishable on any\n   static host or CI artifact store.\n2. **PNG / SVG of the current view** for slides and documents.\n\nThe HTML export is deliberately designed as a **sealed model snapshot**\n(embedded model JSON + renderer): the identical artifact becomes the upload\npayload when the hosted share service ships in v2. Free-tier exports carry a\n\"made with Blastradius\" footer (PRD pricing hypothesis).\n\n## Consequences\n- Share works offline, on day one, with no account — consistent with\n  local-first principle 1.\n- The renderer must be buildable as a standalone bundle independent of Tauri —\n  a real architectural constraint on the UI container (spec/export.md).\n- v2's service becomes storage + access control around an artifact that\n  already exists, not a new rendering stack.\n"
+    },
+    {
+      "id": "adr-0010",
+      "type": "adr",
+      "status": "accepted",
+      "elements": [
+        "blastradius.core.model-service",
+        "blastradius.ui.docs-panel"
+      ],
+      "file": "adr/0010-docs-as-model-objects.md",
+      "title": "ADR-0010: Documents are first-class model objects",
+      "body": "# ADR-0010: Documents are first-class model objects\n\n## Status\nAccepted — 2026-08-22\n\n## Context\nThe dogfood requirement: this `docs/` folder must open in Blastradius as a\nworking workspace. If the schema cannot hold the PRD, ADRs, and specs, they\nlive beside the model as unlinked prose — two sources of truth, which is the\nexact rot this product exists to kill.\n\n## Decision\nThe schema includes a document type. Markdown files matched by the manifest's\ndocs globs and carrying frontmatter (`doc:` id, `type:`, `status:`,\n`elements:` links) are loaded into the model as typed document objects.\n\n- Links are validated both ways: a doc naming a missing element id is a model\n  error, exactly like a dangling relation.\n- The UI surfaces links bidirectionally: an element's inspector lists its\n  governing documents; a document view highlights its elements on the canvas.\n- Document *bodies* remain markdown files owned by the user's editor. The app\n  renders them; v1 does not edit them. Blastradius is not becoming a markdown\n  editor.\n\nDoc types in v1: `prd`, `adr`, `spec`, `roadmap`, `note` — with per-type\nstatus vocabularies (spec/model-format.md).\n\n## Consequences\n- \"Which decisions govern this container?\" is a query the app answers — the\n  feature that makes architecture docs *navigable* rather than merely present.\n- Frontmatter is now schema surface and is versioned with the rest\n  (spec/model-format.md §7).\n- The dogfood gate (PRD) is enforceable: CI validates this folder with the\n  real parser from the first phase of the roadmap.\n"
+    },
+    {
+      "id": "prd",
+      "type": "prd",
+      "status": "draft",
+      "elements": [
+        "blastradius"
+      ],
+      "file": "prd.md",
+      "title": "Blastradius — Product Requirements",
+      "body": "# Blastradius — Product Requirements\n\n## One-liner\n\nA local-first desktop app for beautiful, interactive C4 architecture models —\nYAML-driven, git-versioned, with a continuous zooming canvas from system\ncontext (L1) down to code (L4).\n\n## The problem\n\nArchitecture documentation for real teams is stuck between two failure modes:\n\n- **Drawing tools** (Miro, draw.io, Lucidchart, Visio) produce pictures that are\n  disconnected from the repo, unreviewable in PRs, unmergeable, and stale within\n  a sprint. Nobody trusts them, so nobody maintains them.\n- **Docs-as-code tools** (Structurizr, PlantUML/C4, Mermaid) put the model in\n  git where it belongs, but the feedback loop is compile-and-squint: edit text,\n  regenerate, inspect a static image. Layout is either uncontrollable or fights\n  you. There is no way to *explore* a model, and diagrams communicate exactly as\n  well as their worst auto-layout.\n\nThe gap: **a model that lives in git and reviews like code, with an editing and\nreading experience that matches a design tool.** Teams keep architecture docs\ncurrent when the docs are in the same repo, the same PRs, and the same review\nflow as the code they describe — and when the artifact is genuinely pleasant to\nnavigate.\n\n## Who it is for\n\n**Primary: platform / infrastructure teams of 3–15** who own the architecture\ndocumentation for one or more product groups. They live in monorepos, review\neverything in PRs, and are the people who currently maintain (or guiltily\nneglect) the draw.io exports in `docs/architecture/`.\n\nCharacteristics that shape the product:\n\n- Git fluency is assumed. Git-versioned YAML is a *feature* to this audience.\n- They review each other's changes. **The diff is a first-class surface**, not\n  an afterthought — \"what changed in the architecture this quarter\" is a query\n  they actually run.\n- They present to non-users: engineers on other teams, managers, auditors.\n  Output artifacts (exports) matter as much as the editing experience.\n\nSecondary: solo consultants and OSS maintainers documenting systems they own.\nThey arrive through the free tier and are the top-of-funnel.\n\n## Product principles\n\n1. **The repo is the database.** No account, no server, no sync service in the\n   core product. A workspace is a folder of YAML and markdown in the user's\n   repo; deleting the app leaves everything legible.\n2. **Diffs must stay human.** Every schema and file-layout decision is judged\n   first by what a PR diff looks like. Semantic changes and layout changes never\n   mix in one file (ADR-0004).\n3. **The camera is the interface.** Level navigation is one continuous\n   map-style zoom — no page swaps, no crossfades. The model is a single space\n   the user flies through (design system: motion tokens).\n4. **Never colour alone, never picture alone.** Diff status and validation are\n   encoded redundantly (colour + glyph + text), and every diagram has a textual\n   twin (the YAML) — the model is fully usable by screen reader and greppable\n   by CI.\n5. **Documents are model objects.** ADRs, specs, PRDs attach to elements with\n   typed, validated links. Docs rot becomes a model error the app can show,\n   not a wiki problem nobody owns (ADR-0010).\n\n## v1 scope\n\n### In\n\n- **Workspace**: open a folder containing `workspace.yaml`; multi-file model\n  with include globs; file watcher reloads on external edits\n  (spec/model-format.md).\n- **Model semantics**: C4 people, software systems, containers, components;\n  directed relations with protocol labels; external-system flag; stable ids\n  with display names (ADR-0003). L4 exists as a navigation level; code elements\n  are out of scope for v1 (ADR-0004).\n- **Canvas**: continuous zoom L1→L3, deterministic auto-layout with per-node\n  pinning (ADR-0006); selection, keyboard navigation, hover; dark and light\n  theme following the OS.\n- **Bidirectional editing**: edit on canvas (create/rename/delete elements and\n  relations, drag to pin) or in any text editor; both converge on the same\n  files under the sync rules in spec/sync-engine.md. The in-app YAML panel is a\n  full editor with syntax highlighting and inline validation.\n- **Git awareness**: when the workspace is inside a git repo — branch and dirty\n  state in the chrome; per-element semantic diff vs a chosen base (added /\n  removed / changed) rendered as node badges and canvas states; conflict\n  detection with in-canvas flagging (ADR-0007, spec/git-and-diff.md). Git is\n  optional: a plain folder works with git features absent.\n- **Docs integration**: markdown files with frontmatter register as typed\n  documents linked to elements; broken links are validation errors; element →\n  docs and doc → elements navigation (ADR-0010).\n- **Structurizr import**: one-way importer from Structurizr DSL workspaces to a\n  Blastradius workspace, with a written fidelity report of what did not map\n  (ADR-0002).\n- **Share**: export the model as a single self-contained interactive HTML file\n  (zoom, both themes, no server needed), and the current view as PNG/SVG\n  (ADR-0009, spec/export.md).\n- **Platform**: Tauri desktop app for Windows, macOS, Linux (ADR-0005).\n\n### Out (named, not implied)\n\n- Hosted share links, accounts, or any server component — v2 revenue feature;\n  the HTML export is designed to double as its upload payload (ADR-0009).\n- In-app merge conflict *resolution* — v1 detects and displays; resolution\n  happens in the user's editor/merge tool (spec/git-and-diff.md).\n- L4 code modelling and source-derived elements.\n- Real-time multi-user collaboration. Git is the collaboration protocol.\n- Model-wide refactor tooling beyond rename (which is safe by construction —\n  ids never change).\n- Deployment/dynamic/sequence view types. v1 renders structural views only.\n\n## The dogfood gate\n\n`docs/` in the Blastradius repo is a workspace modelling Blastradius itself.\n**v1 does not ship until the app can open `docs/`, render its views, resolve\nevery doc link, and show a correct semantic diff between any two commits of\nthis repo.** Every schema feature must be exercised by this workspace before it\nis considered done; anything this folder cannot express is a schema bug first.\n\n## Success metrics\n\nActivation (free tier):\n\n- Time from install → first rendered model **< 5 minutes** (template workspace\n  in-app; `blastradius init` scaffold).\n- Structurizr import succeeds without manual fixes on ≥ 80% of sampled public\n  workspaces.\n\nRetention / habit (the real test — does the doc stay alive):\n\n- ≥ 40% of active workspaces receive a model-file commit in any given month.\n- Median PR containing model changes touches ≤ 3 model files (diff hygiene\n  holding up in practice).\n\nCommercial (validated in v1, monetised in v2):\n\n- ≥ 25% of weekly-active users export HTML at least once — demand signal for\n  the hosted link.\n- Waitlist conversion for the team tier ≥ 5% of active installs.\n\n## Pricing hypothesis (not a commitment)\n\n- **Free**: full local product, unlimited workspaces, exports watermarked with\n  a \"made with Blastradius\" footer.\n- **Team (paid, v2)**: hosted share links with access control, PR-comment\n  diff rendering (CI bot), priority support. Per-editor pricing, order of\n  $10–20/editor/month.\n\nThe core stays fully functional offline and free — the paid surface is\n*distribution* of models, never authoring.\n\n## Risks\n\n| Risk | Mitigation |\n| --- | --- |\n| Bidirectional sync is the hardest v1 feature and could slip everything | Sync engine specced first (spec/sync-engine.md); read-only rendering path ships internally before editing; roadmap phases it explicitly |\n| Deterministic layout that is also *good* is a research-grade problem | Constrain v1 to layered ELK with pinning as the escape hatch; \"pin what you care about\" is a documented workflow, not a failure |\n| Schema churn after workspaces exist in the wild | `version:` field from day one; dogfood workspace forces schema exercise before release; migrations are a named deliverable in the roadmap |\n| Tauri WebView divergence (WebKit vs WebView2) breaks the canvas | Design system is plain CSS + SVG (no Chromium-only features); CI screenshot suite across all three platforms |\n| Structurizr import over-promises | Import ships with a per-workspace fidelity report; unmappable constructs are listed, never silently dropped |\n"
+    },
+    {
+      "id": "roadmap",
+      "type": "roadmap",
+      "status": "draft",
+      "elements": [
+        "blastradius"
+      ],
+      "file": "roadmap.md",
+      "title": "Roadmap",
+      "body": "# Roadmap\n\nPhases are gates, not sprints: each has an exit criterion that is demonstrable\non this repository. The dogfood gate (PRD) runs through all of them —\n**`docs/` is the acceptance workspace for every phase.**\n\n## Phase 0 — Model core (headless)\n\nRust library, no UI: workspace loading, schema parse + validation\n(spec/model-format.md), doc frontmatter, semantic model diff between two\nparsed models, `blastradius validate` CLI.\n\n**Exit:** `blastradius validate docs/` passes in CI on this repo, and a\nseeded-fault suite (dangling id, bad frontmatter, duplicate id) fails with\ncorrect file+line errors.\n\n## Phase 1 — Read-only canvas\n\nTauri shell + WebView: open workspace, ELK layout with determinism tests,\nzoom L1→L3 with camera motion, selection/keyboard nav, themes, sidebar tree,\ndocs panel with element↔doc navigation. File watcher: external edits\nre-render live. No editing of any kind.\n\n**Exit:** open `docs/`, fly the model of Blastradius, click ADR-0007 from the\ngit-service node. Screenshot suite green on all three OS WebViews.\n\n## Phase 2 — Git awareness\n\ngit2 integration: status chrome, semantic diff vs selectable base with canvas\ndiff states, layout-diff toggle, conflict flagging with ours/theirs\ninspector, History time-travel (spec/git-and-diff.md).\n\n**Exit:** on this repo, diff any two commits of `docs/` and the canvas states\nmatch `git log` ground truth; a manufactured merge conflict renders\n`is-conflict` and resolves round-trip through an external editor.\n\n## Phase 3 — Editing & sync\n\nThe hard one (ADR-0008, spec/sync-engine.md): CST-preserving writes, canvas\noperations (pin, rename, create, delete, relations), in-app YAML panel,\nstale-state handling, shared undo, atomic writes, race abort.\n\n**Exit:** a scripted torture session — simultaneous external edits + canvas\noperations + malformed intermediate states — ends byte-identical to the\nexpected files, comments and formatting intact. All edits to `docs/` for one\nreal week made through the app.\n\n## Phase 4 — Share & import\n\nSelf-contained HTML export, PNG/SVG, headless `blastradius export` for CI\n(spec/export.md). Structurizr DSL importer with fidelity report (ADR-0002).\n\n**Exit:** CI on this repo publishes `architecture.html` as a build artifact on\nevery merge; import corpus hits the PRD's 80% clean-import bar.\n\n## Phase 5 — Polish & release\n\nOnboarding (`init` scaffold + in-app template), packaging/signing/updates for\nthree platforms, performance budgets enforced (spec/sync-engine.md), a11y\naudit against the design system's AA contract, docs site.\n\n**Exit:** a platform engineer who has never seen the product reaches a\nrendered model of their own repo in under 5 minutes (PRD metric), unassisted.\n\n## v2 themes (not scheduled)\n\nHosted share links (ADR-0009's payload), in-app conflict resolution, PR-bot\ndiff rendering in CI, L4 source-derived elements, deployment views.\n"
+    },
+    {
+      "id": "spec-export",
+      "type": "spec",
+      "status": "draft",
+      "elements": [
+        "blastradius.core.exporter",
+        "blastradius.ui.canvas"
+      ],
+      "file": "spec/export.md",
+      "title": "Spec: Share — exports",
+      "body": "# Spec: Share — exports\n\nImplements ADR-0009. Share is a split-button: primary action = interactive\nHTML; menu = PNG, SVG.\n\n## Self-contained HTML\n\nOne file, zero network requests, works from `file://`:\n\n- **Content**: the full model (all levels L1→L3, all views), both themes\n  (following the viewer's OS, with a manual toggle), zoom/pan navigation with\n  the same camera motion tokens, element inspector with descriptions and doc\n  *summaries* (title, type, status — bodies are included only when the\n  \"include document bodies\" export option is checked, since docs may be more\n  sensitive than structure).\n- **Mechanism**: a sealed snapshot — `{ model: <json>, views: <json> }`\n  embedded beside a standalone renderer bundle built from the same UI\n  components (the design-system classes and the canvas grammar), plus the\n  vendored woff2 fonts inlined as data URIs. Read-only: no sync engine, no\n  git, no editing affordances.\n- **Budget**: ≤ 2.5MB for a 200-element workspace (fonts ≈ 200KB of that).\n- The identical snapshot format is the v2 hosted-link upload payload; the\n  renderer bundle being Tauri-independent is a build-time constraint on the UI\n  container (enforced by building the export bundle in CI).\n- Free tier: \"made with Blastradius\" footer, per PRD pricing hypothesis.\n\n## PNG / SVG\n\nCurrent view, current theme:\n\n- **SVG**: serialize the live canvas — nodes converted to `<foreignObject>`-free\n  pure SVG (text, rects) so the file opens in design tools; fonts embedded.\n- **PNG**: rasterized from that SVG at 1× / 2× / 4× selectable scale, on a\n  solid ground (no transparency surprises in slides).\n- Both honour the diff toggle — exporting a diff view is an explicit, expected\n  use (\"what changed this quarter\" as a slide).\n\n## CI / headless\n\n`blastradius export --html docs/ -o site/architecture.html` runs the same\nexporter from the Rust core without a WebView (SVG assembly is\ntemplate-based, not DOM-scraped, precisely to keep this path headless).\nThis is the roadmap's CI story: architecture docs published as a build\nartifact on every merge.\n"
+    },
+    {
+      "id": "spec-git-diff",
+      "type": "spec",
+      "status": "draft",
+      "elements": [
+        "blastradius.core.git-service"
+      ],
+      "file": "spec/git-and-diff.md",
+      "title": "Spec: git integration and semantic diff",
+      "body": "# Spec: git integration and semantic diff\n\nImplements ADR-0007. Read-only in v1: the app observes the repository; the\nuser's own tooling writes to it.\n\n## Detection & status\n\nOn workspace open, walk up from `workspace.yaml` to find `.git`. Absent → all\ngit UI is hidden (not disabled). Present → the chrome shows branch, dirty\ncount and ahead/behind (design system: `⎇ main` tag + semantic tags), updated\non watcher events and window focus.\n\n## Semantic diff\n\nDiff = compare two **parsed models**, not two texts.\n\n- **Base selection**: default merge-base with the default branch; switchable\n  to any ref or commit via the History control.\n- The git service materialises the model files at base (in-memory via git2\n  blob reads — no checkout), parses both revisions with the same model\n  service, and diffs the element graphs.\n\nClassification per element and relation:\n\n| State | Meaning | Canvas rendering (design system) |\n| --- | --- | --- |\n| added | id exists only in working model | `.is-added` + badge `+` |\n| removed | id exists only at base | `.is-removed` ghost + badge `−` |\n| changed | same id, differing fields (name/tech/description/relations) | `.is-changed` + badge `~` |\n\nRemoved elements render as ghosts *in the diff view only* — they must be\nvisible to review a deletion. The sidebar tree mirrors the same states\n(`.tree-row.is-added/-removed`).\n\n**Layout changes are not architecture changes**: views-file diffs are excluded\nfrom the default diff and from the status chip counts, behind a \"show layout\nchanges\" toggle. Doc changes (frontmatter links) count as `changed` on the\nlinked elements.\n\nRenames: same id = same element (ADR-0003), so a rename is a `changed` name\nfield — never an add+remove pair. Id reuse across deletions is the documented\nhazard, not detected in v1.\n\n## Conflicts\n\nWhen the repository has merge conflicts touching workspace files:\n\n- Conflicted model files are inherently STALE (conflict markers do not parse).\n  The engine additionally reads stage 2 (\"ours\") and stage 3 (\"theirs\") via\n  git2 and parses each side.\n- Elements that differ between the sides render `.is-conflict` (hatched) with\n  badge `!`; the inspector shows ours/theirs field values read-only,\n  side by side.\n- **Resolution is external in v1**: a \"resolve in editor\" affordance opens the\n  file; the watcher picks up the result. In-app resolution is a named v2\n  candidate.\n\n## History\n\nThe History control lists commits touching workspace files (git2 revwalk with\npath filter). Selecting a commit enters read-only time-travel: the canvas\nrenders that revision, diff-against-base recomputed. Leaving time-travel\nreturns to the working tree. Editing is disabled while time-travelling.\n"
+    },
+    {
+      "id": "spec-model-format",
+      "type": "spec",
+      "status": "draft",
+      "elements": [
+        "blastradius.core.model-service"
+      ],
+      "file": "spec/model-format.md",
+      "title": "Spec: workspace and model format",
+      "body": "# Spec: workspace and model format\n\nNormative reference for the Blastradius YAML schema, v1. The workspace in this\n`docs/` folder is the conformance example; where prose and that workspace\ndisagree, it is a bug in one of them and CI should have caught it.\n\n## 1. Workspace\n\nA workspace is a folder containing `workspace.yaml`:\n\n```yaml\nworkspace:\n  name: Blastradius        # display name\n  version: 1               # schema version — integer, required\nmodel:\n  include: [model/*.yaml]\nviews:\n  include: [views/*.yaml]\ndocs:\n  include: [\"*.md\", \"adr/*.md\", \"spec/*.md\"]\n```\n\n- Globs are relative to the manifest, forward-slash, `*` and `**` only.\n- `version` gates parsing: a loader encountering a greater version than it\n  knows refuses with an upgrade message, never a partial parse. Migrations\n  between versions are a roadmap deliverable.\n- Files matched by no glob are ignored — a workspace can live inside a bigger\n  `docs/` tree without claiming all of it.\n\n## 2. Identity\n\nPer ADR-0003: the YAML key of an element is its immutable id — lowercase slug\n`[a-z0-9-]{1,64}`, unique among siblings. Global references use dotted paths:\n`<system>.<container>.<component>` (`blastradius.core.sync-engine`). People\nand external systems are addressed by bare id (`architect`, `git-repo`).\n\n## 3. Model files\n\nEach model file declares either context elements or one software system.\n\n`model/context.yaml`:\n\n```yaml\npeople:\n  architect:\n    name: Platform Architect\n    description: Owns the architecture documentation for their group.\nexternal:\n  os-shell:\n    name: Operating System\n    description: File system, WebView, window manager.\n```\n\n`model/<system-id>.yaml` (one system per file, per ADR-0004):\n\n```yaml\nsystem: blastradius            # id of this system; must match one glob'd file\nname: Blastradius\ndescription: Local-first desktop app for C4 architecture models.\n\ncontainers:\n  ui:\n    name: Canvas UI\n    tech: WebView · design system\n    description: Rendering and interaction; owns no domain state.\n    components:                # L3, optional\n      canvas:\n        name: Canvas\n        tech: SVG + DOM\n  core:\n    name: Core\n    tech: Rust\n    components:\n      model-service: { name: Model Service }\n      sync-engine:   { name: Sync Engine }\n\nrelations:\n  - from: ui\n    to: core.model-service     # dotted path, relative to this system\n    label: load & edit model\n    protocol: Tauri IPC\n  - from: architect            # context elements by bare id\n    to: ui\n    label: models the system\n```\n\nRules:\n\n- `name` defaults to the titleized id. `tech`, `description` optional.\n- `relations` may appear at system level (as above) or nested under a\n  container (then `from` defaults to that container). `from`/`to` accept bare\n  ids (context), sibling ids, or dotted paths; cross-system references use\n  full paths from the root.\n- Relations are **directed** (`from` → `to`). `direction: both | none`\n  overrides; omitted means forward — an undirected relation is a deliberate\n  choice, mirroring the canvas grammar.\n- `external: true` on a system renders the dashed external style. Scalar\n  one-line form (`model-service: { name: Model Service }`) is valid YAML flow\n  style and encouraged for terse L3 listings.\n\n## 4. Views\n\n`views/<view-id>.yaml`:\n\n```yaml\nview: containers            # view id\nname: Containers            # optional display name\nscope: blastradius          # element whose children this view shows\nlevel: L2                   # L1 | L2 | L3 — which altitude this view captures\nlayout:                     # pinned positions — grid units (26px cells @ 1×)\n  ui: [4, 2]\n  core: [10, 4]\ninclude-context: true       # show people/externals related to scope (default true)\n```\n\n- Elements absent from `layout:` are auto-placed (ADR-0006). Pinning is the\n  exception, not the rule.\n- Grid units, not pixels: layouts survive zoom and density changes.\n- A workspace with zero view files is valid — every level renders fully\n  auto-laid-out.\n\n## 5. Documents\n\nMarkdown files matched by `docs.include` and starting with frontmatter join\nthe model (ADR-0010):\n\n```yaml\n---\ndoc: adr-0007            # document id — same slug rules, unique workspace-wide\ntype: adr                # prd | adr | spec | roadmap | note\nstatus: accepted         # see vocabularies below\nelements: [blastradius.core.git-service]\nsupersedes: adr-0004     # optional, adr only\n---\n```\n\nStatus vocabularies — `adr`: proposed / accepted / superseded / rejected;\n`prd`, `spec`, `roadmap`: draft / current / superseded; `note`: none.\nA matched file **without** frontmatter is ignored with an info-level notice\n(ordinary READMEs may share the folder).\n\n## 6. Validation\n\nErrors (workspace loads, marked invalid; affected elements get `is-invalid`):\nduplicate id in scope; dangling reference from a relation, layout, or doc\n`elements:` list; unknown schema version; malformed YAML in any included file.\n\nWarnings: doc frontmatter with unknown `type`; empty system; relation\nduplicated verbatim.\n\nEverything is reported with file + line, in the panel footer and on the\ncanvas — never only in a log.\n\n## 7. Stability contract\n\nAdditions to the schema are minor (same `version`); anything that changes the\nmeaning of an existing construct bumps `version` and ships with a migration.\nFrontmatter counts as schema surface under the same contract.\n"
+    },
+    {
+      "id": "spec-sync-engine",
+      "type": "spec",
+      "status": "draft",
+      "elements": [
+        "blastradius.core.sync-engine",
+        "blastradius.core.model-service"
+      ],
+      "file": "spec/sync-engine.md",
+      "title": "Spec: bidirectional sync engine",
+      "body": "# Spec: bidirectional sync engine\n\nImplements ADR-0008. The sync engine is the arbiter between three editing\nsurfaces — canvas, in-app YAML panel, external editors — and the files, which\nare the only truth.\n\n## State machine\n\nPer workspace, the engine holds:\n\n- **Disk state** — the files as last read.\n- **Model** — the last *valid* parse of disk state (element graph + docs).\n- **Staleness** — per-file flag: disk has content that does not parse.\n\n```\n            valid parse                    parse error\n  IN-SYNC ──────────────▶ IN-SYNC   IN-SYNC ─────────▶ STALE(file)\n     ▲                                                    │\n     └────────────── next valid parse of that file ◀──────┘\n```\n\nWhile any model file is STALE: the canvas renders the last valid model with a\nstale indicator; **canvas editing is disabled** (editing a picture of a file\nthat no longer parses would fork truth); the YAML panel and external editors\nremain live. Views files being stale disables only pinning, not semantics.\n\n## Inbound: text → model\n\nOne path for all text sources:\n\n1. In-app panel keystrokes update an in-memory buffer; external file events\n   (notify watcher) update disk state. Both feed the same debounced parse\n   (~150ms idle).\n2. Valid parse → new model → canvas re-renders (layout stability per\n   ADR-0006).\n3. Invalid parse → STALE; error with file+line to the panel footer and `.err`\n   underline at the offending line.\n\nWatcher writes that the engine itself just performed are recognised by content\nhash and dropped — the echo-loop killer.\n\n## Outbound: canvas → files\n\nCanvas operations commit at operation boundaries only: node **drop** (never\nduring drag), dialog confirm, delete, relation endpoint drop.\n\nEach operation becomes a **targeted CST edit**: the engine locates the owning\nnode in a lossless YAML concrete-syntax-tree (comments, key order, and\nformatting preserved) and splices the minimal change. Full-file re-serialization\nis forbidden — it would destroy user formatting and produce garbage diffs.\n\nCarried-over requirement for the CST layer: the Phase 0 reader (marked-yaml)\ncannot attach a line number to a *YAML-level duplicate key* (its error variant\nexposes no position — see `load_error_line` in `blastradius-core/src/yaml.rs`),\nso that one diagnostic currently reports line 0. Whatever parser backs the CST\nmust report duplicate keys with exact positions, closing the gap rather than\ninheriting it.\n\n| Canvas operation | File touched | Edit |\n| --- | --- | --- |\n| Drag node to pin | views/*.yaml | upsert `layout.<id>: [x, y]` |\n| Rename element | model file | set `name:` (id immutable, ADR-0003) |\n| Create element | model file | insert mapping under parent, id from dialog |\n| Delete element | model + views | remove node; remove layout entry; relations referencing it are removed **in the same transaction** and listed in the confirm dialog |\n| Create/edit relation | model file | insert/update sequence item |\n\nWrites are atomic (temp file + rename). If disk changed under an uncommitted\ncanvas operation (race with external editor), the operation is aborted with a\ntoast, never merged heuristically.\n\n## Undo\n\nOne workspace-level history of file transactions, shared by all surfaces. Undo\nrestores the prior file content of the last transaction regardless of which\nsurface produced it. External edits enter history as transactions too, so\nundo-past-an-external-edit is well-defined (it reverts the file, with a\ndistinct \"external change\" label in the history UI). Depth: 200 transactions;\nhistory is in-memory per session, with the log journaled to the workspace\ncache dir for crash recovery.\n\n## The IPC surface (Tauri commands)\n\n`workspace_open(path)` · `workspace_snapshot() → model+docs+errors` ·\n`apply_operation(op) → transaction` · `undo()` / `redo()` ·\n`buffer_update(file, text)` (panel keystrokes) · events:\n`model_updated`, `file_stale`, `transaction_applied`.\n\nThis surface is also the future CLI/CI attachment point (ADR-0005): validate\nand export must be callable without a WebView.\n\n## Performance budgets\n\n- Parse + validate a 500-element workspace: < 50ms (release build).\n- Keystroke → canvas update (valid edit): < 250ms end to end.\n- Canvas drop → file write: < 30ms.\n\nBudgets are CI-enforced against a generated benchmark workspace.\n"
+    }
+  ],
+  "diagnostics": [
+    {
+      "severity": "info",
+      "file": "README.md",
+      "line": 0,
+      "message": "no frontmatter — ignored"
+    }
+  ]
+}

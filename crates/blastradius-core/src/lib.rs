@@ -12,6 +12,7 @@ pub mod docs;
 pub mod manifest;
 pub mod model;
 pub mod parse;
+pub mod snapshot;
 pub mod validate;
 pub mod views;
 mod yaml;

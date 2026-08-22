@@ -13,15 +13,30 @@ fn main() -> ExitCode {
             (Some(a), Some(b)) => diff(a, b),
             _ => usage(),
         },
+        Some("snapshot") => snapshot(args.get(1).map(String::as_str).unwrap_or(".")),
         _ => usage(),
     }
 }
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage:\n  blastradius validate [workspace-dir]\n  blastradius diff <base-dir> <current-dir>"
+        "usage:\n  blastradius validate [workspace-dir]\n  blastradius diff <base-dir> <current-dir>\n  blastradius snapshot [workspace-dir]"
     );
     ExitCode::from(2)
+}
+
+/// Emit the renderer snapshot as JSON on stdout — the same shape the Tauri
+/// shell serves over IPC, so frontend work can run against real data headless.
+fn snapshot(dir: &str) -> ExitCode {
+    let root = Path::new(dir);
+    let (ws, diags) = blastradius_core::load_workspace(root);
+    let snap = blastradius_core::snapshot::snapshot(root, &ws, &diags);
+    println!("{}", serde_json::to_string_pretty(&snap).expect("snapshot serializes"));
+    if has_errors(&diags) {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
 }
 
 fn validate(dir: &str) -> ExitCode {

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Main window: core IPC + events only. No fs, shell, or network surface — the WebView renders; the Core owns the machine (ADR-0005).",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

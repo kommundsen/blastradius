@@ -1,0 +1,51 @@
+/* Blastradius — app shell layout and density.
+
+   Blastradius is a resizable desktop window, not a fixed 1200x640 mock. Two things
+   follow from that, and neither existed before: panels need a size contract, and the
+   chrome needs a density setting.
+
+   PANEL CONTRACT
+   Widths are runtime state (drag to resize) — the min/max below are the contract, and
+   the canvas is the one region that never yields. The three minimums add up:
+     nav 168 + canvas 360 + side 260 = 788px
+   which is exactly where the container queries in components.css start floating panels
+   over the canvas instead of stealing width from it.
+
+   DENSITY
+   Discrete steps, not a scalar multiplier — a multiplier would reintroduce the
+   fractional pixels the whole-pixel spacing rebase just removed.
+   Density changes RHYTHM (control height, row padding, gutters). It deliberately does
+   NOT change type size: legibility should not depend on how tightly the user packs
+   their panels, and the AA contrast audit assumes the type scale is fixed. */
+
+:root {
+  --panel-nav-w:  200px;  --panel-nav-min:  168px;  --panel-nav-max:  320px;
+  --panel-side-w: 300px;  --panel-side-min: 260px;  --panel-side-max: 480px;
+  --canvas-min:   360px;
+
+  /* Comfortable — the default */
+  --control-h:  36px;
+  --control-px: var(--space-4);
+  --control-py: var(--space-2);
+  --row-py:      5px;
+  --panel-py:   var(--space-4);
+  --bar-py:     var(--space-2);
+}
+
+[data-density="compact"] {
+  --control-h:  30px;
+  --control-px: var(--space-3);
+  --control-py: var(--space-1);
+  --row-py:      3px;
+  --panel-py:   var(--space-2);
+  --bar-py:     var(--space-1);
+}
+
+[data-density="spacious"] {
+  --control-h:  42px;
+  --control-px: var(--space-6);
+  --control-py: var(--space-3);
+  --row-py:      8px;
+  --panel-py:   var(--space-6);
+  --bar-py:     var(--space-3);
+}
