@@ -1,0 +1,70 @@
+---
+doc: spec-git-diff
+type: spec
+status: draft
+elements: [blastradius.core.git-service]
+---
+
+# Spec: git integration and semantic diff
+
+Implements ADR-0007. Read-only in v1: the app observes the repository; the
+user's own tooling writes to it.
+
+## Detection & status
+
+On workspace open, walk up from `workspace.yaml` to find `.git`. Absent → all
+git UI is hidden (not disabled). Present → the chrome shows branch, dirty
+count and ahead/behind (design system: `⎇ main` tag + semantic tags), updated
+on watcher events and window focus.
+
+## Semantic diff
+
+Diff = compare two **parsed models**, not two texts.
+
+- **Base selection**: default merge-base with the default branch; switchable
+  to any ref or commit via the History control.
+- The git service materialises the model files at base (in-memory via git2
+  blob reads — no checkout), parses both revisions with the same model
+  service, and diffs the element graphs.
+
+Classification per element and relation:
+
+| State | Meaning | Canvas rendering (design system) |
+| --- | --- | --- |
+| added | id exists only in working model | `.is-added` + badge `+` |
+| removed | id exists only at base | `.is-removed` ghost + badge `−` |
+| changed | same id, differing fields (name/tech/description/relations) | `.is-changed` + badge `~` |
+
+Removed elements render as ghosts *in the diff view only* — they must be
+visible to review a deletion. The sidebar tree mirrors the same states
+(`.tree-row.is-added/-removed`).
+
+**Layout changes are not architecture changes**: views-file diffs are excluded
+from the default diff and from the status chip counts, behind a "show layout
+changes" toggle. Doc changes (frontmatter links) count as `changed` on the
+linked elements.
+
+Renames: same id = same element (ADR-0003), so a rename is a `changed` name
+field — never an add+remove pair. Id reuse across deletions is the documented
+hazard, not detected in v1.
+
+## Conflicts
+
+When the repository has merge conflicts touching workspace files:
+
+- Conflicted model files are inherently STALE (conflict markers do not parse).
+  The engine additionally reads stage 2 ("ours") and stage 3 ("theirs") via
+  git2 and parses each side.
+- Elements that differ between the sides render `.is-conflict` (hatched) with
+  badge `!`; the inspector shows ours/theirs field values read-only,
+  side by side.
+- **Resolution is external in v1**: a "resolve in editor" affordance opens the
+  file; the watcher picks up the result. In-app resolution is a named v2
+  candidate.
+
+## History
+
+The History control lists commits touching workspace files (git2 revwalk with
+path filter). Selecting a commit enters read-only time-travel: the canvas
+renders that revision, diff-against-base recomputed. Leaving time-travel
+returns to the working tree. Editing is disabled while time-travelling.

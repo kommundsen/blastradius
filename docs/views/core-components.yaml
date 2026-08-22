@@ -1,0 +1,7 @@
+# L3 — inside the Core. Fully auto-laid-out: no pins, deliberately, so this
+# view exercises the deterministic-layout path end to end.
+view: core-components
+name: Core Components
+scope: blastradius.core
+level: L3
+include-context: false

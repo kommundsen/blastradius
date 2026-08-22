@@ -1,0 +1,11 @@
+# Blastradius workspace manifest — this folder is a Blastradius model of Blastradius.
+# Conformance example for spec/model-format.md; validated in CI from Phase 0.
+workspace:
+  name: Blastradius
+  version: 1
+model:
+  include: [model/*.yaml]
+views:
+  include: [views/*.yaml]
+docs:
+  include: ["*.md", "adr/*.md", "spec/*.md"]

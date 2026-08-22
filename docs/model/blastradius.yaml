@@ -1,0 +1,103 @@
+# The Blastradius desktop application.
+system: blastradius
+name: Blastradius
+description: Local-first desktop app for interactive, git-versioned C4 architecture models.
+
+containers:
+  shell:
+    name: App Shell
+    tech: Tauri 2
+    description: Window, menus, packaging, updates; hosts the WebView and the Core; owns the IPC boundary (ADR-0005).
+
+  ui:
+    name: Canvas UI
+    tech: WebView · design system
+    description: All rendering and interaction. Owns no domain state; every edit is proposed to the Core as a transaction.
+    components:
+      canvas:
+        name: Canvas
+        tech: SVG + DOM camera layer
+        description: Zooming diagram surface — nodes, edges, diff states, continuous L1→L3 camera.
+      yaml-panel:
+        name: YAML Panel
+        tech: CodeMirror
+        description: In-app text editor with inline validation; a peer surface to the canvas, not a viewer.
+      docs-panel:
+        name: Docs Panel
+        tech: markdown renderer
+        description: Renders typed documents; element ↔ document navigation (ADR-0010).
+      layout-worker:
+        name: Layout Worker
+        tech: elkjs · web worker
+        description: Deterministic layered layout with pinning constraints and stability hints (ADR-0006).
+
+  core:
+    name: Core
+    tech: Rust
+    description: The domain. Library-first — the CLI and CI attach here without a WebView.
+    components:
+      model-service:
+        name: Model Service
+        description: Workspace loading, schema parse and validation, doc registry, semantic model diff (spec/model-format.md).
+      sync-engine:
+        name: Sync Engine
+        description: Arbiter between canvas, panel, and external editors; CST-preserving writes, staleness, shared undo (ADR-0008).
+      git-service:
+        name: Git Service
+        tech: git2 / libgit2
+        description: Read-only repository access — status, revision materialisation for diff, conflict stages, history (ADR-0007).
+      watcher:
+        name: File Watcher
+        tech: notify
+        description: External-edit detection; feeds the sync engine's single inbound path; echo suppression by content hash.
+      exporter:
+        name: Exporter
+        description: Self-contained HTML snapshot, SVG/PNG assembly; headless-capable for CI (ADR-0009).
+      importer:
+        name: Structurizr Importer
+        description: One-way DSL import with fidelity report (ADR-0002).
+
+relations:
+  - from: architect
+    to: ui
+    label: models the system
+  - from: reviewer
+    to: blastradius
+    label: reads exported HTML & PR diffs
+  - from: ui.canvas
+    to: core.sync-engine
+    label: edit operations
+    protocol: Tauri IPC
+  - from: ui.yaml-panel
+    to: core.sync-engine
+    label: buffer updates
+    protocol: Tauri IPC
+  - from: ui.docs-panel
+    to: core.model-service
+    label: doc queries
+    protocol: Tauri IPC
+  - from: ui.canvas
+    to: ui.layout-worker
+    label: layout requests
+    protocol: postMessage
+  - from: core.model-service
+    to: core.sync-engine
+    label: parse results
+  - from: core.watcher
+    to: core.sync-engine
+    label: external change events
+  - from: core.sync-engine
+    to: git-repo
+    label: reads & writes workspace files
+    protocol: fs
+  - from: core.git-service
+    to: git-repo
+    label: status · blobs · history
+    protocol: libgit2
+  - from: external-editor
+    to: git-repo
+    label: concurrent edits
+    direction: both
+  - from: core.importer
+    to: structurizr-workspace
+    label: one-way import

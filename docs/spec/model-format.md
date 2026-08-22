@@ -1,0 +1,165 @@
+---
+doc: spec-model-format
+type: spec
+status: draft
+elements: [blastradius.core.model-service]
+---
+
+# Spec: workspace and model format
+
+Normative reference for the Blastradius YAML schema, v1. The workspace in this
+`docs/` folder is the conformance example; where prose and that workspace
+disagree, it is a bug in one of them and CI should have caught it.
+
+## 1. Workspace
+
+A workspace is a folder containing `workspace.yaml`:
+
+```yaml
+workspace:
+  name: Blastradius        # display name
+  version: 1               # schema version — integer, required
+model:
+  include: [model/*.yaml]
+views:
+  include: [views/*.yaml]
+docs:
+  include: ["*.md", "adr/*.md", "spec/*.md"]
+```
+
+- Globs are relative to the manifest, forward-slash, `*` and `**` only.
+- `version` gates parsing: a loader encountering a greater version than it
+  knows refuses with an upgrade message, never a partial parse. Migrations
+  between versions are a roadmap deliverable.
+- Files matched by no glob are ignored — a workspace can live inside a bigger
+  `docs/` tree without claiming all of it.
+
+## 2. Identity
+
+Per ADR-0003: the YAML key of an element is its immutable id — lowercase slug
+`[a-z0-9-]{1,64}`, unique among siblings. Global references use dotted paths:
+`<system>.<container>.<component>` (`blastradius.core.sync-engine`). People
+and external systems are addressed by bare id (`architect`, `git-repo`).
+
+## 3. Model files
+
+Each model file declares either context elements or one software system.
+
+`model/context.yaml`:
+
+```yaml
+people:
+  architect:
+    name: Platform Architect
+    description: Owns the architecture documentation for their group.
+external:
+  os-shell:
+    name: Operating System
+    description: File system, WebView, window manager.
+```
+
+`model/<system-id>.yaml` (one system per file, per ADR-0004):
+
+```yaml
+system: blastradius            # id of this system; must match one glob'd file
+name: Blastradius
+description: Local-first desktop app for C4 architecture models.
+
+containers:
+  ui:
+    name: Canvas UI
+    tech: WebView · design system
+    description: Rendering and interaction; owns no domain state.
+    components:                # L3, optional
+      canvas:
+        name: Canvas
+        tech: SVG + DOM
+  core:
+    name: Core
+    tech: Rust
+    components:
+      model-service: { name: Model Service }
+      sync-engine:   { name: Sync Engine }
+
+relations:
+  - from: ui
+    to: core.model-service     # dotted path, relative to this system
+    label: load & edit model
+    protocol: Tauri IPC
+  - from: architect            # context elements by bare id
+    to: ui
+    label: models the system
+```
+
+Rules:
+
+- `name` defaults to the titleized id. `tech`, `description` optional.
+- `relations` may appear at system level (as above) or nested under a
+  container (then `from` defaults to that container). `from`/`to` accept bare
+  ids (context), sibling ids, or dotted paths; cross-system references use
+  full paths from the root.
+- Relations are **directed** (`from` → `to`). `direction: both | none`
+  overrides; omitted means forward — an undirected relation is a deliberate
+  choice, mirroring the canvas grammar.
+- `external: true` on a system renders the dashed external style. Scalar
+  one-line form (`model-service: { name: Model Service }`) is valid YAML flow
+  style and encouraged for terse L3 listings.
+
+## 4. Views
+
+`views/<view-id>.yaml`:
+
+```yaml
+view: containers            # view id
+name: Containers            # optional display name
+scope: blastradius          # element whose children this view shows
+level: L2                   # L1 | L2 | L3 — which altitude this view captures
+layout:                     # pinned positions — grid units (26px cells @ 1×)
+  ui: [4, 2]
+  core: [10, 4]
+include-context: true       # show people/externals related to scope (default true)
+```
+
+- Elements absent from `layout:` are auto-placed (ADR-0006). Pinning is the
+  exception, not the rule.
+- Grid units, not pixels: layouts survive zoom and density changes.
+- A workspace with zero view files is valid — every level renders fully
+  auto-laid-out.
+
+## 5. Documents
+
+Markdown files matched by `docs.include` and starting with frontmatter join
+the model (ADR-0010):
+
+```yaml
+---
+doc: adr-0007            # document id — same slug rules, unique workspace-wide
+type: adr                # prd | adr | spec | roadmap | note
+status: accepted         # see vocabularies below
+elements: [blastradius.core.git-service]
+supersedes: adr-0004     # optional, adr only
+---
+```
+
+Status vocabularies — `adr`: proposed / accepted / superseded / rejected;
+`prd`, `spec`, `roadmap`: draft / current / superseded; `note`: none.
+A matched file **without** frontmatter is ignored with an info-level notice
+(ordinary READMEs may share the folder).
+
+## 6. Validation
+
+Errors (workspace loads, marked invalid; affected elements get `is-invalid`):
+duplicate id in scope; dangling reference from a relation, layout, or doc
+`elements:` list; unknown schema version; malformed YAML in any included file.
+
+Warnings: doc frontmatter with unknown `type`; empty system; relation
+duplicated verbatim.
+
+Everything is reported with file + line, in the panel footer and on the
+canvas — never only in a log.
+
+## 7. Stability contract
+
+Additions to the schema are minor (same `version`); anything that changes the
+meaning of an existing construct bumps `version` and ships with a migration.
+Frontmatter counts as schema surface under the same contract.

@@ -1,0 +1,19 @@
+# People and external systems — the context Blastradius operates in.
+people:
+  architect:
+    name: Platform Architect
+    description: Owns architecture documentation for their team; models systems, reviews model PRs, presents exports.
+  reviewer:
+    name: Reviewer
+    description: Reads model diffs in PRs and exported HTML; may never install the app.
+
+external:
+  git-repo:
+    name: Git Repository
+    description: The team's repo. Holds the workspace; carries history, branches, and merge conflicts. Written only by the user's own git tooling (ADR-0007).
+  external-editor:
+    name: External Editor
+    description: VS Code, vim, anything. Edits workspace files concurrently with the app; reconciled by the sync engine.
+  structurizr-workspace:
+    name: Structurizr Workspace
+    description: Existing Structurizr DSL model; one-way import source (ADR-0002).

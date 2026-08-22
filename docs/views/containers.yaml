@@ -1,0 +1,11 @@
+# L2 — the containers of Blastradius. Pinned per ADR-0006: pin what you care
+# about; everything absent from layout: is auto-placed.
+view: containers
+name: Containers
+scope: blastradius
+level: L2
+layout:
+  shell: [8, 1]
+  ui: [4, 5]
+  core: [12, 5]
+include-context: true
