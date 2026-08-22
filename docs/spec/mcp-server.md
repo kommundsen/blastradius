@@ -34,9 +34,12 @@ suggestions instead of bare errors.
 
 ## Registration
 
-Claude Code: `claude mcp add blastradius -- blastradius mcp <workspace-dir>`
-(or with `cargo run -q -p blastradius-cli -- mcp` from this repo). Any
-MCP-over-stdio client works the same way.
+`blastradius init` offers to write project-scoped registration during
+onboarding — `.mcp.json` (Claude Code), `.vscode/mcp.json` (Copilot/VS
+Code), `.cursor/mcp.json` (Cursor), `.codex/config.toml` (Codex; loads only
+for trusted projects) — plus per-agent skills/instructions. All writes are
+merge-only. Manually: `claude mcp add blastradius -- blastradius mcp
+<workspace-dir>`; any MCP-over-stdio client works the same way.
 
 ## Concurrency boundary (v1)
 

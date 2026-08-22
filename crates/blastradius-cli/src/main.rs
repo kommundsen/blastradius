@@ -238,62 +238,166 @@ fn export(args: &[String]) -> ExitCode {
     }
 }
 
-/// Scaffold a starter workspace (Phase 5 onboarding). Refuses to touch a
-/// folder that already has a manifest; never overwrites any existing file.
+/// Scaffold a starter workspace (Phase 5 onboarding), then offer the
+/// repo-level extras: `git init`, MCP registration, and agent skills.
+/// Idempotent: an existing workspace skips the scaffold but still gets the
+/// extras; no existing file is ever overwritten.
 fn init(args: &[String]) -> ExitCode {
+    use std::io::IsTerminal;
     let mut dir = None;
     let mut name = None;
+    let mut git_flag: Option<bool> = None;
+    let mut agents_flag: Option<String> = None;
+    let mut skills_flag: Option<String> = None;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--name" => name = it.next().cloned(),
+            "--git" => git_flag = Some(true),
+            "--no-git" => git_flag = Some(false),
+            "--agents" => agents_flag = Some(it.next().cloned().unwrap_or_default()),
+            "--skills" => skills_flag = Some(it.next().cloned().unwrap_or_default()),
             other => dir = Some(other.to_string()),
         }
     }
     let dir = dir.unwrap_or_else(|| ".".to_string());
     let root = Path::new(&dir);
-    if root.join("workspace.yaml").is_file() {
-        eprintln!("{dir}: already a Blastradius workspace (workspace.yaml exists)");
-        return ExitCode::from(2);
-    }
-    let name = name.unwrap_or_else(|| {
-        root.canonicalize()
-            .ok()
-            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
-            .unwrap_or_else(|| "My System".to_string())
-    });
-    for (rel, text) in blastradius_core::scaffold::starter_workspace(&name) {
-        let path = root.join(&rel);
-        if path.exists() {
-            eprintln!("{rel}: exists — refusing to overwrite");
-            return ExitCode::from(2);
+
+    let fresh = !root.join("workspace.yaml").is_file();
+    if fresh {
+        let name = name.unwrap_or_else(|| {
+            root.canonicalize()
+                .ok()
+                .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+                .unwrap_or_else(|| "My System".to_string())
+        });
+        for (rel, text) in blastradius_core::scaffold::starter_workspace(&name) {
+            let path = root.join(&rel);
+            if path.exists() {
+                eprintln!("{rel}: exists — refusing to overwrite");
+                return ExitCode::from(2);
+            }
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if let Err(e) = std::fs::write(&path, text) {
+                eprintln!("cannot write {rel}: {e}");
+                return ExitCode::FAILURE;
+            }
+            println!("  created {rel}");
         }
-        if let Some(parent) = path.parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        if let Err(e) = std::fs::write(&path, text) {
-            eprintln!("cannot write {rel}: {e}");
+        let (ws, diags) = blastradius_core::load_workspace(root);
+        if has_errors(&diags) {
+            for d in &diags {
+                eprintln!("{d}");
+            }
+            eprintln!("scaffold does not validate — this is a bug, please report it");
             return ExitCode::FAILURE;
         }
-        println!("  created {rel}");
+        println!("{}: {} elements, {} views", ws.name, ws.elements.len(), ws.views.len());
+    } else {
+        println!("{dir}: already a workspace — scaffold skipped");
     }
-    let (ws, diags) = blastradius_core::load_workspace(root);
-    if has_errors(&diags) {
-        for d in &diags {
-            eprintln!("{d}");
+
+    // ---- repo-level extras --------------------------------------------------
+    let interactive = git_flag.is_none()
+        && agents_flag.is_none()
+        && skills_flag.is_none()
+        && std::io::stdin().is_terminal()
+        && std::io::stdout().is_terminal();
+
+    let in_repo = blastradius_cli::onboard::git_root(root).is_some();
+    let git_init = if in_repo {
+        false
+    } else {
+        match git_flag {
+            Some(v) => v,
+            None if interactive => {
+                ask_yes("Not a git repository — run `git init`? [Y/n] ", true)
+            }
+            None => false,
         }
-        eprintln!("scaffold does not validate — this is a bug, please report it");
-        return ExitCode::FAILURE;
+    };
+    let choices = "all / none / any of claude,copilot,cursor,codex";
+    let mcp = match agents_flag.or_else(|| {
+        interactive.then(|| ask_line(&format!(
+            "Configure MCP so coding agents can query the model? ({choices}) [none] "
+        )))
+    }) {
+        Some(spec) => match parse_agents(&spec) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("{e}");
+                return ExitCode::from(2);
+            }
+        },
+        None => Vec::new(),
+    };
+    let skills = match skills_flag.or_else(|| {
+        interactive.then(|| ask_line(&format!(
+            "Add agent skills/instructions for the model? ({choices}) [none] "
+        )))
+    }) {
+        Some(spec) => match parse_agents(&spec) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("{e}");
+                return ExitCode::from(2);
+            }
+        },
+        None => Vec::new(),
+    };
+
+    let opts = blastradius_cli::onboard::SetupOptions { git_init, mcp, skills };
+    if opts.git_init || !opts.mcp.is_empty() || !opts.skills.is_empty() {
+        for line in blastradius_cli::onboard::setup(root, &opts) {
+            println!("  {line}");
+        }
     }
-    println!(
-        "{}: {} elements, {} views — next:
-  blastradius-app {dir}    # open it in the app
-  blastradius validate {dir}",
-        ws.name,
-        ws.elements.len(),
-        ws.views.len()
-    );
+    println!("next:\\n  blastradius-app {dir}    # open it in the app\\n  blastradius validate {dir}");
     ExitCode::SUCCESS
+}
+
+fn parse_agents(spec: &str) -> Result<Vec<String>, String> {
+    let spec = spec.trim().to_lowercase();
+    if spec.is_empty() || spec == "none" || spec == "n" {
+        return Ok(Vec::new());
+    }
+    if spec == "all" || spec == "a" {
+        return Ok(blastradius_cli::onboard::AGENTS.iter().map(|s| s.to_string()).collect());
+    }
+    let mut out = Vec::new();
+    for part in spec.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+        if !blastradius_cli::onboard::AGENTS.contains(&part) {
+            return Err(format!(
+                "unknown agent {part:?} — expected all, none, or any of {}",
+                blastradius_cli::onboard::AGENTS.join(", ")
+            ));
+        }
+        if !out.contains(&part.to_string()) {
+            out.push(part.to_string());
+        }
+    }
+    Ok(out)
+}
+
+fn ask_yes(prompt: &str, default: bool) -> bool {
+    let answer = ask_line(prompt);
+    let answer = answer.trim().to_lowercase();
+    match answer.as_str() {
+        "" => default,
+        "y" | "yes" => true,
+        _ => false,
+    }
+}
+
+fn ask_line(prompt: &str) -> String {
+    use std::io::Write;
+    print!("{prompt}");
+    let _ = std::io::stdout().flush();
+    let mut line = String::new();
+    let _ = std::io::stdin().read_line(&mut line);
+    line
 }
 
 /// One-way Structurizr DSL import with fidelity report (ADR-0002).

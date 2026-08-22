@@ -130,4 +130,7 @@ day** (ADR-0012, spec/mcp-server.md): `blastradius mcp` serves ten tools
 over stdio; reads are task-shaped (blast_radius, element, model_diff, doc),
 writes route through the sync engine's CST-preserving splices with shared
 undo. Building it surfaced and fixed two latent core bugs (system rename,
-silently-dropped context-file relations).
+silently-dropped context-file relations). `blastradius init` grew the
+matching onboarding: it offers `git init`, project-scoped MCP registration,
+and skills/instructions for Claude Code, Copilot, Cursor, and Codex
+(merge-only writes; `--git/--no-git/--agents/--skills` for scripts).

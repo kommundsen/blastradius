@@ -114,6 +114,13 @@ cargo run -p blastradius-cli -- init path/to/your/repo
 
 then open that folder in the app (File → Open, Ctrl+O). The scaffold is five
 commented YAML files; `blastradius validate .` checks them and is CI-ready.
+Run interactively, `init` also offers to `git init` a fresh folder and to
+register the MCP server and agent skills for Claude Code, Copilot/VS Code,
+Cursor, and Codex — project-scoped config files at the repo root, merged
+into whatever already exists, never overwritten. Passing any of the flags
+switches to fully non-interactive mode (for scripts and CI). Re-running
+`init` on an existing workspace skips the scaffold but still offers the
+extras.
 
 ### 3. Run the test battery
 
@@ -139,7 +146,9 @@ axe-core WCAG AA audit of every surface).
 ## CLI
 
 ```
-blastradius init [dir] [--name <name>]      scaffold a starter workspace
+blastradius init [dir] [--name <name>]      scaffold a starter workspace, offer
+     [--git|--no-git] [--agents <list>]     git init + agent MCP config + skills
+     [--skills <list>]                      (list: all | none | claude,copilot,cursor,codex)
 blastradius validate [dir]                  parse + validate, file:line diagnostics
 blastradius diff <base-dir> <current-dir>   semantic model diff
 blastradius gitdiff <dir> [base] [cur]      semantic diff from git history
