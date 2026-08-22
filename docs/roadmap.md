@@ -67,29 +67,49 @@ every merge; import corpus hits the PRD's 80% clean-import bar.
 
 ## Phase 5 — Polish & release
 
-Onboarding (`init` scaffold + in-app template), packaging/signing/updates for
-three platforms, performance budgets enforced (spec/sync-engine.md), a11y
-audit against the design system's AA contract, docs site. Named debts from
-earlier phases land here, not silently:
+**Status: shipped except packaging** (2026-08-22). Onboarding, the named
+debts, budget enforcement, the a11y audit, and the docs site are done;
+packaging/signing/updates were deliberately deferred (below).
 
-- **Semantic dive choreography** — the camera glides *into* the dived node and
-  *out of* the risen one (the motion spec's continuous-zoom intent), replacing
-  Phase 1's fit-to-view transitions.
-- **Native-window verification on macOS and Linux** (ADR-0011), alongside
-  signing and installers.
-- **Source editor upgrade** — the v1 YAML panel is a plain textarea; CodeMirror
-  brings syntax highlighting and inline `.err` underlines at the offending line.
-- **Performance-budget enforcement in CI** against a generated benchmark
-  workspace (spec/sync-engine.md budgets are design targets until then).
-- **Journal crash recovery** — transactions are journaled per workspace
-  (sync.rs) but nothing replays them yet.
-- **Granular staleness** — v1 blocks all editing on any stale file; the spec's
-  intent is that a stale views file disables only pinning.
-- **`workspace_open` at runtime** — the workspace is fixed at launch; switching
-  (and a File → Open dialog) lands with onboarding.
+Shipped:
+
+- **Onboarding** — `blastradius init` scaffolds a five-file commented starter
+  workspace (validates with zero warnings; a test keeps it honest); the app
+  gained a welcome screen, File → Open (Ctrl+O), runtime `workspace_open` /
+  `workspace_init` / `workspace_demo`, and a native folder picker.
+- **Semantic dive choreography** — the camera flies *into* the dived node and
+  the deeper scene continues the forward motion (inverse on rise), on the
+  motion tokens; prefers-reduced-motion collapses to a cut (e2e-asserted).
+- **Source editor upgrade** — vendored CodeMirror 5: YAML highlighting and
+  inline error-line marking replace the plain textarea.
+- **Journal crash recovery** — write-ahead journal (intent/commit), replayed
+  on open: undo survives restarts, torn writes roll forward, external changes
+  while closed discard the journal (spec/sync-engine.md).
+- **Granular staleness** — a stale views file disables only pinning into that
+  view; model semantics keep flowing (spec/sync-engine.md).
+- **Performance budgets in CI** — release-gated suite against a generated
+  ~510-element workspace: parse < 50ms, drop→write < 30ms, keystroke core
+  share < 150ms, render share < 100ms in WebKit (spec/sync-engine.md).
+- **A11y audit** — axe-core WCAG A/AA scans of shell, welcome, dialogs, and
+  source panel in both themes run in the WebKit gate; all findings fixed.
+- **Docs site** — tools/build-site.mjs renders docs/ with the live model
+  bundled; CI deploys via GitHub Pages from master (one manual step: enable
+  Pages with Source = GitHub Actions in repo settings).
+
+Deferred to the packaging release (deliberately, user-decided):
+
+- **Packaging/signing/updates** for the three platforms — `bundle.active` is
+  still false; installers, a Windows signing cert, and an Apple Developer ID
+  are open decisions with real costs.
+- **Native-window verification on macOS and Linux** (ADR-0011) — needs the
+  installers (or hardware in hand); WebKit-in-CI remains the rendering gate.
 
 **Exit:** a platform engineer who has never seen the product reaches a
 rendered model of their own repo in under 5 minutes (PRD metric), unassisted.
+Everything that makes that run possible now exists (README cold-clone guide,
+init, welcome screen, File → Open); the measured run with a real stranger is
+still owed and belongs with the packaged build, where "install" does not mean
+`cargo build`.
 
 ## v2 themes (not scheduled)
 
