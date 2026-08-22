@@ -59,6 +59,15 @@ jobs:
           name: architecture-html
           path: architecture.html
 
+  budgets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Performance budgets (spec/sync-engine.md) — release-build contracts
+        run: cargo test --release -p blastradius-core --test budgets -- --include-ignored --nocapture
+
   app:
     strategy:
       fail-fast: false

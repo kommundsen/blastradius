@@ -176,3 +176,55 @@ mod tests {
         assert_eq!(slugify("§§§"), "system");
     }
 }
+
+/// Deterministic benchmark workspace for the CI performance budgets
+/// (spec/sync-engine.md): `systems` systems × (1 + 4 containers + 20
+/// components) elements, plus context, relations, and pinned views. 20
+/// systems ≈ a 510-element workspace.
+pub fn benchmark_workspace(systems: usize) -> Vec<(String, String)> {
+    let mut files = Vec::new();
+    files.push((
+        "workspace.yaml".to_string(),
+        "workspace:\n  name: Benchmark\n  version: 1\nmodel:\n  include: [model/*.yaml]\nviews:\n  include: [views/*.yaml]\n".to_string(),
+    ));
+    let mut ctx = String::from("people:\n");
+    for i in 0..5 {
+        ctx.push_str(&format!("  user-{i}:\n    name: User {i}\n"));
+    }
+    ctx.push_str("external:\n");
+    for i in 0..5 {
+        ctx.push_str(&format!("  vendor-{i}:\n    name: Vendor {i}\n"));
+    }
+    ctx.push_str("relations:\n");
+    for i in 0..5 {
+        ctx.push_str(&format!("  - from: user-{i}\n    to: sys-{}\n    label: uses\n", i % systems));
+    }
+    files.push(("model/context.yaml".to_string(), ctx));
+
+    for s in 0..systems {
+        let mut f = format!("system: sys-{s}\nname: System {s}\ncontainers:\n");
+        for c in 0..4 {
+            f.push_str(&format!("  svc-{c}:\n    name: Service {c}\n    tech: Rust\n    components:\n"));
+            for k in 0..5 {
+                f.push_str(&format!("      mod-{k}:\n        name: Module {k}\n"));
+            }
+        }
+        f.push_str("relations:\n");
+        for c in 0..3 {
+            f.push_str(&format!("  - from: svc-{c}\n    to: svc-{}\n    label: calls\n", c + 1));
+        }
+        f.push_str(&format!("  - from: svc-0\n    to: sys-{}.svc-0\n    label: federates\n", (s + 1) % systems));
+        f.push_str(&format!("  - from: svc-3\n    to: vendor-{}\n    label: buys from\n", s % 5));
+        files.push((format!("model/sys-{s}.yaml"), f));
+
+        files.push((
+            format!("views/sys-{s}-l2.yaml"),
+            format!("view: sys-{s}-l2\nscope: sys-{s}\nlevel: L2\nlayout:\n  svc-0: [2, 2]\n  svc-1: [8, 2]\n"),
+        ));
+    }
+    files.push((
+        "views/sys-0-l3.yaml".to_string(),
+        "view: sys-0-l3\nscope: sys-0.svc-0\nlevel: L3\ninclude-context: false\n".to_string(),
+    ));
+    files
+}

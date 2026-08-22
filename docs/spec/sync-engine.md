@@ -116,6 +116,11 @@ and export must be callable without a WebView.
 - Keystroke → canvas update (valid edit): < 250ms end to end.
 - Canvas drop → file write: < 30ms.
 
-Budget enforcement in CI against a generated benchmark workspace is **not yet
-implemented** — a named Phase 5 debt (docs/roadmap.md). Until then the budgets
-are design targets, not guarantees.
+**Enforced in CI** (Phase 5) against a generated ~510-element benchmark
+workspace (`scaffold::benchmark_workspace`): the `budgets` job runs
+crates/blastradius-core/tests/budgets.rs on a release build (parse+validate
+< 50ms, canvas drop → write < 30ms, best-of-5). The keystroke budget spans
+two processes and is enforced in shares: the core share (write + reparse +
+validate) at < 150ms in the same suite, and the render share (ELK layout +
+DOM for the current view) at < 100ms in WebKit by ui/tests/e2e/perf.spec.mjs.
+Debug builds skip the suite — budgets are release-build contracts.
