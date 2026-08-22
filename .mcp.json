@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "blastradius": {
+      "command": "cargo",
+      "args": [
+        "run",
+        "-q",
+        "-p",
+        "blastradius-cli",
+        "--",
+        "mcp",
+        "docs"
+      ]
+    }
+  }
+}

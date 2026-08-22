@@ -354,7 +354,7 @@ fn init(args: &[String]) -> ExitCode {
             println!("  {line}");
         }
     }
-    println!("next:\\n  blastradius-app {dir}    # open it in the app\\n  blastradius validate {dir}");
+    println!("next:\n  blastradius-app {dir}    # open it in the app\n  blastradius validate {dir}");
     ExitCode::SUCCESS
 }
 
