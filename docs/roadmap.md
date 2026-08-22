@@ -104,6 +104,13 @@ Deferred to the packaging release (deliberately, user-decided):
 - **Native-window verification on macOS and Linux** (ADR-0011) — needs the
   installers (or hardware in hand); WebKit-in-CI remains the rendering gate.
 
+Known advisory (recorded 2026-08-22, revisit with the packaging release):
+Dependabot flags `glib` 0.18 (RUSTSEC unsoundness in `VariantStrIter`,
+medium, Linux-only GTK path pulled in transitively by Tauri 2 / rfd). The
+fixed 0.20 line is unreachable until Tauri bumps its gtk-rs dependency —
+`cargo update` confirms no compatible newer version. Not exploitable in our
+usage; re-check when bumping Tauri for packaging.
+
 **Exit:** a platform engineer who has never seen the product reaches a
 rendered model of their own repo in under 5 minutes (PRD metric), unassisted.
 Everything that makes that run possible now exists (README cold-clone guide,
