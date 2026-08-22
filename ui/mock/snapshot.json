@@ -130,6 +130,13 @@
       "description": "In-app source editor with inline validation; a peer surface to the canvas, not a viewer. CodeMirror upgrade is Phase 5 polish."
     },
     {
+      "id": "coding-agent",
+      "kind": "external",
+      "name": "Coding Agent",
+      "description": "Claude Code, Copilot, Cursor, Codex. Reads and edits the model through the MCP server; registered project-scoped by blastradius init (ADR-0012).",
+      "external": true
+    },
+    {
       "id": "external-editor",
       "kind": "external",
       "name": "External Editor",
@@ -241,6 +248,19 @@
       "from": "blastradius.core.importer",
       "to": "structurizr-workspace",
       "label": "one-way import",
+      "direction": "forward"
+    },
+    {
+      "from": "blastradius.cli.mcp-server",
+      "to": "blastradius.core.sync-engine",
+      "label": "applies operations through",
+      "direction": "forward"
+    },
+    {
+      "from": "coding-agent",
+      "to": "blastradius.cli.mcp-server",
+      "label": "queries & edits the model via",
+      "protocol": "MCP/stdio",
       "direction": "forward"
     }
   ],

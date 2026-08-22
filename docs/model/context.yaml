@@ -17,3 +17,11 @@ external:
   structurizr-workspace:
     name: Structurizr Workspace
     description: Existing Structurizr DSL model; one-way import source (ADR-0002).
+  coding-agent:
+    description: "Claude Code, Copilot, Cursor, Codex. Reads and edits the model through the MCP server; registered project-scoped by blastradius init (ADR-0012)."
+    name: Coding Agent
+relations:
+  - from: coding-agent
+    to: blastradius.cli.mcp-server
+    label: "queries & edits the model via"
+    protocol: MCP/stdio

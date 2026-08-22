@@ -13,13 +13,13 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('L1 context renders the dogfood model', async ({ page }) => {
-  await expect(page.locator('#nodes .node')).toHaveCount(6);
-  await expect(page.locator('#edges path.edge')).toHaveCount(5);
+  await expect(page.locator('#nodes .node')).toHaveCount(7);
+  await expect(page.locator('#edges path.edge')).toHaveCount(6);
   await expect(page.locator('.node.is-person')).toHaveCount(2);
-  await expect(page.locator('.node.is-external')).toHaveCount(3);
+  await expect(page.locator('.node.is-external')).toHaveCount(4);
   await expect(page.locator('#breadcrumb')).toContainText('Context');
   // the tree lists the whole model regardless of altitude
-  await expect(page.locator('.tree-row')).toHaveCount(21);
+  await expect(page.locator('.tree-row')).toHaveCount(22);
   expect(page.errors).toEqual([]);
   await page.screenshot({ path: 'test-results/webkit-L1.png', fullPage: true });
 });

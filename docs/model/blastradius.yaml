@@ -115,3 +115,6 @@ relations:
   - from: core.importer
     to: structurizr-workspace
     label: one-way import
+  - from: cli.mcp-server
+    to: core.sync-engine
+    label: applies operations through

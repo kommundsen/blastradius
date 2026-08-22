@@ -14,7 +14,7 @@ fn repo_docs_workspace_is_valid() {
         eprintln!("{d}");
     }
     assert!(!has_errors(&diags));
-    assert_eq!(ws.elements.len(), 21, "element count changed — update this test with the model");
+    assert_eq!(ws.elements.len(), 22, "element count changed — update this test with the model");
     assert_eq!(ws.docs.len(), 19, "registered doc count changed");
     assert_eq!(ws.views.len(), 2);
     // exactly one frontmatter-less file (docs/README.md), no warnings
