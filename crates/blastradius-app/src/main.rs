@@ -53,6 +53,8 @@ fn sync_status(state: State<AppState>) -> Result<serde_json::Value, String> {
     let (labels, cursor) = engine.history_labels();
     Ok(serde_json::json!({
         "stale": engine.stale.iter().collect::<Vec<_>>(),
+        "staleModel": engine.stale_model(),
+        "staleViewIds": engine.stale_view_ids(),
         "canUndo": cursor > 0,
         "canRedo": cursor < labels.len(),
         "undoLabel": (cursor > 0).then(|| labels[cursor - 1].clone()),

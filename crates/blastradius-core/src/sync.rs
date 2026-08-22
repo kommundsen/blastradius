@@ -3,7 +3,7 @@
 //! — targeted CST edits (splice), staleness, atomic writes, race abort, echo
 //! suppression, and one shared undo history for all surfaces.
 
-use crate::diagnostics::{has_errors, Diagnostic};
+use crate::diagnostics::Diagnostic;
 use crate::model::{is_valid_slug, ElementKind, Workspace};
 use crate::splice;
 use crate::vfs::DiskVfs;
@@ -31,7 +31,7 @@ pub enum Operation {
     SetRelationField { from: String, to: String, label: Option<String>, field: String, value: String },
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileChange {
     pub rel: String,
     /// None = file did not exist.
@@ -40,11 +40,11 @@ pub struct FileChange {
     pub after: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
     pub label: String,
     /// "canvas" | "external"
-    pub source: &'static str,
+    pub source: String,
     pub changes: Vec<FileChange>,
 }
 
@@ -57,6 +57,9 @@ pub struct SyncEngine {
     pub diagnostics: Vec<Diagnostic>,
     /// Files whose on-disk content currently fails to parse (spec: staleness).
     pub stale: BTreeSet<String>,
+    /// Manifest-declared view files — staleness in these disables only pinning
+    /// (spec: granular staleness, Phase 5).
+    view_files: BTreeSet<String>,
     history: Vec<Transaction>,
     cursor: usize, // transactions [0..cursor) are applied
     journal: Option<PathBuf>,
@@ -72,10 +75,12 @@ impl SyncEngine {
             model: Workspace::default(),
             diagnostics: Vec::new(),
             stale: BTreeSet::new(),
+            view_files: BTreeSet::new(),
             history: Vec::new(),
             cursor: 0,
             journal: journal_path(root),
         };
+        engine.recover();
         engine.reload_all();
         engine
     }
@@ -84,19 +89,39 @@ impl SyncEngine {
     pub fn reload_all(&mut self) {
         let (ws, diags) = crate::load_workspace(&self.root);
         self.refresh_file_cache(&diags);
-        if has_errors(&diags) {
-            // keep last valid model; mark offending files stale
-            self.stale = diags
-                .iter()
-                .filter(|d| d.severity == crate::diagnostics::Severity::Error)
-                .map(|d| d.file.clone())
-                .collect();
-            self.diagnostics = diags;
-        } else {
+        self.adopt(ws, diags);
+    }
+
+    /// Take a fresh parse. Staleness is granular (spec, Phase 5): errors in a
+    /// *model* file keep the last valid model; errors confined to *view* files
+    /// still adopt the new semantics — only pinning into those files is
+    /// disabled, and their last-known pins are retained so the canvas holds.
+    fn adopt(&mut self, ws: Workspace, diags: Vec<Diagnostic>) {
+        let error_files: BTreeSet<String> = diags
+            .iter()
+            .filter(|d| d.severity == crate::diagnostics::Severity::Error)
+            .map(|d| d.file.clone())
+            .collect();
+        let model_broken = error_files
+            .iter()
+            .any(|f| f.is_empty() || !self.view_files.contains(f));
+        if error_files.is_empty() {
             self.model = ws;
-            self.diagnostics = diags;
             self.stale.clear();
+        } else if model_broken {
+            // keep last valid model; mark offending files stale
+            self.stale = error_files;
+        } else {
+            let mut ws = ws;
+            for v in &self.model.views {
+                if error_files.contains(&v.file) && !ws.views.iter().any(|nv| nv.id == v.id) {
+                    ws.views.push(v.clone());
+                }
+            }
+            self.model = ws;
+            self.stale = error_files;
         }
+        self.diagnostics = diags;
     }
 
     fn refresh_file_cache(&mut self, diags: &[Diagnostic]) {
@@ -107,6 +132,7 @@ impl SyncEngine {
             wanted.extend(m.model_files.iter().cloned());
             wanted.extend(m.view_files.iter().cloned());
             wanted.extend(m.doc_files.iter().cloned());
+            self.view_files = m.view_files.iter().cloned().collect();
         }
         // also keep files mentioned in diagnostics (they may have failed the manifest)
         wanted.extend(diags.iter().map(|d| d.file.clone()).filter(|f| !f.is_empty()));
@@ -156,14 +182,16 @@ impl SyncEngine {
         }
         // external edits enter history as transactions (spec: undo-past-an-
         // external-edit is well-defined)
-        self.push_transaction(Transaction {
+        let tx = Transaction {
             label: format!(
                 "external change: {}",
                 changed.iter().map(|c| c.rel.as_str()).collect::<Vec<_>>().join(", ")
             ),
-            source: "external",
+            source: "external".to_string(),
             changes: changed,
-        });
+        };
+        self.push_transaction(tx.clone());
+        self.journal_event(&JournalEvent::Tx { tx });
         self.reload_all();
         true
     }
@@ -176,12 +204,15 @@ impl SyncEngine {
             return Err(format!("{rel}: not a workspace file"));
         }
         let before = self.files.get(rel).cloned();
-        self.write_atomic(rel, text)?;
-        self.push_transaction(Transaction {
+        let tx = Transaction {
             label: format!("edit {rel}"),
-            source: "canvas", // in-app surface: undoable like any op
+            source: "canvas".to_string(), // in-app surface: undoable like any op
             changes: vec![FileChange { rel: rel.to_string(), before, after: Some(text.to_string()) }],
-        });
+        };
+        self.journal_event(&JournalEvent::Intent { tx: tx.clone() });
+        self.write_atomic(rel, text)?;
+        self.push_transaction(tx);
+        self.journal_event(&JournalEvent::Commit);
         self.files.insert(rel.to_string(), text.to_string());
         self.reload_model_only();
         Ok(!self.stale.contains(rel))
@@ -189,18 +220,24 @@ impl SyncEngine {
 
     fn reload_model_only(&mut self) {
         let (ws, diags) = crate::load_workspace(&self.root);
-        if has_errors(&diags) {
-            self.stale = diags
-                .iter()
-                .filter(|d| d.severity == crate::diagnostics::Severity::Error)
-                .map(|d| d.file.clone())
-                .collect();
-            self.diagnostics = diags;
-        } else {
-            self.model = ws;
-            self.diagnostics = diags;
-            self.stale.clear();
-        }
+        self.adopt(ws, diags);
+    }
+
+    /// Stale files that break the *model* (not mere view files). Canvas
+    /// editing is disabled only while this is non-empty.
+    pub fn stale_model(&self) -> Vec<String> {
+        self.stale.iter().filter(|f| !self.view_files.contains(*f)).cloned().collect()
+    }
+
+    /// Ids of views whose backing file is stale — pinning into them is
+    /// disabled until the file parses again.
+    pub fn stale_view_ids(&self) -> Vec<String> {
+        self.model
+            .views
+            .iter()
+            .filter(|v| self.stale.contains(&v.file))
+            .map(|v| v.id.clone())
+            .collect()
     }
 
     pub fn file_text(&self, rel: &str) -> Option<&str> {
@@ -224,13 +261,37 @@ impl SyncEngine {
     /// Apply one canvas operation as a transaction. Refused while any model
     /// file is stale (spec: canvas read-only while stale).
     pub fn apply(&mut self, op: Operation) -> Result<Transaction, String> {
-        if !self.stale.is_empty() {
+        let stale_model = self.stale_model();
+        if !stale_model.is_empty() {
             return Err(format!(
                 "workspace is stale ({}) — fix the file first",
-                self.stale.iter().cloned().collect::<Vec<_>>().join(", ")
+                stale_model.join(", ")
             ));
         }
+        // Granular staleness (spec, Phase 5): a stale *view* file blocks only
+        // operations that would write into it — i.e. pinning that view. The
+        // target must be resolved before compute (its text does not parse).
+        if let Operation::Pin { view, level, scope, .. } = &op {
+            let target = self.model.views.iter().find(|v| match view {
+                Some(vid) => &v.id == vid,
+                None => v.level == *level && (level == "L1" || Some(v.scope.as_str()) == scope.as_deref()),
+            });
+            if let Some(v) = target {
+                if self.stale.contains(&v.file) {
+                    return Err(format!(
+                        "{}: does not parse — pinning is disabled until it is fixed",
+                        v.file
+                    ));
+                }
+            }
+        }
         let changes = self.compute_changes(&op)?;
+        if let Some(c) = changes.iter().find(|c| self.stale.contains(&c.rel)) {
+            return Err(format!(
+                "{}: does not parse — pinning is disabled until it is fixed",
+                c.rel
+            ));
+        }
         // Race abort (spec): disk must still match our cache for every file
         // we are about to touch — never merge heuristically.
         for c in &changes {
@@ -244,6 +305,11 @@ impl SyncEngine {
         if let Some(e) = candidate_error {
             return Err(format!("operation would invalidate the workspace: {e}"));
         }
+        // Write-ahead: journal intent, write files, journal commit. Recovery
+        // rolls an uncommitted intent forward if the writes were torn.
+        self.journal_event(&JournalEvent::Intent {
+            tx: Transaction { label: op_label(&op), source: "canvas".to_string(), changes: changes.clone() },
+        });
         for c in &changes {
             match &c.after {
                 Some(text) => self.write_atomic(&c.rel, text)?,
@@ -260,8 +326,9 @@ impl SyncEngine {
                 }
             }
         }
-        let tx = Transaction { label: op_label(&op), source: "canvas", changes };
+        let tx = Transaction { label: op_label(&op), source: "canvas".to_string(), changes };
         self.push_transaction(tx.clone());
+        self.journal_event(&JournalEvent::Commit);
         self.reload_model_only();
         Ok(tx)
     }
@@ -277,9 +344,15 @@ impl SyncEngine {
         }
         let overlay = crate::vfs::OverlayVfs { base: &disk, overrides };
         let (_, diags) = crate::load_workspace_vfs(&overlay);
+        let touched: BTreeSet<&str> = changes.iter().map(|c| c.rel.as_str()).collect();
         diags
             .iter()
-            .find(|d| d.severity == crate::diagnostics::Severity::Error)
+            .find(|d| {
+                d.severity == crate::diagnostics::Severity::Error
+                    // a stale view file we are not touching keeps its errors;
+                    // they must not veto unrelated operations
+                    && !(self.stale.contains(&d.file) && !touched.contains(d.file.as_str()))
+            })
             .map(|d| d.to_string())
     }
 
@@ -645,13 +718,13 @@ impl SyncEngine {
             self.history.drain(..drop);
         }
         self.cursor = self.history.len();
-        self.journal_last();
     }
 
     pub fn undo(&mut self) -> Result<Option<String>, String> {
         if self.cursor == 0 {
             return Ok(None);
         }
+        self.journal_event(&JournalEvent::IntentUndo);
         self.cursor -= 1;
         let tx = self.history[self.cursor].clone();
         for c in tx.changes.iter().rev() {
@@ -670,6 +743,7 @@ impl SyncEngine {
                 }
             }
         }
+        self.journal_event(&JournalEvent::Commit);
         self.reload_model_only();
         Ok(Some(tx.label))
     }
@@ -678,6 +752,7 @@ impl SyncEngine {
         if self.cursor >= self.history.len() {
             return Ok(None);
         }
+        self.journal_event(&JournalEvent::IntentRedo);
         let tx = self.history[self.cursor].clone();
         self.cursor += 1;
         for c in &tx.changes {
@@ -696,6 +771,7 @@ impl SyncEngine {
                 }
             }
         }
+        self.journal_event(&JournalEvent::Commit);
         self.reload_model_only();
         Ok(Some(tx.label))
     }
@@ -718,19 +794,244 @@ impl SyncEngine {
         std::fs::rename(&tmp, &path).map_err(|e| e.to_string())
     }
 
-    fn journal_last(&self) {
+    fn journal_event(&self, ev: &JournalEvent) {
         let Some(journal) = &self.journal else { return };
-        if let Some(tx) = self.history.last() {
-            if let Ok(line) = serde_json::to_string(tx) {
-                use std::io::Write;
-                if let Ok(mut f) =
-                    std::fs::OpenOptions::new().create(true).append(true).open(journal)
-                {
-                    let _ = writeln!(f, "{line}");
-                }
+        if let Ok(line) = serde_json::to_string(ev) {
+            use std::io::Write;
+            if let Ok(mut f) =
+                std::fs::OpenOptions::new().create(true).append(true).open(journal)
+            {
+                let _ = writeln!(f, "{line}");
             }
         }
     }
+
+    // ---- crash recovery (spec: journal replay, Phase 5) ----------------------
+
+    /// Replay the journal from a previous session. Three outcomes:
+    /// - the journal's final state matches disk: history (undo depth included)
+    ///   is restored across the restart;
+    /// - the last event is an uncommitted intent and disk is part-way through
+    ///   its writes: the transaction is rolled forward, then history restored;
+    /// - anything else (the files changed while we were gone): the journal is
+    ///   discarded. Files are the truth; recovery never guesses.
+    fn recover(&mut self) {
+        let Some(journal) = self.journal.clone() else { return };
+        let Ok(text) = std::fs::read_to_string(&journal) else { return };
+        if text.trim().is_empty() {
+            return;
+        }
+        let lines: Vec<&str> = text.lines().collect();
+        let mut events: Vec<JournalEvent> = Vec::new();
+        for (i, line) in lines.iter().enumerate() {
+            match serde_json::from_str::<JournalEvent>(line) {
+                Ok(ev) => events.push(ev),
+                Err(_) => {
+                    // a torn final line from a crash mid-append is expected;
+                    // corruption anywhere else makes the journal unusable
+                    if i + 1 != lines.len() {
+                        self.clear_journal();
+                        return;
+                    }
+                }
+            }
+        }
+        let mut history: Vec<Transaction> = Vec::new();
+        let mut cursor: usize = 0;
+        let mut i = 0;
+        let mut torn: Option<JournalEvent> = None;
+        while i < events.len() {
+            let committed = matches!(events.get(i + 1), Some(JournalEvent::Commit));
+            let last = i + 1 == events.len();
+            match &events[i] {
+                JournalEvent::Tx { tx } => {
+                    push_replayed(&mut history, &mut cursor, tx.clone());
+                }
+                JournalEvent::Intent { .. } | JournalEvent::IntentUndo | JournalEvent::IntentRedo
+                    if !committed && !last =>
+                {
+                    // an abandoned intent mid-journal: writes failed and the
+                    // session went on — state after this is not reconstructable
+                    self.clear_journal();
+                    return;
+                }
+                JournalEvent::Intent { tx } => {
+                    if committed {
+                        push_replayed(&mut history, &mut cursor, tx.clone());
+                        i += 1;
+                    } else {
+                        torn = Some(events[i].clone());
+                    }
+                }
+                JournalEvent::IntentUndo => {
+                    if committed {
+                        cursor = cursor.saturating_sub(1);
+                        i += 1;
+                    } else {
+                        torn = Some(JournalEvent::IntentUndo);
+                    }
+                }
+                JournalEvent::IntentRedo => {
+                    if committed {
+                        cursor = (cursor + 1).min(history.len());
+                        i += 1;
+                    } else {
+                        torn = Some(JournalEvent::IntentRedo);
+                    }
+                }
+                JournalEvent::Commit => {}
+                JournalEvent::Cursor { value } => cursor = (*value).min(history.len()),
+            }
+            i += 1;
+        }
+        let disk = |rel: &str| std::fs::read_to_string(self.root.join(rel)).ok();
+        match torn {
+            Some(JournalEvent::Intent { tx }) => {
+                for c in &tx.changes {
+                    let d = disk(&c.rel);
+                    if d == c.after {
+                        continue;
+                    }
+                    let forward_ok = d == c.before
+                        && match &c.after {
+                            Some(t) => self.write_atomic(&c.rel, t).is_ok(),
+                            None => {
+                                let _ = std::fs::remove_file(self.root.join(&c.rel));
+                                true
+                            }
+                        };
+                    if !forward_ok {
+                        self.clear_journal();
+                        return;
+                    }
+                }
+                push_replayed(&mut history, &mut cursor, tx);
+            }
+            Some(JournalEvent::IntentUndo) if cursor > 0 => {
+                let tx = history[cursor - 1].clone();
+                for c in tx.changes.iter().rev() {
+                    let d = disk(&c.rel);
+                    if d == c.before {
+                        continue;
+                    }
+                    let back_ok = d == c.after
+                        && match &c.before {
+                            Some(t) => self.write_atomic(&c.rel, t).is_ok(),
+                            None => {
+                                let _ = std::fs::remove_file(self.root.join(&c.rel));
+                                true
+                            }
+                        };
+                    if !back_ok {
+                        self.clear_journal();
+                        return;
+                    }
+                }
+                cursor -= 1;
+            }
+            Some(JournalEvent::IntentRedo) if cursor < history.len() => {
+                let tx = history[cursor].clone();
+                for c in &tx.changes {
+                    let d = disk(&c.rel);
+                    if d == c.after {
+                        continue;
+                    }
+                    let forward_ok = d == c.before
+                        && match &c.after {
+                            Some(t) => self.write_atomic(&c.rel, t).is_ok(),
+                            None => {
+                                let _ = std::fs::remove_file(self.root.join(&c.rel));
+                                true
+                            }
+                        };
+                    if !forward_ok {
+                        self.clear_journal();
+                        return;
+                    }
+                }
+                cursor += 1;
+            }
+            Some(_) => {
+                self.clear_journal();
+                return;
+            }
+            None => {}
+        }
+        // verify: the journal's notion of every touched file must match disk
+        let mut expected: BTreeMap<String, Option<String>> = BTreeMap::new();
+        for tx in history.iter().take(cursor) {
+            for c in &tx.changes {
+                expected.insert(c.rel.clone(), c.after.clone());
+            }
+        }
+        for tx in history.iter().skip(cursor) {
+            for c in &tx.changes {
+                expected.entry(c.rel.clone()).or_insert_with(|| c.before.clone());
+            }
+        }
+        for (rel, want) in &expected {
+            if disk(rel) != *want {
+                self.clear_journal();
+                return;
+            }
+        }
+        self.history = history;
+        self.cursor = cursor;
+        self.compact_journal();
+    }
+
+    fn clear_journal(&mut self) {
+        self.history.clear();
+        self.cursor = 0;
+        if let Some(j) = &self.journal {
+            let _ = std::fs::write(j, "");
+        }
+    }
+
+    /// Rewrite the journal as the adopted history — bounds its size to
+    /// HISTORY_DEPTH transactions across restarts.
+    fn compact_journal(&self) {
+        let Some(journal) = &self.journal else { return };
+        let mut out = String::new();
+        for tx in &self.history {
+            if let Ok(line) = serde_json::to_string(&JournalEvent::Tx { tx: tx.clone() }) {
+                out.push_str(&line);
+                out.push('\n');
+            }
+        }
+        if self.cursor < self.history.len() {
+            if let Ok(line) = serde_json::to_string(&JournalEvent::Cursor { value: self.cursor }) {
+                out.push_str(&line);
+                out.push('\n');
+            }
+        }
+        let _ = std::fs::write(journal, out);
+    }
+}
+
+/// Journal line format (JSONL). `Intent`/`Commit` bracket every write batch
+/// (write-ahead); `Tx` records an already-on-disk observation (external edits,
+/// compacted history); `Cursor` encodes undo depth in a compacted journal.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "event", rename_all = "kebab-case")]
+enum JournalEvent {
+    Tx { tx: Transaction },
+    Intent { tx: Transaction },
+    IntentUndo,
+    IntentRedo,
+    Commit,
+    Cursor { value: usize },
+}
+
+/// History push with the same truncate/cap semantics as the live engine.
+fn push_replayed(history: &mut Vec<Transaction>, cursor: &mut usize, tx: Transaction) {
+    history.truncate(*cursor);
+    history.push(tx);
+    if history.len() > HISTORY_DEPTH {
+        let drop = history.len() - HISTORY_DEPTH;
+        history.drain(..drop);
+    }
+    *cursor = history.len();
 }
 
 fn op_label(op: &Operation) -> String {
@@ -749,8 +1050,8 @@ fn op_label(op: &Operation) -> String {
 
 /// Crash-recovery journal location: per-workspace file under the OS temp dir,
 /// keyed by a stable hash of the root path (spec: "journaled to the workspace
-/// cache dir"). Recovery tooling arrives with Phase 5 polish.
-fn journal_path(root: &Path) -> Option<PathBuf> {
+/// cache dir"). Public so tests (and support tooling) can find it.
+pub fn journal_path(root: &Path) -> Option<PathBuf> {
     let mut hash: u64 = 0xcbf29ce484222325;
     for b in root.to_string_lossy().as_bytes() {
         hash ^= *b as u64;

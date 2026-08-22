@@ -29,10 +29,10 @@ Per workspace, the engine holds:
 While any model file is STALE: the canvas renders the last valid model with a
 stale indicator; **canvas editing is disabled** (editing a picture of a file
 that no longer parses would fork truth); the YAML panel and external editors
-remain live. Views files being stale should disable only pinning, not
-semantics — **v1 simplification**: the engine blocks all operations on any
-staleness; the pin-only carve-out is a named Phase 5 refinement
-(docs/roadmap.md).
+remain live. Staleness is **granular** (Phase 5): a stale *views* file
+disables only pinning into that view — model semantics keep flowing, the
+view's last-known pins are retained so the canvas holds steady, and every
+other operation (including pinning other views) stays live.
 
 ## Inbound: text → model
 
@@ -83,9 +83,15 @@ One workspace-level history of file transactions, shared by all surfaces. Undo
 restores the prior file content of the last transaction regardless of which
 surface produced it. External edits enter history as transactions too, so
 undo-past-an-external-edit is well-defined (it reverts the file, with a
-distinct "external change" label in the history UI). Depth: 200 transactions;
-history is in-memory per session, with the log journaled to the workspace
-cache dir for crash recovery.
+distinct "external change" label in the history UI). Depth: 200 transactions.
+
+History is journaled per workspace (JSONL under the OS cache dir) and
+**replayed on open** (Phase 5): undo/redo depth survives restarts and crashes.
+Every write batch is bracketed write-ahead (`intent` … `commit`); recovery
+rolls a torn trailing transaction forward when disk sits part-way through its
+writes. If the files changed while the app was closed, the journal is
+discarded whole — files are the truth and recovery never guesses. The journal
+is compacted to the adopted history on every open, bounding its size.
 
 ## The IPC surface (Tauri commands)
 

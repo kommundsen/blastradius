@@ -37,7 +37,8 @@ function mockSync(cmd, args) {
   const snap = state.snapshot;
   const clone = () => JSON.parse(JSON.stringify(state.snapshot));
   if (cmd === 'sync_status') {
-    return { stale: [], canUndo: mockState.undo.length > 0, canRedo: mockState.redo.length > 0,
+    return { stale: [], staleModel: [], staleViewIds: [],
+      canUndo: mockState.undo.length > 0, canRedo: mockState.redo.length > 0,
       undoLabel: mockState.undo.at(-1)?.label ?? null, redoLabel: mockState.redo.at(-1)?.label ?? null,
       files: ['model/context.yaml', 'model/blastradius.yaml', 'views/containers.yaml'] };
   }
@@ -204,9 +205,19 @@ async function refreshSync() {
 /** Editing is allowed when we are on the live working tree with no staleness
  * and no merge conflict (ADR-0008 + spec/git-and-diff.md). */
 function canEdit() {
+  // Granular staleness (Phase 5): only *model* staleness freezes editing; a
+  // stale views file merely disables pinning into that view.
+  const staleModel = state.sync?.staleModel ?? state.sync?.stale;
   return !state.travel
     && !state.conflicts
-    && (state.sync ? state.sync.stale.length === 0 : false);
+    && (staleModel ? staleModel.length === 0 : false);
+}
+
+/** Pinning is per-view: disabled while the current view's file is stale. */
+function canPin() {
+  if (!canEdit()) return false;
+  const viewDef = findViewDef(effectiveSnapshot(), state.level, state.scope);
+  return !viewDef || !(state.sync?.staleViewIds ?? []).includes(viewDef.id);
 }
 
 function renderEditChrome() {
@@ -218,10 +229,14 @@ function renderEditChrome() {
   els.addBtn.hidden = !canEdit();
   document.getElementById('app').classList.toggle('can-edit', canEdit());
   document.querySelector('.stale-banner')?.remove();
-  if (s?.stale?.length) {
+  const staleModel = s?.staleModel ?? s?.stale ?? [];
+  const staleViews = (s?.stale ?? []).filter((f) => !staleModel.includes(f));
+  if (staleModel.length || staleViews.length) {
     const b = document.createElement('div');
     b.className = 'stale-banner';
-    b.innerHTML = `<span>⚠ ${esc(s.stale.join(', '))} does not parse — canvas is read-only until fixed</span>`;
+    b.innerHTML = staleModel.length
+      ? `<span>⚠ ${esc(staleModel.join(', '))} does not parse — canvas is read-only until fixed</span>`
+      : `<span>⚠ ${esc(staleViews.join(', '))} does not parse — pinning is disabled for that view</span>`;
     els.canvas.appendChild(b);
   }
 }
@@ -967,7 +982,7 @@ function toast(message) {
 
 // --- drag to pin -------------------------------------------------------------
 function beginNodeDrag(ev, node, div) {
-  if (!canEdit() || ev.button !== 0) return;
+  if (!canPin() || ev.button !== 0) return;
   const start = { x: ev.clientX, y: ev.clientY };
   const orig = { x: node.x, y: node.y };
   let moved = false;

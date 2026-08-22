@@ -15,3 +15,6 @@ serde_json = "1"
 # Read-only repository access (ADR-0007). vendored-libgit2 so a clean machine
 # builds without system libgit2; no openssl needed for local-only operations.
 git2 = { version = "0.20", default-features = false, features = ["vendored-libgit2"] }
+
+[dev-dependencies]
+serde_json = "1"
