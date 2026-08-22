@@ -144,9 +144,11 @@ All from the repo root in PowerShell.
     - *Pricing*: Free, pick markets.
     - *Properties*: category **Developer tools**.
     - *Age ratings*: IARC questionnaire (all "no" → E for Everyone).
-    - *Privacy*: the app collects and transmits nothing — declare no. Full
-      trust apps still sometimes get asked for a policy URL in review; if
-      so, add a one-page privacy note to the docs site and link it.
+    - *Privacy*: the app collects and transmits nothing — declare no.
+      [docs/privacy.md](../privacy.md) (published on the docs site as
+      `privacy.html`) is the policy URL if Partner Center or review asks
+      for one — Full trust apps sometimes get asked even with a "no
+      collection" declaration.
     - *Store listing*: description, at least one screenshot (1366×768+;
       the canvas over the dogfood model is the obvious shot).
 15. **Submit.** Certification typically clears in 24–72 h; full-trust
