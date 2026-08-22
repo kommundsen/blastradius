@@ -1205,8 +1205,8 @@ async function finishConnect(toId) {
   cancelConnect();
   openDialog({
     title: 'New relation',
-    body: `<div class="dlg-field"><label>Label</label><input class="input" id="dlg-label" placeholder="calls"></div>
-      <div class="dlg-field"><label>Protocol (optional)</label><input class="input" id="dlg-proto" placeholder="HTTPS"></div>
+    body: `<div class="dlg-field"><label for="dlg-label">Label</label><input class="input" id="dlg-label" placeholder="calls"></div>
+      <div class="dlg-field"><label for="dlg-proto">Protocol (optional)</label><input class="input" id="dlg-proto" placeholder="HTTPS"></div>
       <p class="text-muted" style="font-size:var(--text-xs)">${esc(from)} → ${esc(toId)}</p>`,
     confirm: 'Create',
     onConfirm: async () => {
@@ -1264,9 +1264,9 @@ function openCreateDialog() {
   const kindOptions = kinds.map((k) => `<option value="${k}">${k}</option>`).join('');
   openDialog({
     title: 'New element',
-    body: `<div class="dlg-field"><label>Kind</label><select class="input" id="dlg-kind">${kindOptions}</select></div>
-      <div class="dlg-field"><label>Name</label><input class="input" id="dlg-name" placeholder="Payment Service"></div>
-      <div class="dlg-field"><label>Id — immutable once created (ADR-0003)</label>
+    body: `<div class="dlg-field"><label for="dlg-kind">Kind</label><select class="input" id="dlg-kind">${kindOptions}</select></div>
+      <div class="dlg-field"><label for="dlg-name">Name</label><input class="input" id="dlg-name" placeholder="Payment Service"></div>
+      <div class="dlg-field"><label for="dlg-id">Id — immutable once created (ADR-0003)</label>
         <input class="input" id="dlg-id" style="font-family:var(--font-mono)">
         <span class="dlg-id-preview" id="dlg-id-full"></span></div>`,
     confirm: 'Create',
@@ -1343,6 +1343,10 @@ async function renderSource() {
     tabSize: 2,
     screenReaderLabel: 'YAML source editor',
   });
+  // a scrollable region must be keyboard-reachable (axe: WCAG 2.1.1); a
+  // focused scroller pans with the arrow keys natively
+  srcCm.getScrollerElement().setAttribute('tabindex', '0');
+  srcCm.getScrollerElement().setAttribute('aria-label', 'Scroll the source file');
   const load = async () => {
     let text = '';
     try {
@@ -1412,9 +1416,9 @@ function renderRelationSide() {
     <span class="insp-title">${esc(shortName(r.from))} → ${esc(shortName(r.to))}</span>
     <span style="font-family:var(--font-mono);font-size:var(--text-2xs)" class="text-muted">${esc(r.from)} → ${esc(r.to)}</span>
     <div class="insp-section">Label</div>
-    <input class="input" id="rel-label" value="${esc(r.label ?? '')}" ${editable ? '' : 'disabled'}>
+    <input class="input" id="rel-label" aria-label="Relation label" value="${esc(r.label ?? '')}" ${editable ? '' : 'disabled'}>
     <div class="insp-section">Protocol</div>
-    <input class="input" id="rel-proto" value="${esc(relProtocol(r) ?? '')}" ${editable ? '' : 'disabled'}>
+    <input class="input" id="rel-proto" aria-label="Relation protocol" value="${esc(relProtocol(r) ?? '')}" ${editable ? '' : 'disabled'}>
     ${editable ? '<div class="insp-section"></div><button class="btn btn-danger" id="rel-delete">Delete relation</button>' : ''}
   </div>`;
   if (!editable) return;
