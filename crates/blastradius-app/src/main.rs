@@ -8,12 +8,16 @@ use blastradius_core::git::GitContext;
 use blastradius_core::sync::{Operation, SyncEngine};
 use notify::Watcher;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager, State};
 
 struct AppState {
     root: Mutex<Option<PathBuf>>,
     engine: Mutex<Option<SyncEngine>>,
+    /// Bumped on every workspace switch; a watcher thread exits when the
+    /// generation it was born with is no longer current.
+    watch_gen: Arc<AtomicUsize>,
 }
 
 fn root_of(state: &State<AppState>) -> Result<PathBuf, String> {
@@ -113,6 +117,79 @@ fn buffer_update(state: State<AppState>, rel: String, text: String) -> Result<bo
 #[tauri::command]
 fn workspace_root(state: State<AppState>) -> Option<String> {
     state.root.lock().unwrap().as_ref().map(|p| p.display().to_string())
+}
+
+// ---- onboarding (Phase 5): switch workspaces at runtime ---------------------
+
+/// Point the app at a workspace folder: drop the old engine, retire the old
+/// watcher, start a fresh one. The frontend reloads everything afterwards.
+fn open_root(app: &tauri::AppHandle, state: &State<AppState>, root: PathBuf) -> Result<String, String> {
+    let root = root.canonicalize().unwrap_or(root);
+    if !root.join("workspace.yaml").is_file() {
+        return Err(format!(
+            "{}: not a Blastradius workspace (no workspace.yaml) — use \"New workspace\" to scaffold one",
+            root.display()
+        ));
+    }
+    *state.engine.lock().unwrap() = None;
+    *state.root.lock().unwrap() = Some(root.clone());
+    let gen = state.watch_gen.fetch_add(1, Ordering::SeqCst) + 1;
+    spawn_watcher(app.clone(), root.clone(), state.watch_gen.clone(), gen);
+    Ok(root.display().to_string())
+}
+
+#[tauri::command]
+fn workspace_open(app: tauri::AppHandle, state: State<AppState>, path: String) -> Result<String, String> {
+    open_root(&app, &state, PathBuf::from(path))
+}
+
+/// Native folder picker. Async so the modal dialog never blocks the IPC
+/// thread; rfd handles per-platform quirks (COM on Windows, GTK on Linux).
+#[tauri::command(async)]
+fn pick_folder() -> Option<String> {
+    rfd::FileDialog::new().pick_folder().map(|p| p.display().to_string())
+}
+
+/// Scaffold `blastradius init` into a folder and open it. Never overwrites;
+/// a folder that already is a workspace is simply opened.
+#[tauri::command]
+fn workspace_init(app: tauri::AppHandle, state: State<AppState>, path: String) -> Result<String, String> {
+    let root = PathBuf::from(&path);
+    let root = root.canonicalize().unwrap_or(root);
+    if !root.join("workspace.yaml").is_file() {
+        let name = root
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "My System".to_string());
+        for (rel, text) in blastradius_core::scaffold::starter_workspace(&name) {
+            let target = root.join(&rel);
+            if target.exists() {
+                return Err(format!("{rel}: exists — refusing to overwrite"));
+            }
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            std::fs::write(&target, text).map_err(|e| e.to_string())?;
+        }
+    }
+    open_root(&app, &state, root)
+}
+
+/// A throwaway sample workspace under the OS temp dir — the "try it before
+/// pointing it at your repo" path. Fully editable; recreated when absent.
+#[tauri::command]
+fn workspace_demo(app: tauri::AppHandle, state: State<AppState>) -> Result<String, String> {
+    let dir = std::env::temp_dir().join("blastradius-demo");
+    if !dir.join("workspace.yaml").is_file() {
+        for (rel, text) in blastradius_core::scaffold::starter_workspace("Acme Payments") {
+            let target = dir.join(&rel);
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            std::fs::write(&target, text).map_err(|e| e.to_string())?;
+        }
+    }
+    open_root(&app, &state, dir)
 }
 
 #[tauri::command]
@@ -283,7 +360,11 @@ fn main() {
     let root = startup_root();
 
     tauri::Builder::default()
-        .manage(AppState { root: Mutex::new(root.clone()), engine: Mutex::new(None) })
+        .manage(AppState {
+            root: Mutex::new(root.clone()),
+            engine: Mutex::new(None),
+            watch_gen: Arc::new(AtomicUsize::new(0)),
+        })
         .invoke_handler(tauri::generate_handler![
             workspace_snapshot,
             workspace_root,
@@ -300,11 +381,17 @@ fn main() {
             git_conflicts,
             open_in_editor,
             export_html,
-            save_export
+            save_export,
+            workspace_open,
+            workspace_init,
+            workspace_demo,
+            pick_folder
         ])
         .setup(move |app| {
             if let Some(root) = root {
-                spawn_watcher(app.handle().clone(), root);
+                let state: State<AppState> = app.state();
+                let watch_gen = state.watch_gen.clone();
+                spawn_watcher(app.handle().clone(), root, watch_gen, 0);
             }
             Ok(())
         })
@@ -314,7 +401,7 @@ fn main() {
 
 /// Debounced watcher. The engine's external_scan compares disk to its cache —
 /// our own writes match and produce no event (the echo-loop killer, now real).
-fn spawn_watcher(app: tauri::AppHandle, root: PathBuf) {
+fn spawn_watcher(app: tauri::AppHandle, root: PathBuf, watch_gen: Arc<AtomicUsize>, my_gen: usize) {
     std::thread::spawn(move || {
         let (tx, rx) = std::sync::mpsc::channel::<()>();
         let mut watcher = match notify::recommended_watcher(move |res| {
@@ -340,8 +427,23 @@ fn spawn_watcher(app: tauri::AppHandle, root: PathBuf) {
             let _ = watcher.watch(&git_dir.join("HEAD"), notify::RecursiveMode::NonRecursive);
             let _ = watcher.watch(&git_dir.join("index"), notify::RecursiveMode::NonRecursive);
         }
-        while rx.recv().is_ok() {
+        loop {
+            match rx.recv_timeout(std::time::Duration::from_millis(500)) {
+                Ok(()) => {}
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    // idle poll: only here to notice workspace switches
+                    if watch_gen.load(Ordering::SeqCst) != my_gen {
+                        return;
+                    }
+                    continue;
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
+            }
             while rx.recv_timeout(std::time::Duration::from_millis(150)).is_ok() {}
+            // a retired watcher (workspace switched away) must not touch state
+            if watch_gen.load(Ordering::SeqCst) != my_gen {
+                return;
+            }
             // Ask the engine whether anything really changed; git metadata
             // (HEAD/index) always refreshes the chrome.
             let changed = {

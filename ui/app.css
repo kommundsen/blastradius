@@ -139,3 +139,20 @@ select.input { appearance: auto; }
   font-size: var(--text-lg); text-transform: uppercase; width: 100%; }
 .insp-rel.is-selected { background: var(--color-accent-100); }
 .insp-rel .btn { margin-left: var(--space-2); }
+
+/* ---- onboarding (phase 5) ------------------------------------------------ */
+.welcome {
+  position: absolute; inset: 0; z-index: var(--z-raised, 10);
+  display: grid; place-content: center;
+  background: var(--canvas-bg, var(--color-bg));
+}
+.welcome-card { max-width: 26rem; text-align: center; }
+.welcome-kicker {
+  font-size: var(--text-2xs); letter-spacing: 0.2em;
+  color: var(--color-accent); font-weight: 600;
+}
+.welcome-actions {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  margin-block: var(--space-4);
+}
+.welcome-foot { font-size: var(--text-xs); }

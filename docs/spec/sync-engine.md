@@ -101,9 +101,11 @@ availability, editable files) · `apply_operation(op)` · `undo_op` / `redo_op` 
 One event, `workspace-changed`, prompts the WebView to re-request everything;
 the originally sketched fine-grained events (`model_updated`, `file_stale`,
 `transaction_applied`) were not needed at this scale and are not planned unless
-profiling demands them. `workspace_open(path)` (switching workspaces at
-runtime — today the workspace is fixed at launch) lands with Phase 5
-onboarding.
+profiling demands them. Phase 5 onboarding added runtime workspace switching:
+`workspace_open(path)` (plus `workspace_init(path)` scaffolding into an empty
+folder, `workspace_demo()` for a throwaway sample, and `pick_folder()` for the
+native dialog). A switch retires the old watcher by generation counter and
+drops the engine; the frontend resets all state and reloads.
 
 This surface is also the future CLI/CI attachment point (ADR-0005): validate
 and export must be callable without a WebView.

@@ -12,6 +12,9 @@ const invoke = tauri?.core?.invoke
   ? (cmd, args) => tauri.core.invoke(cmd, args)
   : async (cmd, args) => {
       if (cmd === 'workspace_snapshot') {
+        if (location.search.includes('noworkspace') && !mockState.opened) {
+          throw new Error('no workspace open');
+        }
         const res = await fetch('mock/snapshot.json');
         return res.json();
       }
@@ -61,6 +64,13 @@ function mockSync(cmd, args) {
     return t.label;
   }
   if (cmd === 'open_in_editor') return null;
+  if (cmd === 'pick_folder') return '(mock)';
+  if (cmd === 'workspace_open' || cmd === 'workspace_init' || cmd === 'workspace_demo') {
+    // the mock has exactly one workspace: "opening" simply leaves the
+    // welcome screen and serves the committed snapshot
+    mockState.opened = true;
+    return '(mock)';
+  }
   if (cmd === 'export_html') return '(mock: export needs the real app)';
   if (cmd === 'save_export') {
     // in a plain browser, hand the file to the browser's own download path
@@ -175,9 +185,10 @@ async function reload() {
   try {
     state.snapshot = await invoke('workspace_snapshot');
   } catch (e) {
-    els.breadcrumb.textContent = 'No workspace — launch as: blastradius-app <workspace-dir>';
+    renderWelcome();
     return;
   }
+  document.querySelector('.welcome')?.remove();
   await refreshGit();
   // default scope: first system
   if (!state.scopeInit) {
@@ -478,6 +489,7 @@ function wireChrome() {
 
   // theme cycle: auto -> light -> dark
   let theme = 'auto';
+  document.getElementById('open-btn').addEventListener('click', () => openWorkspaceFlow('open'));
   els.themeBtn.addEventListener('click', () => {
     theme = theme === 'auto' ? 'light' : theme === 'light' ? 'dark' : 'auto';
     if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
@@ -521,6 +533,79 @@ function wireChrome() {
   window.addEventListener('pointerup', () => { drag = null; els.camera.classList.remove('no-anim'); });
 
   window.addEventListener('resize', () => state.layout && applyCamera());
+  window.addEventListener('keydown', (ev) => {
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'o') {
+      ev.preventDefault();
+      openWorkspaceFlow('open');
+    }
+  });
+}
+
+// ---- onboarding (phase 5) ---------------------------------------------------
+
+/** First-run screen: no workspace is open. Also the landing state after the
+ * startup folder failed to resolve. */
+function renderWelcome() {
+  state.snapshot = null;
+  els.nodes.textContent = '';
+  els.edges.textContent = '';
+  els.tree.textContent = '';
+  els.breadcrumb.textContent = 'Blastradius';
+  document.querySelector('.welcome')?.remove();
+  const w = document.createElement('div');
+  w.className = 'welcome';
+  w.innerHTML = `<div class="dialog blueprint welcome-card">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <span class="welcome-kicker">BLASTRADIUS</span>
+    <span class="dialog-title">Model your architecture</span>
+    <p class="text-muted">Interactive C4 models as plain YAML in your repo —
+      local-first, versioned by git, diffable in PRs.</p>
+    <div class="welcome-actions">
+      <button class="btn btn-primary" id="welcome-open">Open a workspace folder…</button>
+      <button class="btn btn-secondary" id="welcome-new">New workspace in a folder…</button>
+      <button class="btn btn-ghost" id="welcome-demo">Try a demo workspace</button>
+    </div>
+    <p class="text-muted welcome-foot">A workspace is any folder with a
+      <span style="font-family:var(--font-mono)">workspace.yaml</span> —
+      <span style="font-family:var(--font-mono)">blastradius init</span> scaffolds one from the CLI.</p>
+  </div>`;
+  els.canvas.appendChild(w);
+  document.getElementById('welcome-open').addEventListener('click', () => openWorkspaceFlow('open'));
+  document.getElementById('welcome-new').addEventListener('click', () => openWorkspaceFlow('new'));
+  document.getElementById('welcome-demo').addEventListener('click', async () => {
+    try {
+      await invoke('workspace_demo');
+      await switchedWorkspace();
+    } catch (e) {
+      toast(String(e));
+    }
+  });
+}
+
+/** Pick a folder, then open it ('open') or scaffold into it ('new'). */
+async function openWorkspaceFlow(mode) {
+  try {
+    const path = await invoke('pick_folder');
+    if (!path) return; // dialog cancelled
+    await invoke(mode === 'new' ? 'workspace_init' : 'workspace_open', { path });
+    await switchedWorkspace();
+  } catch (e) {
+    toast(String(e));
+  }
+}
+
+/** Full state reset — a different workspace means a different everything. */
+async function switchedWorkspace() {
+  Object.assign(state, {
+    snapshot: null, level: 'L1', scope: null, selected: null,
+    zoom: 1, pan: { x: 0, y: 0 }, layout: null, doc: null,
+    git: null, conflicts: null, diff: null, diffOn: false, diffBase: null,
+    showLayoutDiff: false, history: null, travel: null,
+    sync: null, srcFile: null, connectFrom: null, selectedRel: null,
+    scopeInit: false,
+  });
+  document.querySelector('.welcome')?.remove();
+  await reload();
 }
 
 function renderBreadcrumb() {
