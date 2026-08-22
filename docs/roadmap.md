@@ -125,6 +125,21 @@ diff rendering in CI, L4 source-derived elements, deployment views, headless
 SVG/PNG export via a node script over ui/js/layout.js (spec/export.md v1
 boundary).
 
+**Layout polish** (diagnosed 2026-08-22, measured in scratch experiment):
+auto-only views are near-optimal already — ELK layered produces 2 crossings
+total across the three dogfood views, 0 once
+`crossingMinimization.forceNodeModelOrder` is relaxed (trade-off: layouts
+shift more under model edits; determinism unaffected — the seed is fixed
+either way). The visible mess is elsewhere: (1) **edge labels collide** —
+midpoint placement with no collision avoidance stacks labels into run-on
+text where edges converge (L1) and clips them under nodes (L2); (2) **edges
+touching pinned nodes bypass ELK** — drawn as straight center-to-center
+lines that ignore obstacles, so they pass beneath nodes and bunch labels.
+Fix order: label de-collision (stagger along the clear segment of the path),
+relax model-order forcing, then optionally a two-pass interactive ELK run so
+pinned-adjacent edges get real routing. Obstacle-avoiding routing for pin
+edges is v2.
+
 **MCP server** — raised as a candidate 2026-08-22 and **shipped the same
 day** (ADR-0012, spec/mcp-server.md): `blastradius mcp` serves ten tools
 over stdio; reads are task-shaped (blast_radius, element, model_diff, doc),
