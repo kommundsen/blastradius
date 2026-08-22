@@ -271,8 +271,8 @@ async function refreshGit() {
 async function renderCanvas({ animate = true } = {}) {
   els.edgeLayer.style.pointerEvents = 'none';
   const snap = effectiveSnapshot();
-  const view = computeView(snap, state.level, state.scope);
   const viewDef = findViewDef(snap, state.level, state.scope);
+  const view = computeView(snap, state.level, state.scope, viewDef?.include_context ?? true);
   const layout = await layoutView(elk, view, resolvePins(viewDef, view));
   state.layout = layout;
 

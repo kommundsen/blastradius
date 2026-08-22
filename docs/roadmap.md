@@ -146,6 +146,18 @@ would land a node against a neighbour nudges to the nearest clear grid cell
 respaced for label room. Still open for later: two-pass interactive ELK so
 pinned-adjacent edges get real routing; obstacle-avoiding routing is v2.
 
+Follow-up (same day, "islands" report): scoped views now join outside
+elements only when a relation touches the scope's strict *interior* — a
+relation to the bare scope element has no visible node to attach to, so it
+no longer pulls disconnected nodes in (this hides context-level actors like
+the reviewer from L2, correctly: their relation is to the system as a
+whole). `include-context:` turned out to be parsed but never honored by the
+renderer — now implemented. Model gaps found by the island audit and fixed
+via MCP: cli → importer/git-service, ipc-bridge → git-service, and the App
+Shell gained its L3 (Window & Lifecycle, IPC Bridge, File Watcher — the
+watcher was mis-modelled under Core; it lives in the app crate). An
+every-view connected-components audit now reports 1 component per view.
+
 **MCP server** — raised as a candidate 2026-08-22 and **shipped the same
 day** (ADR-0012, spec/mcp-server.md): `blastradius mcp` serves ten tools
 over stdio; reads are task-shaped (blast_radius, element, model_diff, doc),

@@ -8,6 +8,18 @@ containers:
     name: App Shell
     tech: Tauri 2
     description: Window, menus, packaging, updates; hosts the WebView and the Core; owns the IPC boundary (ADR-0005).
+    components:
+      window:
+        description: "Native window, welcome screen, File-Open dialog, workspace switching (watcher retired by generation)."
+        name: "Window & Lifecycle"
+      ipc-bridge:
+        description: "The 14 command handlers bridging WebView invoke/events to the core library (ADR-0005: WebView renders, Rust owns truth)."
+        tech: Tauri 2
+        name: IPC Bridge
+      watcher:
+        description: External-edit detection (workspace files + git metadata); feeds the sync engine single inbound path; echo suppression by content hash. Lives in the app crate — was mis-modelled under Core until 2026-08-22.
+        tech: notify
+        name: File Watcher
 
   ui:
     name: Canvas UI
@@ -56,10 +68,6 @@ containers:
         name: Git Service
         tech: git2 / libgit2
         description: Read-only repository access — status, revision materialisation for diff, conflict stages, history (ADR-0007).
-      watcher:
-        name: File Watcher
-        tech: notify
-        description: External-edit detection; feeds the sync engine's single inbound path; echo suppression by content hash.
       exporter:
         name: Exporter
         description: Self-contained HTML snapshot, SVG/PNG assembly; headless-capable for CI (ADR-0009).
@@ -97,9 +105,6 @@ relations:
   - from: core.model-service
     to: core.sync-engine
     label: parse results
-  - from: core.watcher
-    to: core.sync-engine
-    label: external change events
   - from: core.sync-engine
     to: git-repo
     label: reads & writes workspace files
@@ -118,12 +123,31 @@ relations:
   - from: cli.mcp-server
     to: core.sync-engine
     label: applies operations through
-  - from: shell
-    to: ui
-    label: "hosts the WebView, brokers IPC"
   - from: cli
     to: core.exporter
     label: export command
   - from: core.exporter
     to: core.model-service
     label: sealed snapshot of the model
+  - from: cli
+    to: core.importer
+    label: import command
+  - from: shell.watcher
+    to: core.sync-engine
+    label: external change events
+  - from: ui.canvas
+    to: shell.ipc-bridge
+    label: invoke commands
+    protocol: Tauri IPC
+  - from: shell.ipc-bridge
+    to: core.model-service
+    label: "snapshots, operations, git queries"
+  - from: shell.window
+    to: ui
+    label: hosts the WebView
+  - from: cli
+    to: core.git-service
+    label: gitdiff command
+  - from: shell.ipc-bridge
+    to: core.git-service
+    label: "status, history, time-travel"

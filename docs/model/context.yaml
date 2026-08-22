@@ -26,5 +26,5 @@ relations:
     label: "queries & edits the model via"
     protocol: MCP/stdio
   - from: architect
-    to: blastradius.shell
+    to: blastradius.shell.window
     label: "launches, opens workspaces"

@@ -122,6 +122,9 @@ layout:                     # pinned positions — grid units (26px cells @ 1×)
   ui: [4, 2]
   core: [10, 4]
 include-context: true       # show people/externals related to scope (default true)
+                            # (honored by the renderer since 2026-08-22 — it was
+                            # parsed-but-ignored before; core-components.yaml
+                            # exercises the false path)
 ```
 
 - Elements absent from `layout:` are auto-placed (ADR-0006). Pinning is the

@@ -28,7 +28,7 @@ export function byId(snapshot) {
  * container id). Relations are lifted to the deepest visible ancestor of each
  * endpoint and deduplicated; self-loops after lifting are dropped.
  */
-export function computeView(snapshot, level, scope) {
+export function computeView(snapshot, level, scope, includeContext = true) {
   const els = byId(snapshot);
   const visible = new Map(); // id -> element
 
@@ -46,12 +46,13 @@ export function computeView(snapshot, level, scope) {
         visible.set(el.id, el);
       }
     }
-    // Context and sibling elements join only if a relation touches the scope's
-    // interior (include-context handling happens in the caller via views).
+    // Context and sibling elements join only when a relation touches the
+    // scope's strict *interior* — a relation to the bare scope element has no
+    // visible node to attach its edge to, so it must not pull anyone in
+    // (that was the "island" bug: joined node, droppable edge).
     for (const r of snapshot.relations) {
       for (const [a, b] of [[r.from, r.to], [r.to, r.from]]) {
-        const inScope = a === scope || a.startsWith(scope + '.');
-        if (!inScope) continue;
+        if (!a.startsWith(scope + '.')) continue;
         const outside = b === scope || b.startsWith(scope + '.') ? null : b;
         if (!outside) continue;
         // Lift the outside endpoint to its most meaningful visible level:
@@ -62,7 +63,7 @@ export function computeView(snapshot, level, scope) {
             ? liftTo(outside, scopeDepth)
             : rootOf(outside);
         const el = els.get(lifted);
-        if (el) visible.set(el.id, el);
+        if (el && (includeContext || !isContext(el))) visible.set(el.id, el);
       }
     }
   }
