@@ -81,7 +81,7 @@ jobs:
           path: site
 
   deploy-site:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/master'
     needs: site
     permissions:
       pages: write
