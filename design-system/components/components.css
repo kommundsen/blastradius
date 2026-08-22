@@ -180,7 +180,7 @@ textarea.input { min-height: 90px; resize: vertical; }
   container-type: inline-size; container-name: app; }
 
 /* Panels size themselves between their min and max; --panel-*-w is runtime state. */
-.panel { display: flex; flex-direction: column; min-height: 0; min-width: 0; flex: none; }
+.panel { display: flex; flex-direction: column; min-height: 0; min-width: 0; flex: none; position: relative; }
 .panel-nav  { width: clamp(var(--panel-nav-min), var(--panel-nav-w), var(--panel-nav-max));
   border-right: 1px solid var(--color-divider); }
 .panel-side { width: clamp(var(--panel-side-min), var(--panel-side-w), var(--panel-side-max));

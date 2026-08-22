@@ -5,7 +5,7 @@ name: Containers
 scope: blastradius
 level: L2
 layout:
-  shell: [8, 1]
+  shell: [9, 0]
   ui: [4, 5]
   core: [12, 5]
   reviewer: [21, 12]

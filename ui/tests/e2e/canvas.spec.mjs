@@ -105,3 +105,44 @@ test('dive choreography: identical destination under reduced motion (phase 5)', 
   const opacity = await page.locator('#camera').evaluate((el) => getComputedStyle(el).opacity);
   expect(opacity).toBe('1');
 });
+
+test('mouse wheel zooms the canvas about the cursor', async ({ page }) => {
+  await page.goto('/index.html?nogit');
+  await expect(page.locator('#nodes .node').first()).toBeVisible();
+  const before = await page.locator('#zoom-reset').textContent();
+  const box = await page.locator('#canvas').boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, -400); // wheel up = zoom in
+  const zoomedIn = await page.locator('#zoom-reset').textContent();
+  expect(parseInt(zoomedIn)).toBeGreaterThan(parseInt(before));
+  await page.mouse.wheel(0, 800); // and back out further
+  const zoomedOut = await page.locator('#zoom-reset').textContent();
+  expect(parseInt(zoomedOut)).toBeLessThan(parseInt(zoomedIn));
+});
+
+test('side panels resize by dragging their grips, and persist', async ({ page }) => {
+  await page.goto('/index.html?nogit');
+  await expect(page.locator('#nodes .node').first()).toBeVisible();
+  const nav = page.locator('.panel-nav');
+  const w0 = (await nav.boundingBox()).width;
+  const grip = await page.locator('#nav-grip').boundingBox();
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2 + 80, grip.y + 200);
+  await page.mouse.up();
+  const w1 = (await nav.boundingBox()).width;
+  expect(w1).toBeGreaterThan(w0 + 40);
+  // clamped at the design-system maximum
+  expect(w1).toBeLessThanOrEqual(320);
+  // persisted across reloads
+  await page.reload();
+  await expect(page.locator('#nodes .node').first()).toBeVisible();
+  expect((await nav.boundingBox()).width).toBeCloseTo(w1, 0);
+  // keyboard resize on the inspector grip
+  const side = page.locator('.panel-side');
+  const s0 = (await side.boundingBox()).width;
+  await page.locator('#side-grip').focus();
+  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('ArrowLeft');
+  expect((await side.boundingBox()).width).toBeCloseTo(s0 + 32, 0);
+});

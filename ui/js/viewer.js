@@ -102,6 +102,27 @@
     syncSeg();
   }
 
+  $('canvas').addEventListener('wheel', (ev) => {
+    if (!state.layout) return;
+    ev.preventDefault();
+    const c = $('canvas').getBoundingClientRect();
+    const p = { x: ev.clientX - c.left, y: ev.clientY - c.top };
+    const l = state.layout;
+    const fit = Math.min(1, (c.width - 40) / l.width, (c.height - 40) / l.height);
+    const s0 = fit * state.zoom;
+    const delta = ev.deltaMode === 1 ? ev.deltaY * 16 : ev.deltaY;
+    const zoom1 = Math.min(8, Math.max(0.2, state.zoom * Math.exp(-delta * 0.0015)));
+    const s1 = fit * zoom1;
+    if (s1 === s0) return;
+    const t0x = (c.width - l.width * s0) / 2 + state.pan.x;
+    const t0y = (c.height - l.height * s0) / 2 + state.pan.y;
+    state.zoom = zoom1;
+    state.pan.x = p.x - ((p.x - t0x) / s0) * s1 - (c.width - l.width * s1) / 2;
+    state.pan.y = p.y - ((p.y - t0y) / s0) * s1 - (c.height - l.height * s1) / 2;
+    $('camera').classList.add('no-anim');
+    applyCamera();
+  }, { passive: false });
+
   function applyCamera() {
     const c = $('canvas').getBoundingClientRect();
     const l = state.layout;

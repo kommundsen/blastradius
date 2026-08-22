@@ -172,6 +172,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   listen('workspace-changed', () => reload());
   wireChrome();
   wireEditing();
+  wireResizers();
 });
 
 async function reload() {
@@ -391,6 +392,25 @@ function childCount(el) {
   if (!kids) return null;
   const noun = el.kind === 'system' ? 'container' : 'component';
   return `${kids} ${noun}${kids > 1 ? 's' : ''}`;
+}
+
+/** Zoom about a point in canvas coordinates: the model position under the
+ * cursor stays put while the scale changes. */
+function zoomAt(p, factor) {
+  const l = state.layout;
+  const c = els.canvas.getBoundingClientRect();
+  const fit = Math.min(1, (c.width - 40) / l.width, (c.height - 40) / l.height);
+  const s0 = fit * state.zoom;
+  const zoom1 = Math.min(8, Math.max(0.2, state.zoom * factor));
+  const s1 = fit * zoom1;
+  if (s1 === s0) return;
+  const t0x = (c.width - l.width * s0) / 2 + state.pan.x;
+  const t0y = (c.height - l.height * s0) / 2 + state.pan.y;
+  state.zoom = zoom1;
+  state.pan.x = p.x - ((p.x - t0x) / s0) * s1 - (c.width - l.width * s1) / 2;
+  state.pan.y = p.y - ((p.y - t0y) / s0) * s1 - (c.height - l.height * s1) / 2;
+  els.camera.classList.add('no-anim'); // wheel must track 1:1, no glide
+  applyCamera();
 }
 
 function applyCamera() {
@@ -620,12 +640,66 @@ function wireChrome() {
   window.addEventListener('pointerup', () => { drag = null; els.camera.classList.remove('no-anim'); });
 
   window.addEventListener('resize', () => state.layout && applyCamera());
+  // wheel = zoom about the cursor (trackpad pinch arrives as ctrl+wheel)
+  els.canvas.addEventListener('wheel', (ev) => {
+    if (!state.layout) return;
+    ev.preventDefault();
+    const rect = els.canvas.getBoundingClientRect();
+    const delta = ev.deltaMode === 1 ? ev.deltaY * 16 : ev.deltaY;
+    zoomAt({ x: ev.clientX - rect.left, y: ev.clientY - rect.top }, Math.exp(-delta * 0.0015));
+  }, { passive: false });
   window.addEventListener('keydown', (ev) => {
     if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'o') {
       ev.preventDefault();
       openWorkspaceFlow('open');
     }
   });
+}
+
+// ---- panel resize (design-system contract: JS writes --panel-*-w) -----------
+
+function wireResizers() {
+  const setup = (gripId, cssVar, storageKey, bounds, growsRight) => {
+    const grip = $(gripId);
+    const panel = grip.parentElement;
+    const root = document.documentElement;
+    const apply = (w) => {
+      const clamped = Math.round(Math.min(bounds[1], Math.max(bounds[0], w)));
+      root.style.setProperty(cssVar, clamped + 'px');
+      grip.setAttribute('aria-valuenow', String(clamped));
+      localStorage.setItem(storageKey, String(clamped));
+      if (state.layout) applyCamera(); // the canvas just changed size
+    };
+    grip.setAttribute('aria-valuemin', String(bounds[0]));
+    grip.setAttribute('aria-valuemax', String(bounds[1]));
+    const saved = Number(localStorage.getItem(storageKey));
+    if (saved) apply(saved);
+    else grip.setAttribute('aria-valuenow', String(Math.round(panel.getBoundingClientRect().width)));
+    grip.addEventListener('pointerdown', (ev) => {
+      if (ev.button !== 0) return;
+      ev.preventDefault();
+      grip.setPointerCapture(ev.pointerId);
+      const startX = ev.clientX;
+      const startW = panel.getBoundingClientRect().width;
+      const onMove = (mv) =>
+        apply(startW + (growsRight ? mv.clientX - startX : startX - mv.clientX));
+      grip.addEventListener('pointermove', onMove);
+      grip.addEventListener(
+        'pointerup',
+        () => grip.removeEventListener('pointermove', onMove),
+        { once: true },
+      );
+    });
+    grip.addEventListener('keydown', (ev) => {
+      const dir = ev.key === 'ArrowLeft' ? -1 : ev.key === 'ArrowRight' ? 1 : 0;
+      if (!dir) return;
+      ev.preventDefault();
+      apply(panel.getBoundingClientRect().width + 16 * dir * (growsRight ? 1 : -1));
+    });
+  };
+  // bounds mirror the design-system clamp tokens (layout.css)
+  setup('nav-grip', '--panel-nav-w', 'br-nav-w', [168, 320], true);
+  setup('side-grip', '--panel-side-w', 'br-side-w', [260, 480], false);
 }
 
 // ---- onboarding (phase 5) ---------------------------------------------------
