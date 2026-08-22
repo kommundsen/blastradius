@@ -156,3 +156,25 @@ select.input { appearance: auto; }
   margin-block: var(--space-4);
 }
 .welcome-foot { font-size: var(--text-xs); }
+
+/* ---- source editor: CodeMirror themed with design tokens (phase 5) ------- */
+.src-editor { padding: 0; overflow: hidden; }
+.src-editor .CodeMirror {
+  height: 100%; font-family: var(--font-mono); font-size: var(--text-xs);
+  background: var(--color-surface); color: var(--color-text);
+}
+.src-editor .CodeMirror-gutters {
+  background: var(--color-surface); border-right: 1px solid var(--color-border);
+}
+.src-editor .CodeMirror-linenumber { color: var(--color-text-muted); }
+.src-editor .CodeMirror-cursor { border-left: 1px solid var(--color-text); }
+.src-editor .CodeMirror-selected { background: var(--color-accent-tint, rgba(127,127,127,.2)); }
+/* the vendored YAML mode emits: atom = keys, keyword = booleans,
+   meta = document markers, def = list dashes */
+.src-editor .cm-atom { color: var(--code-key); }
+.src-editor .cm-keyword, .src-editor .cm-number { color: var(--color-accent); }
+.src-editor .cm-meta, .src-editor .cm-def { color: var(--color-text-muted); }
+.src-editor .cm-comment { color: var(--color-text-muted); font-style: italic; }
+.src-editor .cm-string { color: var(--color-text); }
+.src-errline { box-shadow: inset 3px 0 0 var(--color-danger); background: var(--color-danger-tint); }
+.src-errline .CodeMirror-linenumber { color: var(--color-danger); font-weight: 600; }

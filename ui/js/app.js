@@ -1231,7 +1231,10 @@ function openDeleteDialog(id) {
 }
 
 // --- source panel ------------------------------------------------------------
+// CodeMirror (Phase 5, vendored v5): YAML highlighting and inline `.err`
+// underlines at the offending line, replacing the v1 plain textarea.
 let srcDebounce = null;
+let srcCm = null;
 async function renderSource() {
   els.sideTitle.textContent = '';
   els.sideBack.hidden = true;
@@ -1241,30 +1244,37 @@ async function renderSource() {
     .map((f) => `<option value="${esc(f)}"${f === state.srcFile ? ' selected' : ''}>${esc(f)}</option>`)
     .join('');
   els.sideBody.innerHTML = `<div class="src-wrap">
-    <select class="input src-file" id="src-file">${options}</select>
-    <textarea class="src-editor" id="src-editor" spellcheck="false"></textarea>
+    <select class="input src-file" id="src-file" aria-label="Workspace file">${options}</select>
+    <div class="src-editor" id="src-editor"></div>
     <div class="src-err" id="src-err" hidden></div>
   </div>`;
-  const editor = document.getElementById('src-editor');
   const fileSel = document.getElementById('src-file');
+  srcCm = CodeMirror(document.getElementById('src-editor'), {
+    mode: 'yaml',
+    lineNumbers: true,
+    indentUnit: 2,
+    tabSize: 2,
+    screenReaderLabel: 'YAML source editor',
+  });
   const load = async () => {
+    let text = '';
     try {
-      editor.value = await invoke('file_text', { rel: state.srcFile });
-    } catch (e) {
-      editor.value = '';
-    }
+      text = await invoke('file_text', { rel: state.srcFile });
+    } catch (e) { /* keep empty */ }
+    srcCm.setValue(text);
     updateSrcStatus();
   };
   fileSel.addEventListener('change', async () => {
     state.srcFile = fileSel.value;
     await load();
   });
-  editor.addEventListener('input', () => {
+  srcCm.on('change', (cm, change) => {
+    if (change.origin === 'setValue') return; // programmatic load, not an edit
     state.srcSuppress = true;
     clearTimeout(srcDebounce);
     srcDebounce = setTimeout(async () => {
       try {
-        const ok = await invoke('buffer_update', { rel: state.srcFile, text: editor.value });
+        const ok = await invoke('buffer_update', { rel: state.srcFile, text: srcCm.getValue() });
         state.srcSuppress = false;
         if (!tauri) return;
         await refreshSync();
@@ -1294,6 +1304,13 @@ function updateSrcStatus() {
       .filter((d) => d.severity === 'error' && d.file === state.srcFile);
     err.hidden = diags.length === 0;
     err.textContent = diags.map((d) => `${d.file}:${d.line} ${d.message}`).join('\n');
+    // inline underline at the offending line (spec/sync-engine.md)
+    if (srcCm) {
+      (srcCm._errLines ?? []).forEach((h) => srcCm.removeLineClass(h, 'wrap', 'src-errline'));
+      srcCm._errLines = diags
+        .filter((d) => d.line >= 1 && d.line <= srcCm.lineCount())
+        .map((d) => srcCm.addLineClass(d.line - 1, 'wrap', 'src-errline'));
+    }
   }
 }
 

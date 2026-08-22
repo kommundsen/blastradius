@@ -85,3 +85,11 @@ test('source panel opens with file list', async ({ page }) => {
   await expect(page.locator('#src-status')).toHaveText('synced');
   expect(page.errors).toEqual([]);
 });
+
+test('source editor is CodeMirror with YAML highlighting (phase 5)', async ({ page }) => {
+  await page.locator('#side-mode .seg-opt', { hasText: 'Source' }).click();
+  await expect(page.locator('#src-editor .CodeMirror')).toBeVisible();
+  // the mock file text begins with comments — the YAML mode must tag them
+  await expect(page.locator('#src-editor .cm-comment').first()).toBeVisible();
+  expect(page.errors).toEqual([]);
+});
