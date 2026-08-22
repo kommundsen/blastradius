@@ -29,6 +29,14 @@ the Store signs the package.
    These go verbatim into `Package.appxmanifest` below. A pack whose
    publisher differs from these values is rejected at upload.
 
+   These identity values are **public identifiers, committed to the repo
+   deliberately** (asked and settled 2026-08-22): they ship inside every
+   Store-signed MSIX and appear in listing metadata, and the Store only
+   accepts uploads for this identity from the enrolled Partner Center
+   account. The only true secrets in this pipeline are the Partner Center
+   API credentials for the future CI submission (GitHub Actions secrets,
+   see the end of this doc) and the untracked local `devcert.pfx`.
+
 ## One-time: packaging scaffold (repo work)
 
 4. **Install the CLI**: `winget install microsoft.winappcli --source winget`
