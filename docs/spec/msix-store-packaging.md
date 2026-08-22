@@ -43,10 +43,14 @@ the Store signs the package.
    (re-run any time to update).
 5. **Scaffold** in a committed `packaging/msix/` directory: run
    `winapp init` there. Prompts: package name and publisher → the Partner
-   Center values from step 3; version → `0.1.0.0`; entry point →
-   `blastradius-app.exe`; SDK setup → *Do not setup SDKs* (we use the Rust
-   `windows` ecosystem, not C++ headers). This writes `Package.appxmanifest`
-   and an `Assets/` folder.
+   Center values from step 3; version → `0.1.0.0`; SDK setup →
+   *Do not setup SDKs* (we use the Rust `windows` ecosystem, not C++
+   headers). Current `winapp` no longer prompts for an entry point — it
+   writes `Executable="$targetnametoken$.exe"` into the manifest and
+   resolves that placeholder at pack time instead (see step 11: we always
+   pass `--executable` explicitly, since our staged folder holds two exes
+   and auto-detection only works for exactly one). This step also writes
+   an `Assets/` folder.
 6. **Edit the manifest**:
    - `DisplayName` **Blastradius**, `Description` from the README one-liner.
    - `TargetDeviceFamily` `Windows.Desktop`, `MinVersion="10.0.17763.0"`.
@@ -99,10 +103,15 @@ All from the repo root in PowerShell.
     ```powershell
     cd packaging\msix
     winapp cert generate --if-exists skip
-    winapp pack .\dist --cert .\devcert.pfx
+    winapp pack .\dist --executable blastradius-app.exe --cert .\devcert.pfx
     winapp cert install .\devcert.pfx     # admin, once
     Add-AppxPackage .\Blastradius_0.1.0.0_x64.msix
     ```
+
+    `--executable` picks which of the two staged exes resolves
+    `$targetnametoken$` as the app's launch target; `blastradius.exe` still
+    ships in the package (the execution alias extension points at it
+    directly, by its real name, so it needs no resolution).
 
     `devcert.pfx` and `*.msix` stay untracked (gitignore them under
     `packaging/msix/`).

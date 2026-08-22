@@ -1,0 +1,4 @@
+msix/dist/
+msix/devcert.pfx
+msix/*.msix
+msix/*.msixbundle
