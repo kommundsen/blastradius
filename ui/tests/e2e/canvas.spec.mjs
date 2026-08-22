@@ -89,3 +89,19 @@ test('theme pin overrides and returns to OS', async ({ page }) => {
   await page.locator('#theme-btn').click(); // back to auto
   expect(await bg()).toEqual(auto);
 });
+
+test('dive choreography: identical destination under reduced motion (phase 5)', async ({ page }) => {
+  // the glide is a vestibular hazard when motion is reduced — it must cut,
+  // and the destination must be exactly the same scene
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/index.html?nogit');
+  const node = (title) =>
+    page.locator('#nodes .node', { has: page.locator('.node-title', { hasText: title }) });
+  await node('Blastradius').dblclick();
+  await expect(page.locator('#breadcrumb')).toContainText('Containers');
+  await page.locator('#canvas').press('Escape');
+  await expect(node('Blastradius')).toBeVisible();
+  // camera lands fully opaque with no animation residue
+  const opacity = await page.locator('#camera').evaluate((el) => getComputedStyle(el).opacity);
+  expect(opacity).toBe('1');
+});

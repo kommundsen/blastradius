@@ -422,25 +422,30 @@ async function dive(id) {
   const el = state.snapshot.elements.find((e) => e.id === id);
   if (!el) return;
   if (el.kind === 'system' && !el.external && state.level === 'L1') {
+    await glideInto(id);
     state.level = 'L2'; state.scope = id;
   } else if (el.kind === 'container' && state.level === 'L2') {
     if (!state.snapshot.elements.some((e) => e.parent === id)) return; // nothing inside
+    await glideInto(id);
     state.level = 'L3'; state.scope = id;
   } else {
     return;
   }
   state.zoom = 1; state.pan = { x: 0, y: 0 };
   state.selected = id;
-  await renderCanvas();
+  await renderCanvas({ animate: false });
+  await glideSettle('in');
   renderSide();
 }
 
 async function rise() {
   if (state.level === 'L3') {
+    await glideOut();
     state.selected = state.scope;
     state.scope = liftTo(state.scope, depthOf(state.scope) - 1);
     state.level = 'L2';
   } else if (state.level === 'L2') {
+    await glideOut();
     state.selected = state.scope;
     state.scope = null;
     state.level = 'L1';
@@ -448,8 +453,90 @@ async function rise() {
     return;
   }
   state.zoom = 1; state.pan = { x: 0, y: 0 };
-  await renderCanvas();
+  await renderCanvas({ animate: false });
+  await glideSettle('out');
   renderSide();
+}
+
+// ---- semantic dive choreography (phase 5) -----------------------------------
+// The motion spec's continuous-zoom intent: diving, the camera flies *into*
+// the chosen node; the deeper scene continues the forward motion by growing
+// to fit. Rising is the exact inverse. --duration-camera/--ease-camera govern
+// both halves, so prefers-reduced-motion collapses the glide to a cut.
+
+function cameraMotion() {
+  const css = getComputedStyle(document.documentElement);
+  const raw = css.getPropertyValue('--duration-camera').trim();
+  const total = raw.endsWith('ms') ? parseFloat(raw) : (parseFloat(raw) || 0) * 1000;
+  return { total, ease: css.getPropertyValue('--ease-camera').trim() || 'ease' };
+}
+
+/** The applyCamera transform, with an extra scale multiplier for glides. */
+function cameraTransform(m = 1) {
+  const c = els.canvas.getBoundingClientRect();
+  const l = state.layout;
+  const fit = Math.min(1, (c.width - 40) / l.width, (c.height - 40) / l.height);
+  const scale = fit * state.zoom * m;
+  const tx = (c.width - l.width * scale) / 2 + state.pan.x;
+  const ty = (c.height - l.height * scale) / 2 + state.pan.y;
+  return `translate(${tx}px, ${ty}px) scale(${scale})`;
+}
+
+/** First half of a dive: magnify the current scene into the target node. */
+async function glideInto(id) {
+  const { total, ease } = cameraMotion();
+  const n = state.layout?.nodes.find((x) => x.id === id);
+  if (!total || !n) return;
+  const c = els.canvas.getBoundingClientRect();
+  const fit = Math.min(1, (c.width - 40) / state.layout.width, (c.height - 40) / state.layout.height);
+  // magnify until the node roughly fills the viewport (clamped so tiny nodes
+  // do not blast the scene into pixels)
+  const k = Math.min(4, Math.max(2, Math.min(c.width / (n.width * fit), c.height / (n.height * fit)) * 0.8));
+  const scale = fit * state.zoom * k;
+  const tx = c.width / 2 - (n.x + n.width / 2) * scale;
+  const ty = c.height / 2 - (n.y + n.height / 2) * scale;
+  els.camera.classList.add('no-anim');
+  await els.camera.animate(
+    [
+      { transform: cameraTransform(), opacity: 1 },
+      { transform: `translate(${tx}px, ${ty}px) scale(${scale})`, opacity: 0 },
+    ],
+    { duration: total / 2, easing: 'cubic-bezier(.4, 0, 1, 1)', fill: 'forwards' },
+  ).finished.catch(() => {});
+}
+
+/** First half of a rise: pull back out of the current scene. */
+async function glideOut() {
+  const { total } = cameraMotion();
+  if (!total || !state.layout) return;
+  els.camera.classList.add('no-anim');
+  await els.camera.animate(
+    [
+      { transform: cameraTransform(), opacity: 1 },
+      { transform: cameraTransform(0.62), opacity: 0 },
+    ],
+    { duration: total / 2, easing: 'cubic-bezier(.4, 0, 1, 1)', fill: 'forwards' },
+  ).finished.catch(() => {});
+}
+
+/** Second half, on the new scene: 'in' continues forward motion (grow to
+ * fit); 'out' continues the pull-back (shrink to fit). */
+async function glideSettle(direction) {
+  const { total, ease } = cameraMotion();
+  els.camera.getAnimations().forEach((a) => a.cancel());
+  if (!total || !state.layout) {
+    els.camera.classList.remove('no-anim');
+    return;
+  }
+  const from = direction === 'in' ? 0.62 : 1.45;
+  await els.camera.animate(
+    [
+      { transform: cameraTransform(from), opacity: 0 },
+      { transform: cameraTransform(), opacity: 1 },
+    ],
+    { duration: total / 2, easing: ease },
+  ).finished.catch(() => {});
+  els.camera.classList.remove('no-anim');
 }
 
 async function setLevel(level) {
