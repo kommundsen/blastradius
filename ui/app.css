@@ -100,3 +100,42 @@ body { margin: 0; overflow: hidden; }
   color: var(--color-text-muted); padding: var(--space-1) 0; }
 .conf-table td { padding: var(--space-1) var(--space-2) var(--space-1) 0;
   border-top: 1px solid var(--color-divider); vertical-align: top; }
+
+/* ── phase 3: editing ──────────────────────────────────────────────────── */
+.node.is-dragging { opacity: .85; cursor: grabbing; z-index: var(--z-node-active); }
+#app.can-edit .node { cursor: grab; }
+
+/* stale banner */
+.stale-banner { position: absolute; top: var(--space-3); left: 50%;
+  transform: translateX(-50%); z-index: var(--z-overlay);
+  display: flex; gap: var(--space-2); align-items: center;
+  background: var(--color-danger-tint); border: 1px solid var(--color-danger);
+  padding: var(--space-1) var(--space-3); font-size: var(--text-sm); }
+
+/* connect mode */
+#canvas.is-connecting .node { outline: 1px dashed var(--color-accent); outline-offset: 2px; cursor: crosshair; }
+
+/* source editor */
+.src-wrap { display: flex; flex-direction: column; height: 100%; }
+.src-file { margin: var(--space-2) var(--space-3); }
+select.input { appearance: auto; }
+.src-editor { flex: 1; margin: 0 var(--space-3) var(--space-3); resize: none;
+  font-family: var(--font-mono); font-size: var(--text-mono); line-height: var(--leading-code);
+  color: var(--color-text); background: var(--code-bg);
+  border: 1px solid var(--color-divider); padding: var(--space-2);
+  white-space: pre; overflow: auto; tab-size: 2; }
+.src-editor:focus-visible { border-color: var(--color-accent); outline: none; }
+.src-err { margin: 0 var(--space-3) var(--space-2); font-family: var(--font-mono);
+  font-size: var(--text-2xs); color: var(--color-danger); white-space: pre-wrap; }
+
+/* dialog form rows */
+.dlg-field { display: flex; flex-direction: column; gap: 4px; }
+.dlg-field label { font-size: var(--text-sm); color: var(--color-text-muted); }
+.dlg-id-preview { font-family: var(--font-mono); font-size: var(--text-2xs);
+  color: var(--color-text-muted); }
+
+/* inspector rename input */
+.insp-name-input { font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: var(--text-lg); text-transform: uppercase; width: 100%; }
+.insp-rel.is-selected { background: var(--color-accent-100); }
+.insp-rel .btn { margin-left: var(--space-2); }

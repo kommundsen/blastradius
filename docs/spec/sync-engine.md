@@ -56,12 +56,11 @@ node in a lossless YAML concrete-syntax-tree (comments, key order, and
 formatting preserved) and splices the minimal change. Full-file re-serialization
 is forbidden — it would destroy user formatting and produce garbage diffs.
 
-Carried-over requirement for the CST layer: the Phase 0 reader (marked-yaml)
-cannot attach a line number to a *YAML-level duplicate key* (its error variant
-exposes no position — see `load_error_line` in `blastradius-core/src/yaml.rs`),
-so that one diagnostic currently reports line 0. Whatever parser backs the CST
-must report duplicate keys with exact positions, closing the gap rather than
-inheriting it.
+The carried-over duplicate-key requirement is **closed** (Phase 3): the loader
+scans for YAML-level duplicate keys itself and reports the exact line — which
+also fixed a worse latent behavior, since marked-yaml's default loader silently
+kept the *last* duplicate with no diagnostic at all. The splice layer edits
+text directly via markers, so no parser replacement was needed.
 
 | Canvas operation | File touched | Edit |
 | --- | --- | --- |

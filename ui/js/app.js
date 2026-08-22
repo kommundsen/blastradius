@@ -17,15 +17,86 @@ const invoke = tauri?.core?.invoke
       }
       if (cmd === 'workspace_root') return '(mock)';
       // git commands answer from an optional fixture; absent = no repo.
-      const git = await fetch('mock/git.json').then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      // `?nogit` simulates a plain folder (and lets edit tests run unconflicted).
+      const git = location.search.includes('nogit')
+        ? null
+        : await fetch('mock/git.json').then((r) => (r.ok ? r.json() : null)).catch(() => null);
       if (cmd === 'git_status') return git?.status ?? null;
       if (cmd === 'git_diff') return git?.diff ?? null;
       if (cmd === 'git_history') return git?.history ?? [];
       if (cmd === 'git_conflicts') return git?.conflicts ?? null;
       if (cmd === 'snapshot_at') return git?.snapshots?.[args?.refspec] ?? null;
-      throw new Error('unknown command ' + cmd);
+      return mockSync(cmd, args);
     };
 const listen = tauri?.event?.listen ? (ev, cb) => tauri.event.listen(ev, cb) : () => {};
+
+// Mock sync layer: applies operations to the fetched snapshot in memory so the
+// full editing UX is exercisable (and Playwright-testable) without Tauri.
+const mockState = { undo: [], redo: [] }; // [{label, snap}] — snapshot clones
+function mockSync(cmd, args) {
+  const snap = state.snapshot;
+  const clone = () => JSON.parse(JSON.stringify(state.snapshot));
+  if (cmd === 'sync_status') {
+    return { stale: [], canUndo: mockState.undo.length > 0, canRedo: mockState.redo.length > 0,
+      undoLabel: mockState.undo.at(-1)?.label ?? null, redoLabel: mockState.redo.at(-1)?.label ?? null,
+      files: ['model/context.yaml', 'model/blastradius.yaml', 'views/containers.yaml'] };
+  }
+  if (cmd === 'file_text') {
+    return '# mock harness: source editing needs the real app\n# (files are served read-only here)\n';
+  }
+  if (cmd === 'buffer_update') return true;
+  if (cmd === 'undo_op') {
+    const t = mockState.undo.pop();
+    if (!t) return null;
+    mockState.redo.push({ label: t.label, snap: clone() });
+    state.snapshot = t.snap;
+    return t.label;
+  }
+  if (cmd === 'redo_op') {
+    const t = mockState.redo.pop();
+    if (!t) return null;
+    mockState.undo.push({ label: t.label, snap: clone() });
+    state.snapshot = t.snap;
+    return t.label;
+  }
+  if (cmd === 'open_in_editor') return null;
+  if (cmd !== 'apply_operation') throw new Error('unknown command ' + cmd);
+
+  const before = clone();
+  const op = args.op;
+  const label = op.op + ' ' + (op.id ?? (op.from ? op.from + ' -> ' + op.to : ''));
+  if (op.op === 'rename') {
+    const el = snap.elements.find((e) => e.id === op.id);
+    if (!el) throw new Error('unknown element');
+    el.name = op.name;
+  } else if (op.op === 'create') {
+    const id = op.parent ? op.parent + '.' + op.id : op.id;
+    if (snap.elements.some((e) => e.id === id)) throw new Error('id exists');
+    snap.elements.push({ id, kind: op.kind, parent: op.parent ?? undefined, name: op.name });
+  } else if (op.op === 'delete') {
+    snap.elements = snap.elements.filter((e) => e.id !== op.id && !e.id.startsWith(op.id + '.'));
+    snap.relations = snap.relations.filter((r) => r.from !== op.id && r.to !== op.id);
+  } else if (op.op === 'add-relation') {
+    snap.relations.push({ from: op.from, to: op.to, label: op.label ?? null,
+      protocol: op.protocol ?? null, direction: 'forward' });
+  } else if (op.op === 'delete-relation') {
+    snap.relations = snap.relations.filter((r) =>
+      !(r.from === op.from && r.to === op.to && (op.label == null || r.label === op.label)));
+  } else if (op.op === 'set-relation-field') {
+    const r = snap.relations.find((r) => r.from === op.from && r.to === op.to);
+    if (r) r[op.field] = op.value;
+  } else if (op.op === 'pin') {
+    const v = snap.views.find((v) => op.view ? v.id === op.view :
+      (v.level === op.level && (op.level === 'L1' || v.scope === op.scope)));
+    if (v) {
+      const key = op.scope && op.id.startsWith(op.scope + '.') ? op.id.slice(op.scope.length + 1) : op.id;
+      v.layout[key] = [op.x, op.y];
+    }
+  }
+  mockState.undo.push({ label, snap: before });
+  mockState.redo.length = 0;
+  return { label };
+}
 
 // ---- state ------------------------------------------------------------------
 const state = {
@@ -46,6 +117,14 @@ const state = {
   showLayoutDiff: false,
   history: null,      // commit list when the History panel is open
   travel: null,       // { refspec, snapshot } during time-travel
+  // ── editing (phase 3) ──
+  sync: null,         // sync_status payload
+  sideMode: 'inspect',
+  srcFile: null,      // open file in the Source panel
+  srcSuppress: false, // don't clobber the textarea while the user types
+  connectFrom: null,  // relation-draw mode: source element id
+  selectedRel: null,  // selected relation {from,to,label}
+  dialog: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -56,6 +135,8 @@ const els = {
   sideBack: $('side-back'), levelSeg: $('level-seg'), diagChips: $('diag-chips'),
   hint: $('hint'), themeBtn: $('theme-btn'),
   gitChips: $('git-chips'), diffBtn: $('diff-btn'), historyBtn: $('history-btn'),
+  undoBtn: $('undo-btn'), redoBtn: $('redo-btn'), addBtn: $('add-btn'),
+  sideMode: $('side-mode'), srcStatus: $('src-status'),
 };
 
 let elk = null;
@@ -66,6 +147,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   await reload();
   listen('workspace-changed', () => reload());
   wireChrome();
+  wireEditing();
 });
 
 async function reload() {
@@ -91,9 +173,44 @@ async function reload() {
   }
   renderDiagnostics();
   renderGitChrome();
+  await refreshSync();
   renderTree();
   await renderCanvas({ animate: false });
   renderSide();
+}
+
+async function refreshSync() {
+  try {
+    state.sync = await invoke('sync_status');
+  } catch (e) {
+    state.sync = null;
+  }
+  renderEditChrome();
+}
+
+/** Editing is allowed when we are on the live working tree with no staleness
+ * and no merge conflict (ADR-0008 + spec/git-and-diff.md). */
+function canEdit() {
+  return !state.travel
+    && !state.conflicts
+    && (state.sync ? state.sync.stale.length === 0 : false);
+}
+
+function renderEditChrome() {
+  const s = state.sync;
+  els.undoBtn.disabled = !s?.canUndo;
+  els.redoBtn.disabled = !s?.canRedo;
+  els.undoBtn.title = s?.undoLabel ? `Undo: ${s.undoLabel}` : 'Undo (Ctrl+Z)';
+  els.redoBtn.title = s?.redoLabel ? `Redo: ${s.redoLabel}` : 'Redo (Ctrl+Y)';
+  els.addBtn.hidden = !canEdit();
+  document.getElementById('app').classList.toggle('can-edit', canEdit());
+  document.querySelector('.stale-banner')?.remove();
+  if (s?.stale?.length) {
+    const b = document.createElement('div');
+    b.className = 'stale-banner';
+    b.innerHTML = `<span>⚠ ${esc(s.stale.join(', '))} does not parse — canvas is read-only until fixed</span>`;
+    els.canvas.appendChild(b);
+  }
 }
 
 async function refreshGit() {
@@ -112,6 +229,7 @@ async function refreshGit() {
 
 // ---- canvas -----------------------------------------------------------------
 async function renderCanvas({ animate = true } = {}) {
+  els.edgeLayer.style.pointerEvents = 'none';
   const snap = effectiveSnapshot();
   const view = computeView(snap, state.level, state.scope);
   const viewDef = findViewDef(snap, state.level, state.scope);
@@ -156,12 +274,20 @@ async function renderCanvas({ animate = true } = {}) {
       b.innerHTML = `<span aria-hidden="true">${badge[0]}</span><span class="sr-only">${badge[1]}</span>`;
       div.appendChild(b);
     }
-    div.addEventListener('click', () => select(n.id));
+    div.addEventListener('click', (ev) => {
+      if (state.connectFrom && state.connectFrom !== n.id) {
+        ev.stopPropagation();
+        finishConnect(n.id);
+        return;
+      }
+      select(n.id);
+    });
     div.addEventListener('dblclick', () => dive(n.id));
     div.addEventListener('keydown', (ev) => {
       if (ev.key === 'Enter') { ev.preventDefault(); dive(n.id); }
       if (ev.key === ' ') { ev.preventDefault(); select(n.id); }
     });
+    div.addEventListener('pointerdown', (ev) => beginNodeDrag(ev, n, div));
     els.nodes.appendChild(div);
   }
 
@@ -180,6 +306,16 @@ async function renderCanvas({ animate = true } = {}) {
     if (relChange === 'removed') cls += ' is-removed';
     path.setAttribute('class', cls);
     path.setAttribute('d', d);
+    if (e.exact) {
+      const hit = document.createElementNS(svgNS, 'path');
+      hit.setAttribute('class', 'edge-hit');
+      hit.setAttribute('d', d);
+      hit.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        selectRelation(e);
+      });
+      els.edges.appendChild(hit);
+    }
     els.edges.appendChild(path);
     const label = e.label ?? e.protocol;
     if (label) {
@@ -235,6 +371,7 @@ function applyCamera() {
 function select(id) {
   state.selected = id;
   state.doc = null;
+  state.selectedRel = null;
   for (const div of els.nodes.children) {
     div.classList.toggle('is-active', div.dataset.id === id);
   }
@@ -435,8 +572,11 @@ async function focusElement(id) {
 
 // ---- side panel -------------------------------------------------------------
 function renderSide() {
+  if (state.sideMode === 'source') { renderSource(); return; }
+  els.srcStatus.hidden = true;
   if (state.history) return renderHistory();
   if (state.doc) return renderDoc(state.doc);
+  if (state.selectedRel) return renderRelationSide();
   els.sideBack.hidden = true;
   const id = state.selected;
   if (!id) {
@@ -455,7 +595,11 @@ function renderSide() {
 
   let html = `<div class="insp">`;
   html += `<span class="insp-kicker">${esc(kicker(el))}</span>`;
-  html += `<span class="insp-title">${esc(el.name)}</span>`;
+  if (canEdit()) {
+    html += `<input class="input insp-name-input" id="insp-name" value="${esc(el.name)}" aria-label="Element name">`;
+  } else {
+    html += `<span class="insp-title">${esc(el.name)}</span>`;
+  }
   html += `<span class="mono text-muted" style="font-family:var(--font-mono);font-size:var(--text-2xs)">${esc(el.id)}</span>`;
   if (el.description) html += `<p class="insp-desc">${esc(el.description)}</p>`;
 
@@ -488,6 +632,15 @@ function renderSide() {
   }
   for (const btn of els.sideBody.querySelectorAll('[data-editfile]')) {
     btn.addEventListener('click', () => invoke('open_in_editor', { rel: btn.dataset.editfile }).catch(() => {}));
+  }
+  const nameInput = document.getElementById('insp-name');
+  if (nameInput) {
+    nameInput.addEventListener('change', async () => {
+      const name = nameInput.value.trim();
+      if (name && name !== el.name) {
+        await applyOp({ op: 'rename', id, name });
+      }
+    });
   }
 }
 
@@ -729,6 +882,345 @@ function conflictSection(id) {
       <thead><tr><th>side</th><th>name</th><th>tech</th></tr></thead>
       <tbody>${row('ours', c.ours)}${row('theirs', c.theirs)}</tbody>
     </table>${files}`;
+}
+
+// ---- editing (phase 3) ------------------------------------------------------
+
+function wireEditing() {
+  els.undoBtn.addEventListener('click', () => doUndo());
+  els.redoBtn.addEventListener('click', () => doRedo());
+  els.addBtn.addEventListener('click', () => openCreateDialog());
+  els.sideMode.addEventListener('change', (ev) => {
+    if (ev.target.name === 'sidemode') {
+      state.sideMode = ev.target.value;
+      for (const opt of els.sideMode.querySelectorAll('.seg-opt')) {
+        opt.classList.toggle('is-active', opt.querySelector('input').value === state.sideMode);
+      }
+      state.doc = null; state.history = null;
+      renderSide();
+    }
+  });
+  window.addEventListener('keydown', async (ev) => {
+    if (ev.target.tagName === 'TEXTAREA' || ev.target.tagName === 'INPUT' || ev.target.tagName === 'SELECT') return;
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z' && !ev.shiftKey) {
+      ev.preventDefault(); doUndo();
+    } else if ((ev.ctrlKey || ev.metaKey) && (ev.key.toLowerCase() === 'y' || (ev.key.toLowerCase() === 'z' && ev.shiftKey))) {
+      ev.preventDefault(); doRedo();
+    } else if (ev.key === 'Delete' && state.selected && canEdit()) {
+      ev.preventDefault(); openDeleteDialog(state.selected);
+    } else if (ev.key.toLowerCase() === 'r' && state.selected && canEdit() && !state.connectFrom) {
+      ev.preventDefault(); startConnect(state.selected);
+    } else if (ev.key === 'Escape' && state.connectFrom) {
+      ev.preventDefault(); cancelConnect();
+    }
+  });
+}
+
+async function applyOp(op) {
+  try {
+    await invoke('apply_operation', { op });
+  } catch (e) {
+    toast(String(e));
+    return false;
+  }
+  if (!tauri) {
+    // mock: no watcher — refresh explicitly
+    await refreshSync();
+    renderTree();
+    await renderCanvas({ animate: false });
+    renderSide();
+  }
+  return true;
+}
+
+async function doUndo() {
+  try { await invoke('undo_op'); } catch (e) { toast(String(e)); }
+  if (!tauri) { await refreshSync(); renderTree(); await renderCanvas({ animate: false }); renderSide(); }
+}
+async function doRedo() {
+  try { await invoke('redo_op'); } catch (e) { toast(String(e)); }
+  if (!tauri) { await refreshSync(); renderTree(); await renderCanvas({ animate: false }); renderSide(); }
+}
+
+function toast(message) {
+  document.querySelector('.travel-banner.is-toast')?.remove();
+  const b = document.createElement('div');
+  b.className = 'travel-banner is-toast';
+  b.innerHTML = `<span>${esc(message)}</span>`;
+  els.canvas.appendChild(b);
+  setTimeout(() => b.remove(), 4000);
+}
+
+// --- drag to pin -------------------------------------------------------------
+function beginNodeDrag(ev, node, div) {
+  if (!canEdit() || ev.button !== 0) return;
+  const start = { x: ev.clientX, y: ev.clientY };
+  const orig = { x: node.x, y: node.y };
+  let moved = false;
+  const scale = parseFloat(els.camera.style.getPropertyValue('--camera-scale')) || 1;
+  const onMove = (mv) => {
+    const dx = (mv.clientX - start.x) / scale;
+    const dy = (mv.clientY - start.y) / scale;
+    if (!moved && Math.hypot(dx, dy) * scale < 4) return; // click tolerance
+    moved = true;
+    div.classList.add('is-dragging');
+    els.camera.classList.add('no-anim');
+    div.style.left = orig.x + dx + 'px';
+    div.style.top = orig.y + dy + 'px';
+  };
+  const onUp = async (up) => {
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    div.classList.remove('is-dragging');
+    els.camera.classList.remove('no-anim');
+    if (!moved) return;
+    const dx = (up.clientX - start.x) / scale;
+    const dy = (up.clientY - start.y) / scale;
+    const gx = Math.max(0, Math.round((orig.x + dx) / GRID));
+    const gy = Math.max(0, Math.round((orig.y + dy) / GRID));
+    const viewDef = findViewDef(effectiveSnapshot(), state.level, state.scope);
+    await applyOp({ op: 'pin', view: viewDef?.id ?? null, level: state.level,
+      scope: state.scope, id: node.id, x: gx, y: gy });
+  };
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+}
+
+// --- relations ---------------------------------------------------------------
+function startConnect(fromId) {
+  state.connectFrom = fromId;
+  els.canvas.classList.add('is-connecting');
+  els.hint.textContent = 'Click a target element to connect · Esc to cancel';
+}
+
+function cancelConnect() {
+  state.connectFrom = null;
+  els.canvas.classList.remove('is-connecting');
+  els.hint.textContent = 'Double-click to dive · Esc to rise';
+}
+
+async function finishConnect(toId) {
+  const from = state.connectFrom;
+  cancelConnect();
+  openDialog({
+    title: 'New relation',
+    body: `<div class="dlg-field"><label>Label</label><input class="input" id="dlg-label" placeholder="calls"></div>
+      <div class="dlg-field"><label>Protocol (optional)</label><input class="input" id="dlg-proto" placeholder="HTTPS"></div>
+      <p class="text-muted" style="font-size:var(--text-xs)">${esc(from)} → ${esc(toId)}</p>`,
+    confirm: 'Create',
+    onConfirm: async () => {
+      const label = document.getElementById('dlg-label').value.trim() || null;
+      const protocol = document.getElementById('dlg-proto').value.trim() || null;
+      return applyOp({ op: 'add-relation', from, to: toId, label, protocol });
+    },
+  });
+}
+
+function selectRelation(edge) {
+  state.selectedRel = { from: edge.from, to: edge.to, label: edge.label };
+  state.selected = null;
+  state.doc = null;
+  renderSide();
+}
+
+// --- dialogs -----------------------------------------------------------------
+function openDialog({ title, body, confirm, danger, onConfirm }) {
+  closeDialog();
+  const wrap = document.createElement('div');
+  wrap.className = 'dialog-backdrop';
+  wrap.id = 'app-dialog';
+  wrap.innerHTML = `<div class="dialog blueprint" role="dialog" aria-modal="true">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <span class="dialog-title">${esc(title)}</span>
+    <div class="dialog-body">${body}</div>
+    <div class="dialog-actions">
+      <button class="btn btn-secondary" id="dlg-cancel">Cancel</button>
+      <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="dlg-ok">${esc(confirm)}</button>
+    </div></div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click', (ev) => { if (ev.target === wrap) closeDialog(); });
+  document.getElementById('dlg-cancel').addEventListener('click', closeDialog);
+  document.getElementById('dlg-ok').addEventListener('click', async () => {
+    const ok = await onConfirm();
+    if (ok !== false) closeDialog();
+  });
+  wrap.querySelector('input, select')?.focus();
+}
+
+function closeDialog() {
+  document.getElementById('app-dialog')?.remove();
+}
+
+function slugify(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
+}
+
+function openCreateDialog() {
+  const level = state.level;
+  const kinds = level === 'L1' ? ['system', 'person', 'external']
+    : level === 'L2' ? ['container'] : ['component'];
+  const parent = level === 'L1' ? null : state.scope;
+  const kindOptions = kinds.map((k) => `<option value="${k}">${k}</option>`).join('');
+  openDialog({
+    title: 'New element',
+    body: `<div class="dlg-field"><label>Kind</label><select class="input" id="dlg-kind">${kindOptions}</select></div>
+      <div class="dlg-field"><label>Name</label><input class="input" id="dlg-name" placeholder="Payment Service"></div>
+      <div class="dlg-field"><label>Id — immutable once created (ADR-0003)</label>
+        <input class="input" id="dlg-id" style="font-family:var(--font-mono)">
+        <span class="dlg-id-preview" id="dlg-id-full"></span></div>`,
+    confirm: 'Create',
+    onConfirm: async () => {
+      const kind = document.getElementById('dlg-kind').value;
+      const name = document.getElementById('dlg-name').value.trim();
+      const id = document.getElementById('dlg-id').value.trim();
+      if (!name || !id) { toast('name and id are required'); return false; }
+      const useParent = (kind === 'person' || kind === 'external' || kind === 'system') ? null : parent;
+      return applyOp({ op: 'create', parent: useParent, id, name, kind });
+    },
+  });
+  const nameInput = document.getElementById('dlg-name');
+  const idInput = document.getElementById('dlg-id');
+  const preview = document.getElementById('dlg-id-full');
+  const sync = () => {
+    if (!idInput.dataset.touched) idInput.value = slugify(nameInput.value);
+    const kind = document.getElementById('dlg-kind').value;
+    const useParent = (kind === 'person' || kind === 'external' || kind === 'system') ? null : parent;
+    preview.textContent = useParent ? `${useParent}.${idInput.value}` : idInput.value;
+  };
+  nameInput.addEventListener('input', sync);
+  idInput.addEventListener('input', () => { idInput.dataset.touched = '1'; sync(); });
+  document.getElementById('dlg-kind').addEventListener('change', sync);
+  sync();
+}
+
+function openDeleteDialog(id) {
+  const snap = effectiveSnapshot();
+  const el = snap.elements.find((e) => e.id === id);
+  if (!el) return;
+  const cascading = snap.relations.filter((r) => r.from === id || r.to === id
+    || r.from.startsWith(id + '.') || r.to.startsWith(id + '.'));
+  const relList = cascading.length
+    ? `<p>Also removes ${cascading.length} relation${cascading.length > 1 ? 's' : ''}:</p><ul>` +
+      cascading.map((r) => `<li>${esc(r.from)} → ${esc(r.to)}${r.label ? ` <span class="text-muted">· ${esc(r.label)}</span>` : ''}</li>`).join('') + '</ul>'
+    : '<p>No relations reference it.</p>';
+  openDialog({
+    title: `Delete ${el.name}?`,
+    body: `<p><span style="font-family:var(--font-mono)">${esc(id)}</span> and everything inside it will be removed from the model.</p>${relList}`,
+    confirm: 'Delete',
+    danger: true,
+    onConfirm: async () => {
+      const ok = await applyOp({ op: 'delete', id });
+      if (ok) { state.selected = null; }
+      return ok;
+    },
+  });
+}
+
+// --- source panel ------------------------------------------------------------
+let srcDebounce = null;
+async function renderSource() {
+  els.sideTitle.textContent = '';
+  els.sideBack.hidden = true;
+  const files = state.sync?.files ?? [];
+  if (!state.srcFile && files.length) state.srcFile = files[0];
+  const options = files
+    .map((f) => `<option value="${esc(f)}"${f === state.srcFile ? ' selected' : ''}>${esc(f)}</option>`)
+    .join('');
+  els.sideBody.innerHTML = `<div class="src-wrap">
+    <select class="input src-file" id="src-file">${options}</select>
+    <textarea class="src-editor" id="src-editor" spellcheck="false"></textarea>
+    <div class="src-err" id="src-err" hidden></div>
+  </div>`;
+  const editor = document.getElementById('src-editor');
+  const fileSel = document.getElementById('src-file');
+  const load = async () => {
+    try {
+      editor.value = await invoke('file_text', { rel: state.srcFile });
+    } catch (e) {
+      editor.value = '';
+    }
+    updateSrcStatus();
+  };
+  fileSel.addEventListener('change', async () => {
+    state.srcFile = fileSel.value;
+    await load();
+  });
+  editor.addEventListener('input', () => {
+    state.srcSuppress = true;
+    clearTimeout(srcDebounce);
+    srcDebounce = setTimeout(async () => {
+      try {
+        const ok = await invoke('buffer_update', { rel: state.srcFile, text: editor.value });
+        state.srcSuppress = false;
+        if (!tauri) return;
+        await refreshSync();
+        updateSrcStatus();
+        if (ok) {
+          renderTree();
+          await renderCanvas({ animate: false });
+        }
+      } catch (e) {
+        toast(String(e));
+        state.srcSuppress = false;
+      }
+    }, 200);
+  });
+  await load();
+}
+
+function updateSrcStatus() {
+  const stale = state.sync?.stale ?? [];
+  els.srcStatus.hidden = state.sideMode !== 'source';
+  const isStale = state.srcFile && stale.includes(state.srcFile);
+  els.srcStatus.textContent = isStale ? 'error' : 'synced';
+  els.srcStatus.className = 'tag ' + (isStale ? 'tag-danger' : 'tag-accent');
+  const err = document.getElementById('src-err');
+  if (err) {
+    const diags = (state.snapshot?.diagnostics ?? [])
+      .filter((d) => d.severity === 'error' && d.file === state.srcFile);
+    err.hidden = diags.length === 0;
+    err.textContent = diags.map((d) => `${d.file}:${d.line} ${d.message}`).join('\n');
+  }
+}
+
+/** Relation inspector view. */
+function renderRelationSide() {
+  const r = state.selectedRel;
+  els.sideTitle.textContent = '';
+  els.sideBack.hidden = true;
+  const editable = canEdit();
+  els.sideBody.innerHTML = `<div class="insp">
+    <span class="insp-kicker">Relation</span>
+    <span class="insp-title">${esc(shortName(r.from))} → ${esc(shortName(r.to))}</span>
+    <span style="font-family:var(--font-mono);font-size:var(--text-2xs)" class="text-muted">${esc(r.from)} → ${esc(r.to)}</span>
+    <div class="insp-section">Label</div>
+    <input class="input" id="rel-label" value="${esc(r.label ?? '')}" ${editable ? '' : 'disabled'}>
+    <div class="insp-section">Protocol</div>
+    <input class="input" id="rel-proto" value="${esc(relProtocol(r) ?? '')}" ${editable ? '' : 'disabled'}>
+    ${editable ? '<div class="insp-section"></div><button class="btn btn-danger" id="rel-delete">Delete relation</button>' : ''}
+  </div>`;
+  if (!editable) return;
+  const commit = (field) => async (ev) => {
+    const value = ev.target.value.trim();
+    await applyOp({ op: 'set-relation-field', from: r.from, to: r.to, label: r.label ?? null, field, value });
+    if (field === 'label') state.selectedRel.label = value || null;
+  };
+  document.getElementById('rel-label').addEventListener('change', commit('label'));
+  document.getElementById('rel-proto').addEventListener('change', commit('protocol'));
+  document.getElementById('rel-delete').addEventListener('click', async () => {
+    const ok = await applyOp({ op: 'delete-relation', from: r.from, to: r.to, label: r.label ?? null });
+    if (ok) { state.selectedRel = null; renderSide(); }
+  });
+}
+
+function shortName(id) {
+  const snap = effectiveSnapshot();
+  return snap.elements.find((e) => e.id === id)?.name ?? id;
+}
+
+function relProtocol(r) {
+  const snap = effectiveSnapshot();
+  return snap.relations.find((x) => x.from === r.from && x.to === r.to && x.label === r.label)?.protocol;
 }
 
 // ---- util -------------------------------------------------------------------

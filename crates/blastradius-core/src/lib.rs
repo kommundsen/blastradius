@@ -14,6 +14,8 @@ pub mod manifest;
 pub mod model;
 pub mod parse;
 pub mod snapshot;
+pub mod splice;
+pub mod sync;
 pub mod validate;
 pub mod vfs;
 pub mod views;

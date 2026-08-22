@@ -20,8 +20,8 @@ containers:
         description: Zooming diagram surface — nodes, edges, diff states, continuous L1→L3 camera.
       yaml-panel:
         name: YAML Panel
-        tech: CodeMirror
-        description: In-app text editor with inline validation; a peer surface to the canvas, not a viewer.
+        tech: plain-text editor (v1)
+        description: In-app source editor with inline validation; a peer surface to the canvas, not a viewer. CodeMirror upgrade is Phase 5 polish.
       docs-panel:
         name: Docs Panel
         tech: markdown renderer

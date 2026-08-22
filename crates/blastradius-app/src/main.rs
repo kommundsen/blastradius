@@ -1,18 +1,19 @@
-//! Blastradius desktop shell. Phase 2: read-only rendering + git awareness.
-//! The WebView renders; the Core loads, watches, and reads the repository.
-//! Still no write path: git stays read-only (ADR-0007), files are edited by
-//! the user's own tooling.
+//! Blastradius desktop shell. Phase 3: the sync engine arrives — canvas and
+//! YAML panel propose transactions; files stay the single source of truth
+//! (ADR-0008). Git remains read-only (ADR-0007).
 
 #![cfg_attr(all(not(debug_assertions), windows), windows_subsystem = "windows")]
 
 use blastradius_core::git::GitContext;
+use blastradius_core::sync::{Operation, SyncEngine};
 use notify::Watcher;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State};
 
 struct AppState {
     root: Mutex<Option<PathBuf>>,
+    engine: Mutex<Option<SyncEngine>>,
 }
 
 fn root_of(state: &State<AppState>) -> Result<PathBuf, String> {
@@ -24,25 +25,87 @@ fn root_of(state: &State<AppState>) -> Result<PathBuf, String> {
         .ok_or_else(|| "no workspace open".to_string())
 }
 
-/// Loading is cheap enough to redo per request (Phase 0 budget), which keeps
-/// the shell stateless — the files are the truth (ADR-0008), so there is
-/// nothing to cache that could go stale. The same goes for the GitContext:
-/// rediscovered per call, so external `git checkout`/`merge` are always seen.
+/// The renderer snapshot. While merge conflicts exist the on-disk files carry
+/// markers and do not parse — render the OURS side (spec/git-and-diff.md).
+/// While a file is stale from ordinary editing, the engine serves the last
+/// valid model (ADR-0008) with the live diagnostics riding along.
 #[tauri::command]
 fn workspace_snapshot(state: State<AppState>) -> Result<serde_json::Value, String> {
     let root = root_of(&state)?;
-    // During a merge conflict the on-disk files carry markers and do not
-    // parse; the model must stay viewable, so render the OURS side
-    // (spec/git-and-diff.md) — the conflict chrome tells the user why.
     if let Some(ctx) = GitContext::discover(&root) {
         if let Ok(Some(snap)) = ctx.ours_snapshot(&root) {
             return serde_json::to_value(&snap).map_err(|e| e.to_string());
         }
     }
-    let (ws, diags) = blastradius_core::load_workspace(&root);
+    let mut guard = state.engine.lock().unwrap();
+    let engine = guard.get_or_insert_with(|| SyncEngine::open(&root));
     let vfs = blastradius_core::vfs::DiskVfs::new(&root);
-    let snap = blastradius_core::snapshot::snapshot(&vfs, &ws, &diags);
+    let snap = blastradius_core::snapshot::snapshot(&vfs, &engine.model, &engine.diagnostics);
     serde_json::to_value(&snap).map_err(|e| e.to_string())
+}
+
+/// Editing surface state: staleness, undo/redo availability, editable files.
+#[tauri::command]
+fn sync_status(state: State<AppState>) -> Result<serde_json::Value, String> {
+    let root = root_of(&state)?;
+    let mut guard = state.engine.lock().unwrap();
+    let engine = guard.get_or_insert_with(|| SyncEngine::open(&root));
+    let (labels, cursor) = engine.history_labels();
+    Ok(serde_json::json!({
+        "stale": engine.stale.iter().collect::<Vec<_>>(),
+        "canUndo": cursor > 0,
+        "canRedo": cursor < labels.len(),
+        "undoLabel": (cursor > 0).then(|| labels[cursor - 1].clone()),
+        "redoLabel": (cursor < labels.len()).then(|| labels[cursor].clone()),
+        "files": engine.editable_files(),
+    }))
+}
+
+#[tauri::command]
+fn apply_operation(state: State<AppState>, op: serde_json::Value) -> Result<serde_json::Value, String> {
+    let op: Operation = serde_json::from_value(op).map_err(|e| format!("bad operation: {e}"))?;
+    let root = root_of(&state)?;
+    let mut guard = state.engine.lock().unwrap();
+    let engine = guard.get_or_insert_with(|| SyncEngine::open(&root));
+    let tx = engine.apply(op)?;
+    Ok(serde_json::json!({ "label": tx.label }))
+}
+
+#[tauri::command]
+fn undo_op(state: State<AppState>) -> Result<Option<String>, String> {
+    let root = root_of(&state)?;
+    let mut guard = state.engine.lock().unwrap();
+    let engine = guard.get_or_insert_with(|| SyncEngine::open(&root));
+    engine.undo()
+}
+
+#[tauri::command]
+fn redo_op(state: State<AppState>) -> Result<Option<String>, String> {
+    let root = root_of(&state)?;
+    let mut guard = state.engine.lock().unwrap();
+    let engine = guard.get_or_insert_with(|| SyncEngine::open(&root));
+    engine.redo()
+}
+
+#[tauri::command]
+fn file_text(state: State<AppState>, rel: String) -> Result<String, String> {
+    let root = root_of(&state)?;
+    let mut guard = state.engine.lock().unwrap();
+    let engine = guard.get_or_insert_with(|| SyncEngine::open(&root));
+    engine
+        .file_text(&rel)
+        .map(str::to_string)
+        .ok_or_else(|| format!("{rel}: not a workspace file"))
+}
+
+/// YAML panel keystrokes (debounced by the frontend). Returns whether the
+/// buffer parses — false means the file is now stale and the canvas froze.
+#[tauri::command]
+fn buffer_update(state: State<AppState>, rel: String, text: String) -> Result<bool, String> {
+    let root = root_of(&state)?;
+    let mut guard = state.engine.lock().unwrap();
+    let engine = guard.get_or_insert_with(|| SyncEngine::open(&root));
+    engine.buffer_update(&rel, &text)
 }
 
 #[tauri::command]
@@ -50,8 +113,6 @@ fn workspace_root(state: State<AppState>) -> Option<String> {
     state.root.lock().unwrap().as_ref().map(|p| p.display().to_string())
 }
 
-/// Branch, dirty count, ahead/behind, conflicted files — or null outside a
-/// repository (git surfaces are absent, not errors: ADR-0007).
 #[tauri::command]
 fn git_status(state: State<AppState>) -> Result<Option<serde_json::Value>, String> {
     let root = root_of(&state)?;
@@ -62,9 +123,6 @@ fn git_status(state: State<AppState>) -> Result<Option<serde_json::Value>, Strin
     Ok(Some(serde_json::to_value(&status).map_err(|e| e.to_string())?))
 }
 
-/// Semantic diff of the working tree against a base revision (default: the
-/// merge-base with the default branch). Layout changes ride along separately,
-/// for the toggle (spec/git-and-diff.md).
 #[tauri::command]
 fn git_diff(state: State<AppState>, base: Option<String>) -> Result<Option<serde_json::Value>, String> {
     let root = root_of(&state)?;
@@ -87,7 +145,6 @@ fn git_diff(state: State<AppState>, base: Option<String>) -> Result<Option<serde
     Ok(Some(serde_json::to_value(&payload).map_err(|e| e.to_string())?))
 }
 
-/// Commits touching workspace files, newest first — the History control.
 #[tauri::command]
 fn git_history(state: State<AppState>) -> Result<Vec<serde_json::Value>, String> {
     let root = root_of(&state)?;
@@ -101,7 +158,6 @@ fn git_history(state: State<AppState>) -> Result<Vec<serde_json::Value>, String>
         .collect()
 }
 
-/// Time-travel: the full snapshot at a revision, read-only.
 #[tauri::command]
 fn snapshot_at(state: State<AppState>, refspec: String) -> Result<serde_json::Value, String> {
     let root = root_of(&state)?;
@@ -110,7 +166,6 @@ fn snapshot_at(state: State<AppState>, refspec: String) -> Result<serde_json::Va
     serde_json::to_value(&snap).map_err(|e| e.to_string())
 }
 
-/// Ours/theirs element values during a merge conflict, or null when clean.
 #[tauri::command]
 fn git_conflicts(state: State<AppState>) -> Result<Option<serde_json::Value>, String> {
     let root = root_of(&state)?;
@@ -123,8 +178,6 @@ fn git_conflicts(state: State<AppState>) -> Result<Option<serde_json::Value>, St
     }
 }
 
-/// "Resolve in editor": hand the conflicted file to the OS default handler.
-/// The watcher sees the resolution — the app itself never writes (ADR-0007).
 #[tauri::command]
 fn open_in_editor(state: State<AppState>, rel: String) -> Result<(), String> {
     let root = root_of(&state)?;
@@ -157,10 +210,16 @@ fn main() {
     let root = startup_root();
 
     tauri::Builder::default()
-        .manage(AppState { root: Mutex::new(root.clone()) })
+        .manage(AppState { root: Mutex::new(root.clone()), engine: Mutex::new(None) })
         .invoke_handler(tauri::generate_handler![
             workspace_snapshot,
             workspace_root,
+            sync_status,
+            apply_operation,
+            undo_op,
+            redo_op,
+            file_text,
+            buffer_update,
             git_status,
             git_diff,
             git_history,
@@ -178,9 +237,8 @@ fn main() {
         .expect("error while running tauri application");
 }
 
-/// Watch the workspace AND the repository metadata: commits, branch switches
-/// and merges change what the git surfaces show without touching workspace
-/// files. One debounced event either way; the WebView re-requests everything.
+/// Debounced watcher. The engine's external_scan compares disk to its cache —
+/// our own writes match and produce no event (the echo-loop killer, now real).
 fn spawn_watcher(app: tauri::AppHandle, root: PathBuf) {
     std::thread::spawn(move || {
         let (tx, rx) = std::sync::mpsc::channel::<()>();
@@ -202,22 +260,24 @@ fn spawn_watcher(app: tauri::AppHandle, root: PathBuf) {
             eprintln!("cannot watch {}: {e}", root.display());
             return;
         }
-        // .git/HEAD + index: branch switches, commits, merge state.
-        if let Some(ctx_dir) = GitContext::discover(&root)
-            .and(Some(root.clone()))
-            .and_then(|r| git_dir_of(&r))
+        if let Some(git_dir) = git2::Repository::discover(&root).ok().map(|r| r.path().to_path_buf())
         {
-            let _ = watcher.watch(&ctx_dir.join("HEAD"), notify::RecursiveMode::NonRecursive);
-            let _ = watcher.watch(&ctx_dir.join("index"), notify::RecursiveMode::NonRecursive);
+            let _ = watcher.watch(&git_dir.join("HEAD"), notify::RecursiveMode::NonRecursive);
+            let _ = watcher.watch(&git_dir.join("index"), notify::RecursiveMode::NonRecursive);
         }
         while rx.recv().is_ok() {
             while rx.recv_timeout(std::time::Duration::from_millis(150)).is_ok() {}
-            let _ = app.emit("workspace-changed", ());
+            // Ask the engine whether anything really changed; git metadata
+            // (HEAD/index) always refreshes the chrome.
+            let changed = {
+                let state: State<AppState> = app.state();
+                let mut guard = state.engine.lock().unwrap();
+                match guard.as_mut() {
+                    Some(engine) => engine.external_scan(),
+                    None => true,
+                }
+            };
+            let _ = app.emit("workspace-changed", changed);
         }
     });
-}
-
-fn git_dir_of(root: &PathBuf) -> Option<PathBuf> {
-    let repo = git2::Repository::discover(root).ok()?;
-    Some(repo.path().to_path_buf())
 }
