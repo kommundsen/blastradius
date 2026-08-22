@@ -50,6 +50,13 @@ fn load_error_line(e: &marked_yaml::LoadError) -> Option<u64> {
         | MappingKeyMustBeScalar(m)
         | UnexpectedTag(m) => Some(m.line() as u64),
         ScanError(m, _) => Some(m.line() as u64),
+        // KNOWN GAP: marked-yaml's DuplicateKey variant boxes its detail without
+        // exposing a Marker, so a YAML-level duplicate key (same key twice in one
+        // mapping — distinct from a model-level duplicate id, which we report with
+        // exact lines in parse::register) currently reports line 0. Revisit when
+        // Phase 3's CST layer replaces marked-yaml for editing
+        // (docs/spec/sync-engine.md, "Outbound") — the replacement must not
+        // regress this to silent acceptance either.
         _ => None,
     }
 }
