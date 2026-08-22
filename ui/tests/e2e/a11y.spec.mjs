@@ -7,6 +7,13 @@ import AxeBuilder from '@axe-core/playwright';
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
 async function scan(page, label) {
+  // freeze transitions first: the seg chips animate background/color for
+  // --duration-fast when .is-active lands, and axe sampling mid-transition
+  // on a slow runner reads a blended color — a CI-only contrast flake
+  // (observed 2026-08-22: failed twice on one run, unreproducible after)
+  await page.addStyleTag({
+    content: '*, *::before, *::after { transition: none !important; animation: none !important; }',
+  });
   const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
   const summary = results.violations.map((v) => ({
     id: v.id,
