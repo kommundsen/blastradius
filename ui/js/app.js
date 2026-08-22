@@ -1253,12 +1253,41 @@ function beginNodeDrag(ev, node, div) {
     const dy = (up.clientY - start.y) / scale;
     const gx = Math.max(0, Math.round((orig.x + dx) / GRID));
     const gy = Math.max(0, Math.round((orig.y + dy) / GRID));
+    // minimum distance: a drop may not land a node against its neighbours —
+    // nudge to the nearest clear grid cell (deterministic ring scan)
+    const [fx, fy] = freePinSpot(gx, gy, node);
     const viewDef = findViewDef(effectiveSnapshot(), state.level, state.scope);
     await applyOp({ op: 'pin', view: viewDef?.id ?? null, level: state.level,
-      scope: state.scope, id: node.id, x: gx, y: gy });
+      scope: state.scope, id: node.id, x: fx, y: fy });
   };
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);
+}
+
+/** Nearest grid position where `node` keeps one grid unit of clearance from
+ * every other node. Scans outward ring by ring; gives up (and honors the raw
+ * drop) if nothing frees up within 8 units. */
+function freePinSpot(gx, gy, node) {
+  const margin = GRID;
+  const others = state.layout.nodes.filter((n) => n.id !== node.id);
+  const fits = (x, y) =>
+    others.every((n) =>
+      x * GRID + node.width + margin <= n.x ||
+      n.x + n.width + margin <= x * GRID ||
+      y * GRID + node.height + margin <= n.y ||
+      n.y + n.height + margin <= y * GRID);
+  if (fits(gx, gy)) return [gx, gy];
+  for (let r = 1; r <= 8; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const x = gx + dx;
+        const y = gy + dy;
+        if (x >= 0 && y >= 0 && fits(x, y)) return [x, y];
+      }
+    }
+  }
+  return [gx, gy];
 }
 
 // --- relations ---------------------------------------------------------------

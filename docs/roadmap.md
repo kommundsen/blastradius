@@ -135,10 +135,16 @@ midpoint placement with no collision avoidance stacks labels into run-on
 text where edges converge (L1) and clips them under nodes (L2); (2) **edges
 touching pinned nodes bypass ELK** — drawn as straight center-to-center
 lines that ignore obstacles, so they pass beneath nodes and bunch labels.
-Fix order: label de-collision (stagger along the clear segment of the path),
-relax model-order forcing, then optionally a two-pass interactive ELK run so
-pinned-adjacent edges get real routing. Obstacle-avoiding routing for pin
-edges is v2.
+**Shipped same day**: (1) label de-collision — a deterministic placer scores
+candidate positions along the path, beside it, and shifted sideways against
+node boxes, other labels, and how much of the edge's own line the knockout
+would erase (short edges keep their arrows visible); e2e asserts no label
+sits on a node at L1/L2. (2) model-order forcing relaxed to PREFER_NODES
+(0 crossings measured). (3) minimum distance on pin drops — a drop that
+would land a node against a neighbour nudges to the nearest clear grid cell
+(deterministic ring scan, e2e-asserted). The containers-view pins were
+respaced for label room. Still open for later: two-pass interactive ELK so
+pinned-adjacent edges get real routing; obstacle-avoiding routing is v2.
 
 **MCP server** — raised as a candidate 2026-08-22 and **shipped the same
 day** (ADR-0012, spec/mcp-server.md): `blastradius mcp` serves ten tools

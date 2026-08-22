@@ -146,3 +146,59 @@ test('side panels resize by dragging their grips, and persist', async ({ page })
   await page.keyboard.press('ArrowLeft');
   expect((await side.boundingBox()).width).toBeCloseTo(s0 + 32, 0);
 });
+
+test('edge labels never sit on node boxes (label de-collision)', async ({ page }) => {
+  for (const path of ['/index.html?nogit', '/index.html?nogit#l2']) {
+    await page.goto(path);
+    await expect(page.locator('#nodes .node').first()).toBeVisible();
+    if (path.endsWith('#l2')) {
+      await page.locator('#nodes .node', {
+        has: page.locator('.node-title', { hasText: 'Blastradius' }),
+      }).dblclick();
+      await expect(page.locator('#breadcrumb')).toContainText('Containers');
+    }
+    const overlaps = await page.evaluate(() => {
+      const boxes = [...document.querySelectorAll('#nodes .node')].map((n) => n.getBoundingClientRect());
+      const bad = [];
+      for (const label of document.querySelectorAll('.edge-label')) {
+        const r = label.getBoundingClientRect();
+        for (const b of boxes) {
+          const w = Math.min(r.right, b.right) - Math.max(r.left, b.left);
+          const h = Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top);
+          if (w > 2 && h > 2) bad.push(label.textContent);
+        }
+      }
+      return bad;
+    });
+    expect(overlaps, `labels overlapping nodes at ${path}`).toEqual([]);
+  }
+});
+
+test('dropping a node onto another nudges it to clear space (min distance)', async ({ page }) => {
+  await page.goto('/index.html?nogit');
+  const node = (t) => page.locator('#nodes .node', { has: page.locator('.node-title', { hasText: t }) });
+  await node('Blastradius').dblclick();
+  await expect(page.locator('#breadcrumb')).toContainText('Containers');
+  const cli = await node('CLI').first().boundingBox();
+  const core = await node('Core').first().boundingBox();
+  await page.mouse.move(cli.x + cli.width / 2, cli.y + 10);
+  await page.mouse.down();
+  await page.mouse.move(core.x + core.width / 2, core.y + 10, { steps: 5 });
+  await page.mouse.up();
+  await page.waitForTimeout(300); // pin op + re-render
+  const overlapping = await page.evaluate(() => {
+    const rects = [...document.querySelectorAll('#nodes .node')].map((n) => {
+      const r = n.getBoundingClientRect();
+      return { id: n.dataset.id, l: r.left, t: r.top, r: r.right, b: r.bottom };
+    });
+    const bad = [];
+    for (let i = 0; i < rects.length; i++)
+      for (let j = i + 1; j < rects.length; j++) {
+        const a = rects[i], b = rects[j];
+        if (Math.min(a.r, b.r) - Math.max(a.l, b.l) > 1 &&
+            Math.min(a.b, b.b) - Math.max(a.t, b.t) > 1) bad.push([a.id, b.id]);
+      }
+    return bad;
+  });
+  expect(overlapping).toEqual([]);
+});
