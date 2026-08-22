@@ -29,7 +29,10 @@ Per workspace, the engine holds:
 While any model file is STALE: the canvas renders the last valid model with a
 stale indicator; **canvas editing is disabled** (editing a picture of a file
 that no longer parses would fork truth); the YAML panel and external editors
-remain live. Views files being stale disables only pinning, not semantics.
+remain live. Views files being stale should disable only pinning, not
+semantics — **v1 simplification**: the engine blocks all operations on any
+staleness; the pin-only carve-out is a named Phase 5 refinement
+(docs/roadmap.md).
 
 ## Inbound: text → model
 
@@ -86,10 +89,15 @@ cache dir for crash recovery.
 
 ## The IPC surface (Tauri commands)
 
-`workspace_open(path)` · `workspace_snapshot() → model+docs+errors` ·
-`apply_operation(op) → transaction` · `undo()` / `redo()` ·
-`buffer_update(file, text)` (panel keystrokes) · events:
-`model_updated`, `file_stale`, `transaction_applied`.
+As shipped (v1): `workspace_snapshot` · `sync_status` (staleness, undo/redo
+availability, editable files) · `apply_operation(op)` · `undo_op` / `redo_op` ·
+`file_text(rel)` · `buffer_update(rel, text)` — plus the Phase 2 git surface.
+One event, `workspace-changed`, prompts the WebView to re-request everything;
+the originally sketched fine-grained events (`model_updated`, `file_stale`,
+`transaction_applied`) were not needed at this scale and are not planned unless
+profiling demands them. `workspace_open(path)` (switching workspaces at
+runtime — today the workspace is fixed at launch) lands with Phase 5
+onboarding.
 
 This surface is also the future CLI/CI attachment point (ADR-0005): validate
 and export must be callable without a WebView.
@@ -100,4 +108,6 @@ and export must be callable without a WebView.
 - Keystroke → canvas update (valid edit): < 250ms end to end.
 - Canvas drop → file write: < 30ms.
 
-Budgets are CI-enforced against a generated benchmark workspace.
+Budget enforcement in CI against a generated benchmark workspace is **not yet
+implemented** — a named Phase 5 debt (docs/roadmap.md). Until then the budgets
+are design targets, not guarantees.

@@ -77,6 +77,16 @@ earlier phases land here, not silently:
   Phase 1's fit-to-view transitions.
 - **Native-window verification on macOS and Linux** (ADR-0011), alongside
   signing and installers.
+- **Source editor upgrade** — the v1 YAML panel is a plain textarea; CodeMirror
+  brings syntax highlighting and inline `.err` underlines at the offending line.
+- **Performance-budget enforcement in CI** against a generated benchmark
+  workspace (spec/sync-engine.md budgets are design targets until then).
+- **Journal crash recovery** — transactions are journaled per workspace
+  (sync.rs) but nothing replays them yet.
+- **Granular staleness** — v1 blocks all editing on any stale file; the spec's
+  intent is that a stale views file disables only pinning.
+- **`workspace_open` at runtime** — the workspace is fixed at launch; switching
+  (and a File → Open dialog) lands with onboarding.
 
 **Exit:** a platform engineer who has never seen the product reaches a
 rendered model of their own repo in under 5 minutes (PRD metric), unassisted.
