@@ -1,0 +1,5 @@
+view: containers
+scope: shop
+level: L2
+layout:
+  web: [2, 1]

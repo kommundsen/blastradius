@@ -1,0 +1,11 @@
+[package]
+name = "blastradius-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Blastradius model core: workspace loading, schema validation, semantic diff (library-first, per ADR-0005)"
+
+[dependencies]
+# Span-aware YAML: every semantic error must carry file + line (spec/model-format.md §6),
+# which rules out serde-style deserialization that discards positions.
+marked-yaml = "0.8"

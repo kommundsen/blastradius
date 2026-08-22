@@ -1,0 +1,6 @@
+people:
+  user:
+    name: User
+external:
+  mainframe:
+    name: Mainframe

@@ -1,0 +1,8 @@
+system: shop
+containers:
+  web:
+    name: Web
+relations:
+  - from: web
+    to: apii
+    label: calls

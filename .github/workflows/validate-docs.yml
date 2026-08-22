@@ -1,27 +1,20 @@
 # The dogfood gate (docs/prd.md): docs/ must always be a valid Blastradius
-# workspace. Until the Phase 0 parser ships `blastradius validate`, the
-# stand-in validator enforces spec/model-format.md section 6 on every push.
+# workspace, validated by the real parser (`blastradius validate` — Phase 0
+# exit criterion). The Python stand-in this replaced is retired.
 name: validate-docs
 
 on:
   push:
-    paths:
-      - "docs/**"
-      - "tools/validate-docs.py"
-      - ".github/workflows/validate-docs.yml"
   pull_request:
-    paths:
-      - "docs/**"
-      - "tools/validate-docs.py"
-      - ".github/workflows/validate-docs.yml"
 
 jobs:
-  validate:
+  build-test-validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - run: pip install pyyaml
-      - run: python tools/validate-docs.py docs
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Test (unit, seeded-fault, conformance suites)
+        run: cargo test --workspace
+      - name: Dogfood gate — validate docs/
+        run: cargo run -p blastradius-cli -- validate docs

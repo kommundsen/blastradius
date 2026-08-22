@@ -31,6 +31,11 @@ containers:
         tech: elkjs · web worker
         description: Deterministic layered layout with pinning constraints and stability hints (ADR-0006).
 
+  cli:
+    name: CLI
+    tech: Rust
+    description: "`blastradius validate` and `blastradius diff` — the headless attachment point for CI (ADR-0005); enforces the dogfood gate on this folder."
+
   core:
     name: Core
     tech: Rust
@@ -76,6 +81,10 @@ relations:
     to: core.model-service
     label: doc queries
     protocol: Tauri IPC
+  - from: cli
+    to: core.model-service
+    label: validate · diff
+    protocol: library call
   - from: ui.canvas
     to: ui.layout-worker
     label: layout requests

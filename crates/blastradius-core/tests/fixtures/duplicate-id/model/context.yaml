@@ -1,0 +1,6 @@
+people:
+  user:
+    name: User
+external:
+  user:
+    name: Also User

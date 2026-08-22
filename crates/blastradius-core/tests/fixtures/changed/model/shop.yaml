@@ -1,0 +1,23 @@
+system: shop
+name: Shop
+containers:
+  web:
+    name: Storefront
+    tech: React
+  api:
+    name: API
+    tech: Rust
+  cache:
+    name: Cache
+    tech: Redis
+relations:
+  - from: user
+    to: web
+    label: uses
+  - from: web
+    to: api
+    label: calls
+    protocol: gRPC
+  - from: api
+    to: cache
+    label: reads

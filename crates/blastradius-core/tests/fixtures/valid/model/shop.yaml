@@ -1,0 +1,22 @@
+system: shop
+name: Shop
+containers:
+  web:
+    name: Web App
+    tech: React
+  api:
+    name: API
+    tech: Go
+    components:
+      router: { name: Router }
+relations:
+  - from: user
+    to: web
+    label: uses
+  - from: web
+    to: api
+    label: calls
+    protocol: HTTPS
+  - from: api
+    to: mainframe
+    label: settles

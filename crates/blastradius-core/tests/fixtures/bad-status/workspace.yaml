@@ -1,0 +1,5 @@
+workspace:
+  name: BadStatus
+  version: 1
+docs:
+  include: ["*.md"]

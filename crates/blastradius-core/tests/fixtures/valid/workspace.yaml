@@ -1,0 +1,9 @@
+workspace:
+  name: Fixture
+  version: 1
+model:
+  include: [model/*.yaml]
+views:
+  include: [views/*.yaml]
+docs:
+  include: ["*.md"]
