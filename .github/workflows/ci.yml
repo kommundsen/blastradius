@@ -59,6 +59,41 @@ jobs:
           name: architecture-html
           path: architecture.html
 
+  # Docs site (Phase 5): docs/ rendered by tools/build-site.mjs with the live
+  # model export bundled in. The deploy step needs GitHub Pages enabled once,
+  # manually: repo Settings -> Pages -> Source: "GitHub Actions".
+  site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Build live model export
+        run: cargo run -p blastradius-cli -- export docs -o architecture.html
+      - name: Build docs site
+        run: node tools/build-site.mjs
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+  deploy-site:
+    if: github.ref == 'refs/heads/main'
+    needs: site
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
   budgets:
     runs-on: ubuntu-latest
     steps:
