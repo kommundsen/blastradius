@@ -124,3 +124,13 @@ Hosted share links (ADR-0009's payload), in-app conflict resolution, PR-bot
 diff rendering in CI, L4 source-derived elements, deployment views, headless
 SVG/PNG export via a node script over ui/js/layout.js (spec/export.md v1
 boundary).
+
+**MCP server** (candidate, raised 2026-08-22): `blastradius mcp` as a CLI
+subcommand — a stdio MCP server over the core library so coding agents
+(Claude Code et al.) can query the model instead of parsing snapshot JSON.
+Task-shaped read tools first (element/relation lookup, blast-radius impact
+of a change, semantic diff vs a ref, "which ADRs/specs govern this
+element" via docs-as-model-objects); writes second, routed through the
+sync engine so agent edits are CST-preserving splices, never YAML
+re-serialization. ADR-0005's library-first design makes this a third head
+on the same core; needs its own ADR before building.
