@@ -12,6 +12,9 @@ async function scan(page, label) {
     id: v.id,
     impact: v.impact,
     nodes: v.nodes.map((n) => n.target.join(' ')).slice(0, 5),
+    // for contrast findings, surface what axe actually measured — CI-only
+    // failures are undebuggable without the computed colors
+    detail: v.nodes[0]?.any?.[0]?.data ?? null,
   }));
   expect(summary, `${label}: ${JSON.stringify(summary, null, 2)}`).toEqual([]);
 }
