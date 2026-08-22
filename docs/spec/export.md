@@ -44,8 +44,14 @@ Current view, current theme:
 
 ## CI / headless
 
-`blastradius export --html docs/ -o site/architecture.html` runs the same
-exporter from the Rust core without a WebView (SVG assembly is
-template-based, not DOM-scraped, precisely to keep this path headless).
-This is the roadmap's CI story: architecture docs published as a build
-artifact on every merge.
+`blastradius export <dir> -o architecture.html` runs from the Rust core
+without a WebView — headless **by construction**: the export embeds elkjs and
+lays out at open time, so build-time layout is never needed. CI publishes the
+artifact on every merge (the Phase 4 exit criterion).
+
+**v1 boundary**: headless SVG/PNG is *not* shipped — deterministic layout
+lives in elkjs (ADR-0006), so a headless raster would need a JS runtime in the
+export path. SVG/PNG are in-app exports serialized from the live layout, with
+fonts embedded via data URIs. If CI ever needs raster output, the route is a
+node script reusing ui/js/layout.js (same engine, same determinism) — recorded
+as a v2 theme, not planned for v1.

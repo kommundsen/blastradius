@@ -94,4 +94,6 @@ rendered model of their own repo in under 5 minutes (PRD metric), unassisted.
 ## v2 themes (not scheduled)
 
 Hosted share links (ADR-0009's payload), in-app conflict resolution, PR-bot
-diff rendering in CI, L4 source-derived elements, deployment views.
+diff rendering in CI, L4 source-derived elements, deployment views, headless
+SVG/PNG export via a node script over ui/js/layout.js (spec/export.md v1
+boundary).

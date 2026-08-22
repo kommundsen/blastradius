@@ -135,6 +135,7 @@ name = "blastradius-app"
 version = "0.1.0"
 dependencies = [
  "blastradius-core",
+ "dirs",
  "git2",
  "notify",
  "serde",

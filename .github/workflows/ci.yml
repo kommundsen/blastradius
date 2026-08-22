@@ -43,6 +43,22 @@ jobs:
           path: test-results/*.png
           if-no-files-found: ignore
 
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Import corpus bar + export tests
+        run: cargo test -p blastradius-core --test import
+      - name: Build architecture.html (Phase 4 exit criterion)
+        run: cargo run -p blastradius-cli -- export docs -o architecture.html
+      - name: Upload model artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: architecture-html
+          path: architecture.html
+
   app:
     strategy:
       fail-fast: false

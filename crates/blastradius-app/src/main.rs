@@ -197,6 +197,77 @@ fn open_in_editor(state: State<AppState>, rel: String) -> Result<(), String> {
     result.map(|_| ()).map_err(|e| e.to_string())
 }
 
+/// Share: build the self-contained HTML (ADR-0009) and save it to Downloads.
+#[tauri::command]
+fn export_html(state: State<AppState>, with_bodies: bool) -> Result<String, String> {
+    let root = root_of(&state)?;
+    let (ws, diags) = blastradius_core::load_workspace(&root);
+    if blastradius_core::diagnostics::has_errors(&diags) {
+        return Err("workspace is invalid — fix errors before exporting".into());
+    }
+    let vfs = blastradius_core::vfs::DiskVfs::new(&root);
+    let options = blastradius_core::export::ExportOptions { include_doc_bodies: with_bodies };
+    let html = blastradius_core::export::export_html(&vfs, &ws, &diags, &options)?;
+    let name = format!("{}-architecture.html", slug(&ws.name));
+    let path = downloads_path(&name)?;
+    std::fs::write(&path, html).map_err(|e| e.to_string())?;
+    Ok(path.display().to_string())
+}
+
+/// Save a frontend-produced export (SVG text or PNG base64) to Downloads.
+#[tauri::command]
+fn save_export(name: String, data: String, base64: bool) -> Result<String, String> {
+    if name.contains(['/', '\\']) || name.contains("..") {
+        return Err("bad file name".into());
+    }
+    let path = downloads_path(&name)?;
+    if base64 {
+        let bytes = decode_base64(&data)?;
+        std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    } else {
+        std::fs::write(&path, data).map_err(|e| e.to_string())?;
+    }
+    Ok(path.display().to_string())
+}
+
+fn downloads_path(name: &str) -> Result<PathBuf, String> {
+    let dir = dirs::download_dir()
+        .or_else(dirs::home_dir)
+        .ok_or("no downloads directory")?;
+    Ok(dir.join(name))
+}
+
+fn slug(s: &str) -> String {
+    s.to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+fn decode_base64(s: &str) -> Result<Vec<u8>, String> {
+    const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = Vec::with_capacity(s.len() * 3 / 4);
+    let mut buf = 0u32;
+    let mut bits = 0u8;
+    for c in s.bytes() {
+        if c == b'=' || c == b'\n' || c == b'\r' {
+            continue;
+        }
+        let v = T.iter().position(|&t| t == c).ok_or("bad base64")? as u32;
+        buf = (buf << 6) | v;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buf >> bits) as u8);
+        }
+    }
+    Ok(out)
+}
+
 fn startup_root() -> Option<PathBuf> {
     let candidate = std::env::args()
         .nth(1)
@@ -225,7 +296,9 @@ fn main() {
             git_history,
             snapshot_at,
             git_conflicts,
-            open_in_editor
+            open_in_editor,
+            export_html,
+            save_export
         ])
         .setup(move |app| {
             if let Some(root) = root {

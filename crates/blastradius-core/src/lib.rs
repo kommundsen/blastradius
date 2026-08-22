@@ -9,7 +9,9 @@
 pub mod diagnostics;
 pub mod diff;
 pub mod docs;
+pub mod export;
 pub mod git;
+pub mod import;
 pub mod manifest;
 pub mod model;
 pub mod parse;

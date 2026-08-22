@@ -1,0 +1,369 @@
+workspace "Name" "NL-Wallet" {
+
+    !identifiers hierarchical
+
+    model {
+
+        u = person "User" "End user of wallet App"
+        us = person "Wallet User Support"
+        uaPid = person "PID issuer admin"
+        uaPb = person "Issuer admin"
+
+        ws = softwareSystem "NL-Wallet" {
+            wab = group "NL-Wallet App containers" {
+                walletApp = container "Wallet app" "" "Android/iOS" {
+                    appGui = component "App Frontend" "" "flutter (dart)"
+                    appCore = component "App Core" "" "rust"
+                    appPlatform = component "Platform support" "native functions" "rust"
+                }
+                appDb = container "App database" "" "sqlite" {
+                    tags "Database"
+                }
+            }
+            revokeUi = container "Wallet Revocation Portal" "" "vite"
+            wb = group "NL-Wallet backend containers" {
+                walletBackend = container "WalletBackend (WB)" "Wallet backend" "axum (rust)" {
+                    hsmInstructionClient = component "Assisted wallet Instructions (WSCA)"
+                    walletAccountManager = component "Wallet Account manager (enroll / migrate / recover / revoke)"
+                    walletStatusManager = component "Status List Service"
+                    walletDenyList = component "Wallet Deny list manager"
+                }
+                updateServer = container "UpdateServer" "Serve app update policy" "nginx (static)" {
+                    updatePolicy = component "Policy configuration" "" "[update policy] section in .toml file" {
+                        tags "File"
+                    }
+                }
+
+                statusList = container "WIA status list" "" "Static content (TSL)"
+                configurationServer = container "ConfigurationServer" "Serve app config file" "nginx (static)"
+                db = container "WB database (accounts, WIA status)" "" "postgress" {
+                    tags "Database"
+                }       
+                auditDb = container "WB auditlog" "" "postgress" {
+                    tags "DatabaseS"
+                }    
+         
+            }
+            walletHsm = container "HSM device (WSCD)" "dedicated cryptographic hardware" 
+            adminPortal = container "Admin Portal" ""{ 
+               -> ws.walletBackend "[A-104] Manage vulnerable devices"
+               -> ws.walletBackend "[A-103] Revoke wallet (admin request)" 
+               -> ws.walletBackend.walletDenyList "Manage vulnerable devices"
+        }
+
+        }
+
+
+        iam = softwareSystem "IAM" "Keycloak"{ 
+            tags "HostingPlatform"
+        }
+        ws.adminPortal -> iam "[A-107] Admin user authentication/authorization"
+
+
+        ciCdPipeline = softwareSystem "CI/CD" "deployment"{ 
+            tags "HostingPlatform"
+            -> ws.configurationServer "[A-101] Maintain runtime config"
+            -> ws.updateServer.updatePolicy "[A-102] Maintain updatepolicy"
+        }
+
+        healthMonitoring = softwareSystem "Monitoring" "health monitoring"{
+            tags "HostingPlatform"
+            -> ws.walletBackend "[A-105] Get health"
+        }
+        performanceMetrics = softwareSystem "Performance monitoring" "Prometheus"{
+            tags "HostingPlatform"
+            -> ws.walletBackend "[A-106] Get metrics"
+        }
+
+        secureElement = softwareSystem "Secure Element" "Secure Enclave, Android TEE/Strongbox" ""{
+            tags "External"
+        }
+
+        platformServicesApple = softwareSystem "Apple AppAttest"{
+          tags "External"
+        }
+        platformServices = softwareSystem "Apple AppAttest / Google Play Integrity"{
+          tags "External"
+        }
+
+        sentry = softwareSystem "Sentry" {
+            tags "External"
+        }
+
+
+
+        ua = person "Wallet Technical Support"{
+            -> ws "Maintain configuration, Manage vulnerabilities" 
+            -> ws.adminPortal "Perform system administration"
+        }
+
+        hc = softwareSystem "BRP-V"
+
+        verifier = softwareSystem "Verifier" {
+            tags "External"
+            ov = container "OV-component"{
+                verifying = component "Disclosure endpoint"
+            }
+
+            rpApp = container "Relying Party application"
+        }
+        issuerPb = softwareSystem "(Pub/Q)EAA Issuer" {
+            tags "External"
+
+            vvPbi = container "VV for Disclosure based issuance" {
+                statusManager = component "Attestation Status manager" ""  "Rust (endpoint)"
+                issuing = component "Disc. based issuing endpoint" "" "Rust (endpoint)"
+            }
+            statusDb = container "attestation-status storage" "" "postgress DB" {
+                    tags "Database"
+            }
+
+            ds = container "Issuer attestation data source"
+            statusList = container "Attestation status list" "" "Static content (TSL)"
+        }
+
+        issuerPid = softwareSystem "PID Issuer" {
+            tags "External"
+
+            vvPid = container "VV for PID issuer" "" "Rust app" {
+                statusManager = component "Attestation Status manager" ""  "Rust (endpoint)"
+                issuing = component "Issuing endpoint" "" "Rust (endpoint)"
+            }
+            pidStatusDb = container "attestation-status storage" "" "postgress DB" {
+                    tags "Database"
+            }
+            //pidIssuer = container "PID-issuer business logic" "" "Rust app"
+            statusList = container "PID attestation status list" "" "Static content (TSL)"
+            mockUserStorage = container "Demo user storage" "" "Static files" {
+                tags "Database"
+            }
+            authServer = container "Authorization server" "" "OIDC/SAML proxy"
+        }
+
+        haalCentraal = softwareSystem "BRP V" {
+            tags "External"
+        }
+
+        digid = softwareSystem "DigiD" "OIDC/SAML proxy" {
+            tags "External"
+        }
+
+        issuerPid -> digid "User authentication"
+        u -> ws "Uses"
+        u -> ws.revokeUi "Revoke wallet"
+        u -> ws.walletApp "Uses"
+        u -> ws.walletApp.appGui "Has interactions"
+
+
+
+        ws -> platformServices "[E-501] Request/verify app- and keyattestations"
+        ws -> digid "[E-201] Start user authentication (onboarding and recovery)"
+        ws -> verifier.ov "[E-401] Present data"
+        //issuerPb -> ws "Issue attestations"
+        ws.walletApp -> platformServices "[I-113] Request App/key attestation (Apple AppAttest)"
+        ws.walletApp -> sentry " [I-114] Send error report"
+        ws.walletBackend -> platformServices "[I-405] Verify App attestation (Google Play Integrity)"
+        ws.walletApp -> digid "[I-106] Start authentication for activation/recovery"
+        ws.walletBackend -> ws.db "[I-401] Reads from and writes to"
+
+        ws.walletApp.appCore -> ws.walletApp.appGui "Exchange information from core to GUI"
+        ws.walletApp.appGui -> ws.walletApp.appCore "Exchange information from GUI to core"
+        ws.walletApp.appCore -> ws.walletApp.appPlatform "Use platform routines (iOS/Android)"
+        ws.walletApp.appCore -> ws.updateServer "[I-105] Get update policies"
+        ws.walletApp.appCore -> ws.configurationServer "[I-104] Get runtime configuration"
+        ws.walletApp.appCore -> ws.walletBackend.hsmInstructionClient "[I-103] HSM-assisted operation (sign, generate key, PIN mgmt, recovery)"
+        ws.walletBackend.hsmInstructionClient -> ws.walletBackend.walletAccountManager "account operations"
+        ws.walletApp.appCore -> ws.appDb "[I-101] Store/retrieve attestations, logs, configuration"
+        ws.walletApp.appPlatform -> secureElement "[I-102] Manage keys, signing ops"
+        ws.revokeUi -> ws.walletBackend.walletAccountManager "[I-407] Revoke wallet (user request)"
+        //PID issuer specific
+        ws.walletApp -> issuerPid "[E-107] Wallet activation and PID issuance, [E-103] check PID status "
+        ws.walletApp.appCore -> issuerPid.authServer "[I-107] Wallet activation and PID issuance, [I-108] check PID status "
+
+        ws.walletBackend -> ws.walletHsm "[I-403] Call HSM for assisted operation"
+        ws.walletBackend -> ws.statusList "[I-402] Publish WIA statuslist"
+
+
+        ws.walletApp -> issuerPb "[E-301] Perform disclosure based issuance, [E-302] Retrieve Status List"
+        ws.walletApp -> issuerPb.vvPbi "[I-109] Perform disclosure based issuance, [I-110] Retrieve Status List"
+
+        ws.walletApp -> verifier "[I-111] Disclose attributes to verifier"
+
+        ws.walletBackend.walletAccountManager -> ws.walletBackend.walletStatusManager "Update WIA status"
+        ws.walletBackend.walletStatusManager -> ws.statusList "Publish WIA statuslist"
+        ws.walletBackend.hsmInstructionClient -> ws.walletHsm "Process HSM instruction"
+        ws.walletBackend.hsmInstructionClient -> ws.db "Store/retrieve (encrypted) keys"
+        ws.walletBackend.hsmInstructionClient -> ws.walletBackend.walletDenyList "Check denylist"
+        ws.walletBackend.walletAccountManager -> ws.db "Store/retrieve accountdata"
+        ws.walletBackend.walletStatusManager -> ws.db "Store/retrieve WIA data + status"
+        ws.walletBackend.walletDenyList -> ws.db "Store/retrieve denylist"
+        ws.walletBackend -> ws.auditDb "[I-409] Log audit data"
+   
+
+        us -> ws.revokeUi "Revoke wallet"
+        issuerPid -> ws.statusList "[E-102] Check wallet validity"
+        issuerPid.vvPid -> ws.statusList "Get WIA status"
+
+        ws.walletApp.appCore -> issuerPid.statusList "Get attestation status list (PID)"
+        //verifier.ov -> issuerPid.statusList "Get attestation status list (PID)"
+        uaPid -> issuerPid.vvPid.statusManager "Update PID attestation status"
+        issuerPid.vvPid.statusManager -> issuerPid.statusList "Publish Status List"
+
+        issuerPid.vvPid.statusManager -> issuerPid.pidStatusDb "Persist/retrieve attestation status"
+        issuerPid.vvPid.issuing -> issuerPid.vvPid.statusManager "Persist attestation status"
+        issuerPid.vvPid.issuing -> issuerPid.authServer "Get authenticated BSN"
+
+
+        issuerPid.vvPid -> issuerPid.mockUserStorage "Retrieve PID attestation data"
+        //issuerPid.authServer -> digid "Retrieve authentication result"
+
+        //issuerPid.pidIssuer -> issuerPid.mockUserStorage "Fetch PID-Attributes"
+        ws.walletApp.appCore -> issuerPid.vvPid  "Retrieve PID / Disclose WIA + PoA"
+        //issuerPid.vvPid.issuing  -> issuerPid.pidIssuer "Retrieve attestation data"
+        issuerPid.vvPid.issuing  -> issuerPid.mockUserStorage "Retrieve attestation data"
+        //issuerPid.mockUserStorage -> haalCentraal "Call BRP V"
+
+        ws.walletApp.appCore -> issuerPb "Perform disclosure based issuance, retrieve Status List"
+        ws.walletApp.appCore -> verifier "Perform disclosure of attributes"
+        ws.walletApp.appCore -> issuerPb.statusList "Get attestation status list"
+        //verifier.ov -> issuerPb.statusList "Get attestation status list"
+
+        issuerPb.vvPbi.issuing -> issuerPb.ds "Retrieve attestation data for disclosed attestation"
+        issuerPb.vvPbi.statusManager -> issuerPb.statusDb "Persist/retrieve attestation status"
+        issuerPb.vvPbi.issuing -> issuerPb.vvPbi.statusManager "Persist attestation status"
+        uaPb -> issuerPb.vvPbi.statusManager "Update attestation status"
+        issuerPb.vvPbi.statusManager -> issuerPb.statusList "Publish Status List"
+
+
+        verifier.rpApp -> verifier.ov.verifying "Disclosure session operations"
+    }
+
+    views {
+        systemContext ws "AD1NL-Wallet" {
+            include u ws verifier issuerPid issuerPb platformServices ua
+        }
+
+        systemContext ws "AD2NL-Wallet" {
+            include u ws verifier issuerPid issuerPb platformServices ua iam
+        }
+
+        systemContext ws "B1PID-Issuer" {
+            include u issuerPid ws verifier
+        }
+
+        container ws "D2NL-WalletSystem" {
+            include * platformServices
+        }
+
+        component ws.walletBackend "GD2NL-walletBackend" {
+            include *
+
+        }
+
+        component ws.walletApp "HD2NL-WalletApp" {
+            include * verifier ws.wab
+        }
+
+        systemContext issuerPb "ID3IssuerSoftwareSystem" {
+            include *
+        }
+
+        container issuerPid "KD4PID_IssuerSoftwareSystem" {
+            include * ws uaPid digid
+        }
+
+        component issuerPid.vvPid "MD5PID_IssuerVV" {
+            include * uaPid
+        }
+
+        component issuerPb.vvPbi "ND5PID_IssuerPB" {
+            include * uaPb
+        }
+
+        properties {
+            "structurizr.sort" "key"
+        }
+
+
+        styles {
+
+            element "Element" {
+                color #ffffff
+            }
+            element "Person" {
+
+                background #7992bb
+                stroke #09326b
+                shape person
+                fontSize 16
+                width 300
+            }
+            element "Software System" {
+                background #2b81e9
+                shape Window
+                fontSize 32
+            }
+            element "Container" {
+                background #2b81e9
+                shape RoundedBox
+                fontSize 32
+            }
+
+
+            element "Component" {
+                background #1056ab
+                shape Component
+            }
+
+            element "Database" {
+                shape cylinder
+            }
+            
+            element "DatabaseS" {
+                shape cylinder
+                fontSize 25
+                width 300
+            }
+
+
+            element "File" {
+                shape Folder
+            }
+
+            element "newComponent" {
+                background #88DCaa
+            }
+
+            element "NewDB" {
+                shape cylinder
+                background #88DCaa
+            }
+            element "External" {
+                background #aaaaaa
+                fontSize 26
+
+            }
+            element "HostingPlatform" {
+                stroke #2b81e9
+                color #2b81e9
+
+                background #ddedff
+                fontSize 26
+
+            }
+
+            relationship "Relationship" {
+                fontSize 28
+            }
+        }
+       // branding {            
+            //font "Calibri, Arial" 
+        //}
+
+    }
+
+    configuration {
+        scope none
+    }
+
+}

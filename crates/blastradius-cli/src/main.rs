@@ -18,6 +18,11 @@ fn main() -> ExitCode {
             Some(dir) => gitdiff(dir, args.get(2).map(String::as_str), args.get(3).map(String::as_str)),
             None => usage(),
         },
+        Some("export") => export(&args[1..]),
+        Some("import") => match (args.get(1), args.get(2)) {
+            (Some(dsl), Some(out)) => import(dsl, out),
+            _ => usage(),
+        },
         _ => usage(),
     }
 }
@@ -171,5 +176,104 @@ fn tag_str(c: &str) -> &'static str {
         "added" => "+",
         "removed" => "-",
         _ => "~",
+    }
+}
+
+/// Self-contained HTML export (ADR-0009) — the CI story: publish the model as
+/// a build artifact on every merge. Headless: layout runs in the viewer.
+fn export(args: &[String]) -> ExitCode {
+    let mut dir = None;
+    let mut out = None;
+    let mut bodies = false;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--with-doc-bodies" => bodies = true,
+            "-o" => out = it.next().cloned(),
+            other => dir = Some(other.to_string()),
+        }
+    }
+    let (Some(dir), Some(out)) = (dir, out) else {
+        return usage();
+    };
+    let root = Path::new(&dir);
+    let (ws, diags) = blastradius_core::load_workspace(root);
+    if has_errors(&diags) {
+        for d in &diags {
+            eprintln!("{d}");
+        }
+        eprintln!("cannot export: workspace is invalid");
+        return ExitCode::FAILURE;
+    }
+    let vfs = blastradius_core::vfs::DiskVfs::new(root);
+    let options = blastradius_core::export::ExportOptions { include_doc_bodies: bodies };
+    match blastradius_core::export::export_html(&vfs, &ws, &diags, &options) {
+        Ok(html) => {
+            if let Some(parent) = Path::new(&out).parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            match std::fs::write(&out, &html) {
+                Ok(()) => {
+                    println!("{out}: {} KB, self-contained, zero network requests", html.len() / 1024);
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("cannot write {out}: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("export failed: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// One-way Structurizr DSL import with fidelity report (ADR-0002).
+fn import(dsl_path: &str, out_dir: &str) -> ExitCode {
+    let src = match std::fs::read_to_string(dsl_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("cannot read {dsl_path}: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let imported = match blastradius_core::import::import_dsl(&src) {
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!("import failed: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let out = Path::new(out_dir);
+    for (rel, text) in &imported.files {
+        let path = out.join(rel);
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Err(e) = std::fs::write(&path, text) {
+            eprintln!("cannot write {}: {e}", path.display());
+            return ExitCode::FAILURE;
+        }
+    }
+    // the imported workspace must validate — that is what "clean import" means
+    let (ws, diags) = blastradius_core::load_workspace(out);
+    for d in &diags {
+        println!("{d}");
+    }
+    println!(
+        "imported {:?}: {} elements, {} files, {} constructs not mapped (see import-report.md)",
+        imported.workspace_name,
+        ws.elements.len(),
+        imported.files.len(),
+        imported.fidelity.skipped.len(),
+    );
+    if has_errors(&diags) {
+        println!("RESULT: IMPORTED WITH ERRORS");
+        ExitCode::FAILURE
+    } else {
+        println!("RESULT: CLEAN");
+        ExitCode::SUCCESS
     }
 }

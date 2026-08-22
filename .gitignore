@@ -20,5 +20,9 @@ Desktop.ini
 test-results/
 playwright-report/
 
+# Build products
+ui/mock/export-test.html
+architecture.html
+
 # Local scratch
 *.local
