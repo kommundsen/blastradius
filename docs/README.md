@@ -62,3 +62,13 @@ problem.
 - Decisions live in ADRs; specs describe mechanisms; the PRD owns scope and
   success metrics. If a paragraph is deciding something, it is an ADR.
 - Never hand-edit an element id. Ids are permanent (ADR-0003).
+- **Every finding that needs future follow-up is recorded here the moment it
+  arises** — ideally in the same commit as the code that created it, never
+  only in a conversation, review thread, or someone's head. Destinations, in
+  order: a deferred capability → the roadmap's Phase 5 "named debts" list (or
+  v2 themes); a spec that no longer matches the implementation → amend the
+  spec with an explicit "v1 simplification" / "not yet implemented" note; an
+  implementation-local gap → a comment at the exact site, pointing at the doc
+  that will retire it. A limitation we know about but did not write down is
+  treated as an undocumented model error — the same class of rot this product
+  exists to kill.
