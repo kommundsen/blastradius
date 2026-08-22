@@ -155,6 +155,35 @@ All from the repo root in PowerShell.
     delivers them to users automatically, so this build never carries a
     self-updater.
 
+## Troubleshooting
+
+**System-wide ~1s freezes while the installed package is foreground**
+(observed 2026-08-22, on step 12's local smoke test): moving the cursor
+over any hover-animated element (tree rows, buttons — not specific to
+one) froze the entire desktop, including the OS cursor, for about a
+second, recurring every 20–30s once interaction started. Traced through:
+
+- The app's own CSS hover rules are trivial (`background-color` swaps,
+  no filters/transforms/JS) and the *unpackaged* dev build
+  (`cargo run -p blastradius-app`) never reproduced it under the same
+  interaction — ruling out our rendering code.
+- Windows Defender: no matching Protection History entries; disabling
+  real-time protection and adding an exclusion made no difference —
+  ruling out AV/reputation scanning.
+- It occurred only while the window was foreground and *unoccluded*, not
+  when partially covered by another window — the signature of a
+  DXGI/capture hook (Xbox Game Bar or a GPU vendor overlay) attaching to
+  the foreground surface, which is far more likely to trigger on a
+  full-trust MSIX (`runFullTrust` + package identity) than a plain debug
+  exe.
+- **Resolved by updating the GPU driver.** The exact mechanism (a driver
+  bug in swapchain/present handling, possibly only surfaced through a
+  Game Bar or overlay capture hook) was not isolated further once the
+  symptom was gone — recorded here so a future tester hitting this
+  doesn't redo the Defender/occlusion investigation from scratch. If it
+  recurs on different hardware: check for Game Bar / GeForce
+  Experience / Radeon Software overlay capture before assuming an app bug.
+
 ## Later, recorded not scheduled
 
 - **arm64 package**: build with `--target aarch64-pc-windows-msvc`, pack a
