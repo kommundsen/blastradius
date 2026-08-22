@@ -99,8 +99,12 @@ Shipped:
 Deferred to the packaging release (deliberately, user-decided):
 
 - **Packaging/signing/updates** for the three platforms — `bundle.active` is
-  still false; installers, a Windows signing cert, and an Apple Developer ID
-  are open decisions with real costs.
+  still false. **Windows is now decided and costed at zero** (2026-08-22):
+  Microsoft Store MSIX via the `winapp` CLI, Store-signed, Store-updated —
+  ADR-0013 has the decision, spec/msix-store-packaging.md the step-by-step
+  guide (owner steps: free Partner Center enrollment + name reservation).
+  macOS remains the open cost decision (Apple Developer ID, $99/year);
+  Linux undecided.
 - **Native-window verification on macOS and Linux** (ADR-0011) — needs the
   installers (or hardware in hand); WebKit-in-CI remains the rendering gate.
 

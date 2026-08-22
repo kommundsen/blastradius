@@ -1,0 +1,146 @@
+---
+doc: spec-msix-store-packaging
+type: spec
+status: current
+elements: [blastradius.shell, blastradius.cli]
+---
+
+# Spec: MSIX packaging for the Microsoft Store
+
+How the Windows build ships, per [ADR-0013](../adr/0013-msix-store-distribution.md).
+Two halves: a one-time setup (account, identity, manifest) and a repeatable
+per-release loop (build, pack, test, submit). Everything is free of charge;
+the Store signs the package.
+
+## One-time: account and identity (owner-only, in the browser)
+
+1. **Enroll** at [partner.microsoft.com](https://partner.microsoft.com/dashboard)
+   → Microsoft Store program, account type *Individual*. Registration is
+   free (since September 2025). Identity verification takes minutes to a
+   few days.
+2. **Reserve the name**: Apps and Games → *New product* → *App (MSIX/PWA)* →
+   reserve **Blastradius**. Name reservations last indefinitely once a
+   submission exists; unused ones expire after ~3 months.
+3. **Copy the identity values** from *Product management → Product identity*:
+   - `Package/Identity/Name` (e.g. `12345KimOmmundsen.Blastradius`)
+   - `Package/Identity/Publisher` (a `CN=`-prefixed GUID)
+   - `PublisherDisplayName`
+
+   These go verbatim into `Package.appxmanifest` below. A pack whose
+   publisher differs from these values is rejected at upload.
+
+## One-time: packaging scaffold (repo work)
+
+4. **Install the CLI**: `winget install microsoft.winappcli --source winget`
+   (re-run any time to update).
+5. **Scaffold** in a committed `packaging/msix/` directory: run
+   `winapp init` there. Prompts: package name and publisher → the Partner
+   Center values from step 3; version → `0.1.0.0`; entry point →
+   `blastradius-app.exe`; SDK setup → *Do not setup SDKs* (we use the Rust
+   `windows` ecosystem, not C++ headers). This writes `Package.appxmanifest`
+   and an `Assets/` folder.
+6. **Edit the manifest**:
+   - `DisplayName` **Blastradius**, `Description` from the README one-liner.
+   - `TargetDeviceFamily` `Windows.Desktop`, `MinVersion="10.0.17763.0"`.
+   - Add an **app execution alias** so the CLI lands on PATH with the Store
+     install (inside the `<Application>` element):
+
+     ```xml
+     <Extensions>
+       <uap3:Extension Category="windows.appExecutionAlias"
+                       Executable="blastradius.exe"
+                       EntryPoint="Windows.FullTrustApplication">
+         <uap3:AppExecutionAlias>
+           <desktop:ExecutionAlias Alias="blastradius.exe" />
+         </uap3:AppExecutionAlias>
+       </uap3:Extension>
+     </Extensions>
+     ```
+
+     (declare the `uap3` and `desktop` XML namespaces on `<Package>`).
+7. **Replace the placeholder assets** with renders of
+   `crates/blastradius-app/icons/icon.png`: at minimum Square44x44Logo,
+   Square150x150Logo, StoreLogo (50×50); Wide310x150 optional. Keep the
+   generated names — the manifest references them.
+8. **Version rule**: manifest versions are four-part and the Store owns the
+   fourth digit — always `x.y.z.0`, where `x.y.z` mirrors
+   `tauri.conf.json`/`Cargo.toml`. Windows refuses same-or-lower-version
+   installs, so every repack that should install over a previous one bumps
+   the version.
+
+## Per release: build, pack, test locally
+
+All from the repo root in PowerShell.
+
+9. **Build both binaries** (release; the exe embeds the `ui/` assets):
+
+   ```powershell
+   cargo build --release -p blastradius-app -p blastradius-cli
+   ```
+
+10. **Stage** just the payload (target/ is huge; the package wants 2 files):
+
+    ```powershell
+    New-Item -ItemType Directory -Force packaging\msix\dist | Out-Null
+    Copy-Item target\release\blastradius-app.exe, target\release\blastradius.exe packaging\msix\dist\
+    ```
+
+11. **Pack + install locally** (dev-signed; cert generate/install are
+    once-per-machine, install needs an elevated prompt):
+
+    ```powershell
+    cd packaging\msix
+    winapp cert generate --if-exists skip
+    winapp pack .\dist --cert .\devcert.pfx
+    winapp cert install .\devcert.pfx     # admin, once
+    Add-AppxPackage .\Blastradius_0.1.0.0_x64.msix
+    ```
+
+    `devcert.pfx` and `*.msix` stay untracked (gitignore them under
+    `packaging/msix/`).
+
+12. **Smoke-test the installed package** — this is where MSIX-specific
+    breakage would show:
+    - launch from the Start menu; open a real workspace; make an edit and
+      confirm the YAML on disk changed (full-trust MSIX writes normally to
+      user folders, but AppData writes are virtualized — we keep state in
+      the workspace, so nothing should surprise);
+    - external-edit the YAML and confirm the watcher picks it up;
+    - `blastradius validate <dir>` from a fresh terminal proves the
+      execution alias;
+    - uninstall from Start menu → reinstall → still opens.
+    - This packaged build is also the vehicle for the owed items from the
+      roadmap: the ADR-0011 native-window verification pass and the
+      5-minute-stranger exit run.
+
+## Per release: submit
+
+13. **Pack unsigned for the Store** (the Store signs; upload wants your
+    identity, not a dev cert): repeat step 11's pack **without** `--cert`.
+14. In Partner Center, open the reserved product → **Start submission**:
+    - *Packages*: upload the `.msix`.
+    - *Pricing*: Free, pick markets.
+    - *Properties*: category **Developer tools**.
+    - *Age ratings*: IARC questionnaire (all "no" → E for Everyone).
+    - *Privacy*: the app collects and transmits nothing — declare no. Full
+      trust apps still sometimes get asked for a policy URL in review; if
+      so, add a one-page privacy note to the docs site and link it.
+    - *Store listing*: description, at least one screenshot (1366×768+;
+      the canvas over the dogfood model is the obvious shot).
+15. **Submit.** Certification typically clears in 24–72 h; full-trust
+    desktop apps get a closer look on the first submission. Once live,
+    updates are just a version bump + repack + new submission — the Store
+    delivers them to users automatically, so this build never carries a
+    self-updater.
+
+## Later, recorded not scheduled
+
+- **arm64 package**: build with `--target aarch64-pc-windows-msvc`, pack a
+  second MSIX, upload both to one submission. Not blocking — Windows on ARM
+  runs the x64 package under emulation.
+- **CI submission**: `msstore-cli` can push submissions from GitHub Actions
+  once releases are routine; needs Partner Center API credentials (Entra
+  app registration).
+- **WebView2 absent** on an unpatched Windows 10: Tauri errors at launch.
+  Accepted residual risk (Win11 ships it, Edge servicing covers Win10);
+  revisit only if certification or a user report hits it.
