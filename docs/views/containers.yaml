@@ -8,4 +8,9 @@ layout:
   shell: [8, 1]
   ui: [4, 5]
   core: [12, 5]
+  reviewer: [21, 12]
+  git-repo: [21, 18]
+  structurizr-workspace: [15, 23]
+  cli: [8, 18]
+  architect: [0, 24]
 include-context: true

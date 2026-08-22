@@ -118,3 +118,12 @@ relations:
   - from: cli.mcp-server
     to: core.sync-engine
     label: applies operations through
+  - from: shell
+    to: ui
+    label: "hosts the WebView, brokers IPC"
+  - from: cli
+    to: core.exporter
+    label: export command
+  - from: core.exporter
+    to: core.model-service
+    label: sealed snapshot of the model
