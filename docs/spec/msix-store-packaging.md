@@ -186,6 +186,41 @@ second, recurring every 20–30s once interaction started. Traced through:
   recurs on different hardware: check for Game Bar / GeForce
   Experience / Radeon Software overlay capture before assuming an app bug.
 
+**Windows App Certification Kit: two expected findings, overall `WARNING`**
+(observed 2026-08-22, local WACK run before first submission — report
+`APP_TYPE="Centennial"`, i.e. WACK treats our full-trust MSIX as a
+converted Win32/Desktop Bridge app, which is correct). Neither should
+block certification (overall result is `WARNING`, not `FAIL`); recorded
+so a future re-run doesn't re-diagnose them:
+
+- **FAIL, "Blocked executables" (test 88, `OPTIONAL="TRUE"`)** — flags
+  `blastradius-app.exe` and `blastradius.exe` for `CreateProcessW` /
+  `ShellExecuteW` references and string matches on `cmd`/`cmd.exe`. Real
+  and intentional: `open_in_editor` in
+  [main.rs](../../crates/blastradius-app/src/main.rs) uses
+  `Command::new("cmd").args(["/c", "start", ""])` — the standard
+  cross-platform "open this file with its OS-default app" idiom (`open`
+  on macOS, `xdg-open` on Linux), called only on a workspace-relative
+  path already validated against `..` traversal. This check targets
+  sandboxed apps trying to escape confinement; a full-trust app launching
+  processes is exactly what `runFullTrust` exists to permit. If a
+  reviewer asks: *"Opens the currently-open workspace file with its
+  OS-registered default application, via the platform-standard
+  `cmd /c start` / `open` / `xdg-open` idiom."*
+- **WARNING, "DPIAwarenessValidation" (test 92, `OPTIONAL="FALSE"`)** —
+  "the app is not DPI Aware." A known false positive for non-MSBuild
+  toolchains: Tauri's windowing crate (`tao`) calls Windows'
+  `SetProcessDpiAwarenessContext` at runtime (confirmed in
+  `tao`'s Windows backend source), but WACK's static analyzer only reads
+  the PE's *embedded manifest resource*, not runtime API calls, so it
+  never sees a declared `<dpiAwareness>` and flags it regardless. Same
+  reported behavior for Avalonia apps, which set DPI awareness the same
+  way ([AvaloniaUI/Avalonia#17769](https://github.com/AvaloniaUI/Avalonia/discussions/17769)).
+  The app is actually per-monitor DPI-aware already; this is cosmetic to
+  the report, not a real rendering bug. Not pursued further (would mean
+  embedding a Win32 manifest resource purely to satisfy the static
+  check) since it doesn't block submission.
+
 ## Later, recorded not scheduled
 
 - **arm64 package**: build with `--target aarch64-pc-windows-msvc`, pack a
