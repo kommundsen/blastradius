@@ -99,14 +99,23 @@ Shipped:
 Deferred to the packaging release (deliberately, user-decided):
 
 - **Packaging/signing/updates** for the three platforms — `bundle.active` is
-  still false. **Windows is now decided and costed at zero** (2026-08-22):
-  Microsoft Store MSIX via the `winapp` CLI, Store-signed, Store-updated —
-  ADR-0013 has the decision, spec/msix-store-packaging.md the step-by-step
-  guide (owner steps: free Partner Center enrollment + name reservation).
-  macOS remains the open cost decision (Apple Developer ID, $99/year);
-  Linux undecided.
+  still false. **Windows is shipped** (2026-08-22): Microsoft Store MSIX via
+  the `winapp` CLI, Store-signed, Store-updated, zero cost. ADR-0013 has the
+  decision, spec/msix-store-packaging.md the step-by-step guide plus the
+  local-smoke-test and WACK-certification findings hit along the way. First
+  submission passed certification 2026-08-22 and is in the Store's publish
+  queue, awaiting public listing — nothing left to do but wait. macOS
+  remains the open cost decision (Apple Developer ID, $99/year); Linux
+  undecided.
 - **Native-window verification on macOS and Linux** (ADR-0011) — needs the
   installers (or hardware in hand); WebKit-in-CI remains the rendering gate.
+  Windows' packaged-install leg of this is now covered too, beyond the
+  continuous dev-machine testing ADR-0011 originally scoped: the MSIX local
+  smoke test (spec/msix-store-packaging.md step 12) exercised a real
+  Start-menu launch, install/uninstall/reinstall, and external-edit
+  detection against the installed package — and caught a real (if
+  ultimately driver-related, not app-related) foreground-freeze issue that
+  dev-mode testing never would have surfaced.
 
 Known advisory (recorded 2026-08-22, revisit with the packaging release):
 Dependabot flags `glib` 0.18 (RUSTSEC unsoundness in `VariantStrIter`,
