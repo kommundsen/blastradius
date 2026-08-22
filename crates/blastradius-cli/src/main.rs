@@ -14,6 +14,10 @@ fn main() -> ExitCode {
             _ => usage(),
         },
         Some("snapshot") => snapshot(args.get(1).map(String::as_str).unwrap_or(".")),
+        Some("gitdiff") => match args.get(1) {
+            Some(dir) => gitdiff(dir, args.get(2).map(String::as_str), args.get(3).map(String::as_str)),
+            None => usage(),
+        },
         _ => usage(),
     }
 }
@@ -30,7 +34,8 @@ fn usage() -> ExitCode {
 fn snapshot(dir: &str) -> ExitCode {
     let root = Path::new(dir);
     let (ws, diags) = blastradius_core::load_workspace(root);
-    let snap = blastradius_core::snapshot::snapshot(root, &ws, &diags);
+    let vfs = blastradius_core::vfs::DiskVfs::new(root);
+    let snap = blastradius_core::snapshot::snapshot(&vfs, &ws, &diags);
     println!("{}", serde_json::to_string_pretty(&snap).expect("snapshot serializes"));
     if has_errors(&diags) {
         ExitCode::FAILURE
@@ -104,5 +109,67 @@ fn tag(c: blastradius_core::diff::Change) -> &'static str {
         Added => "+",
         Removed => "-",
         Changed => "~",
+    }
+}
+
+/// Semantic diff from git history (spec/git-and-diff.md): base defaults to
+/// the merge-base with the default branch; current defaults to the working
+/// tree.
+fn gitdiff(dir: &str, base_ref: Option<&str>, cur_ref: Option<&str>) -> ExitCode {
+    use blastradius_core::git::GitContext;
+    let root = Path::new(dir);
+    let Some(ctx) = GitContext::discover(root) else {
+        eprintln!("{dir}: not inside a git repository");
+        return ExitCode::from(2);
+    };
+    let base_label = base_ref
+        .map(str::to_string)
+        .or_else(|| ctx.default_base())
+        .unwrap_or_else(|| "HEAD".to_string());
+
+    let (base_ws, base_diags) = match ctx.load_at(&base_label) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("cannot load base {base_label}: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let (cur_ws, cur_diags) = match cur_ref {
+        Some(r) => match ctx.load_at(r) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("cannot load {r}: {e}");
+                return ExitCode::from(2);
+            }
+        },
+        None => blastradius_core::load_workspace(root),
+    };
+    if has_errors(&base_diags) || has_errors(&cur_diags) {
+        eprintln!("cannot diff: one side is invalid");
+        return ExitCode::from(2);
+    }
+
+    let payload = blastradius_core::diff::diff_payload(&base_label, &base_ws, &cur_ws);
+    for e in &payload.elements {
+        println!("{} element {}", tag_str(e.change), e.id);
+    }
+    for r in &payload.relations {
+        let label = r.label.as_deref().map(|l| format!(" ({l})")).unwrap_or_default();
+        println!("{} relation {} -> {}{label}", tag_str(r.change), r.from, r.to);
+    }
+    for l in &payload.layout {
+        println!("~ layout {} [{}]", l.view, l.pins.join(", "));
+    }
+    if payload.elements.is_empty() && payload.relations.is_empty() && payload.layout.is_empty() {
+        println!("no semantic changes vs {base_label}");
+    }
+    ExitCode::SUCCESS
+}
+
+fn tag_str(c: &str) -> &'static str {
+    match c {
+        "added" => "+",
+        "removed" => "-",
+        _ => "~",
     }
 }

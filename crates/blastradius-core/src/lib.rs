@@ -9,11 +9,13 @@
 pub mod diagnostics;
 pub mod diff;
 pub mod docs;
+pub mod git;
 pub mod manifest;
 pub mod model;
 pub mod parse;
 pub mod snapshot;
 pub mod validate;
+pub mod vfs;
 pub mod views;
 mod yaml;
 
@@ -27,27 +29,33 @@ pub use model::Workspace;
 pub const SCHEMA_VERSION: u64 = 1;
 
 /// Load a workspace folder (the directory containing `workspace.yaml`).
+pub fn load_workspace(root: &Path) -> (Workspace, Vec<Diagnostic>) {
+    load_workspace_vfs(&vfs::DiskVfs::new(root))
+}
+
+/// Load a workspace from any file source — the working tree, a git revision,
+/// or a conflict stage (spec/git-and-diff.md).
 ///
 /// Always returns the best-effort workspace plus every diagnostic gathered on
 /// the way; the workspace is usable when no diagnostic is `Severity::Error`.
-pub fn load_workspace(root: &Path) -> (Workspace, Vec<Diagnostic>) {
+pub fn load_workspace_vfs(source: &dyn vfs::Vfs) -> (Workspace, Vec<Diagnostic>) {
     let mut diags = Vec::new();
     let mut ws = Workspace::default();
 
-    let manifest = match manifest::load(root, &mut diags) {
+    let manifest = match manifest::load(source, &mut diags) {
         Some(m) => m,
         None => return (ws, diags), // unreadable/invalid manifest: diagnostics explain
     };
     ws.name = manifest.name.clone();
 
     for file in &manifest.model_files {
-        parse::parse_model_file(root, file, &mut ws, &mut diags);
+        parse::parse_model_file(source, file, &mut ws, &mut diags);
     }
     for file in &manifest.view_files {
-        views::parse_view_file(root, file, &mut ws, &mut diags);
+        views::parse_view_file(source, file, &mut ws, &mut diags);
     }
     for file in &manifest.doc_files {
-        docs::parse_doc_file(root, file, &mut ws, &mut diags);
+        docs::parse_doc_file(source, file, &mut ws, &mut diags);
     }
 
     validate::cross_validate(&ws, &mut diags);

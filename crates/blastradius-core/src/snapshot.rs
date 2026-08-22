@@ -9,8 +9,8 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::model::{Direction, ElementKind, Workspace};
+use crate::vfs::Vfs;
 use serde::Serialize;
-use std::path::Path;
 
 #[derive(Serialize)]
 pub struct Snapshot {
@@ -98,22 +98,24 @@ fn kind_str(k: ElementKind) -> &'static str {
     }
 }
 
-/// Build the snapshot. `root` is needed to read doc bodies — the model keeps
-/// only frontmatter (ADR-0010: bodies belong to the user's editor).
-pub fn snapshot(root: &Path, ws: &Workspace, diags: &[Diagnostic]) -> Snapshot {
-    let elements = ws
-        .elements
-        .values()
-        .map(|e| SnapElement {
-            id: e.id.clone(),
-            kind: kind_str(e.kind),
-            parent: e.id.rsplit_once('.').map(|(p, _)| p.to_string()),
-            name: e.name.clone(),
-            tech: e.tech.clone(),
-            description: e.description.clone(),
-            external: e.external || e.kind == ElementKind::External,
-        })
-        .collect();
+/// One element in snapshot form — shared by the full snapshot and the diff
+/// payload (removed-element ghosts).
+pub fn snap_element(e: &crate::model::Element) -> SnapElement {
+    SnapElement {
+        id: e.id.clone(),
+        kind: kind_str(e.kind),
+        parent: e.id.rsplit_once('.').map(|(p, _)| p.to_string()),
+        name: e.name.clone(),
+        tech: e.tech.clone(),
+        description: e.description.clone(),
+        external: e.external || e.kind == ElementKind::External,
+    }
+}
+
+/// Build the snapshot. The source is needed to read doc bodies — the model
+/// keeps only frontmatter (ADR-0010: bodies belong to the user's editor).
+pub fn snapshot(vfs: &dyn Vfs, ws: &Workspace, diags: &[Diagnostic]) -> Snapshot {
+    let elements = ws.elements.values().map(snap_element).collect();
 
     let relations = ws
         .relations
@@ -151,7 +153,8 @@ pub fn snapshot(root: &Path, ws: &Workspace, diags: &[Diagnostic]) -> Snapshot {
         .docs
         .iter()
         .map(|d| {
-            let body = std::fs::read_to_string(root.join(&d.file))
+            let body = vfs
+                .read(&d.file)
                 .map(|t| strip_frontmatter(&t))
                 .unwrap_or_default();
             SnapDoc {

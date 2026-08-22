@@ -3,8 +3,8 @@
 //! (spec §1); anything fancier is a manifest error, not a silent no-match.
 
 use crate::diagnostics::Diagnostic;
+use crate::vfs::Vfs;
 use crate::yaml;
-use std::path::{Path, PathBuf};
 
 pub struct Manifest {
     pub name: String,
@@ -13,14 +13,13 @@ pub struct Manifest {
     pub doc_files: Vec<String>,
 }
 
-pub fn load(root: &Path, diags: &mut Vec<Diagnostic>) -> Option<Manifest> {
+pub fn load(vfs: &dyn Vfs, diags: &mut Vec<Diagnostic>) -> Option<Manifest> {
     let rel = "workspace.yaml";
-    let abs = root.join(rel);
-    if !abs.is_file() {
+    if vfs.read(rel).is_err() {
         diags.push(Diagnostic::error(rel, 0, "workspace.yaml not found — not a workspace"));
         return None;
     }
-    let (node, _text) = yaml::load_file(&abs, rel, diags)?;
+    let (node, _text) = yaml::load_file(vfs, rel, diags)?;
     let map = yaml::as_mapping(&node, rel, "workspace.yaml", diags)?;
 
     // workspace: { name, version }
@@ -83,14 +82,14 @@ pub fn load(root: &Path, diags: &mut Vec<Diagnostic>) -> Option<Manifest> {
 
     Some(Manifest {
         name,
-        model_files: expand(root, &model_globs, rel, diags),
-        view_files: expand(root, &view_globs, rel, diags),
-        doc_files: expand(root, &doc_globs, rel, diags),
+        model_files: expand(vfs, &model_globs, rel, diags),
+        view_files: expand(vfs, &view_globs, rel, diags),
+        doc_files: expand(vfs, &doc_globs, rel, diags),
     })
 }
 
 /// Expand globs to sorted, deduplicated workspace-relative paths.
-fn expand(root: &Path, globs: &[String], rel: &str, diags: &mut Vec<Diagnostic>) -> Vec<String> {
+fn expand(vfs: &dyn Vfs, globs: &[String], rel: &str, diags: &mut Vec<Diagnostic>) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for g in globs {
         if g.contains('\\') || g.starts_with('/') || g.split('/').any(|seg| seg == "..") {
@@ -103,7 +102,7 @@ fn expand(root: &Path, globs: &[String], rel: &str, diags: &mut Vec<Diagnostic>)
         }
         let segments: Vec<&str> = g.split('/').collect();
         let mut matches = Vec::new();
-        walk(root, &PathBuf::new(), &segments, &mut matches);
+        walk(vfs, "", &segments, &mut matches);
         matches.sort();
         for m in matches {
             if !out.contains(&m) {
@@ -116,31 +115,22 @@ fn expand(root: &Path, globs: &[String], rel: &str, diags: &mut Vec<Diagnostic>)
 }
 
 /// Recursive matcher: `*` matches within one segment, `**` any depth.
-fn walk(root: &Path, prefix: &Path, segments: &[&str], out: &mut Vec<String>) {
+fn walk(vfs: &dyn Vfs, prefix: &str, segments: &[&str], out: &mut Vec<String>) {
     let Some((seg, rest)) = segments.split_first() else {
         return;
     };
-    let dir = root.join(prefix);
-    let Ok(entries) = std::fs::read_dir(&dir) else {
-        return;
+    let names = vfs.list(prefix);
+    let join = |name: &str| {
+        if prefix.is_empty() { name.to_string() } else { format!("{prefix}/{name}") }
     };
-    let mut names: Vec<(String, bool)> = entries
-        .flatten()
-        .filter_map(|e| {
-            let name = e.file_name().to_string_lossy().into_owned();
-            let is_dir = e.file_type().ok()?.is_dir();
-            Some((name, is_dir))
-        })
-        .collect();
-    names.sort();
 
     if *seg == "**" {
         // ** matches zero segments…
-        walk(root, prefix, rest, out);
+        walk(vfs, prefix, rest, out);
         // …or one-or-more: descend keeping the ** active.
         for (name, is_dir) in &names {
             if *is_dir {
-                walk(root, &prefix.join(name), segments, out);
+                walk(vfs, &join(name), segments, out);
             }
         }
         return;
@@ -150,13 +140,13 @@ fn walk(root: &Path, prefix: &Path, segments: &[&str], out: &mut Vec<String>) {
         if !segment_matches(seg, name) {
             continue;
         }
-        let child = prefix.join(name);
+        let child = join(name);
         if rest.is_empty() {
             if !*is_dir {
-                out.push(child.to_string_lossy().replace('\\', "/"));
+                out.push(child);
             }
         } else if *is_dir {
-            walk(root, &child, rest, out);
+            walk(vfs, &child, rest, out);
         }
     }
 }

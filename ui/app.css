@@ -69,3 +69,34 @@ body { margin: 0; overflow: hidden; }
 
 /* the hidden attribute must always win over component display rules */
 [hidden] { display: none !important; }
+
+/* ── phase 2: git chrome ───────────────────────────────────────────────── */
+#git-chips { display: inline-flex; gap: var(--space-2); align-items: center; }
+#git-chips .tag { cursor: default; }
+.btn.is-on { background: var(--color-accent); border-color: var(--color-accent);
+  color: var(--color-on-accent); }
+
+/* time-travel banner */
+.travel-banner { position: absolute; top: var(--space-3); left: 50%;
+  transform: translateX(-50%); z-index: var(--z-overlay);
+  display: flex; gap: var(--space-2); align-items: center;
+  background: var(--color-warning-tint); border: 1px solid var(--color-warning);
+  padding: var(--space-1) var(--space-3); font-size: var(--text-sm); }
+
+/* history list (side panel) */
+.hist-row { display: flex; flex-direction: column; gap: 2px; width: 100%;
+  text-align: left; font: inherit; padding: var(--space-2) var(--space-3);
+  background: none; border: 0; border-bottom: 1px solid var(--color-divider); }
+.hist-row .sum { font-size: var(--text-sm); }
+.hist-row .meta { font-family: var(--font-mono); font-size: var(--text-2xs);
+  color: var(--color-text-muted); }
+.hist-row .acts { display: flex; gap: var(--space-2); margin-top: 3px; }
+.hist-row.is-base { background: var(--color-accent-100); }
+
+/* conflict inspector */
+.conf-table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
+.conf-table th { text-align: left; font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-label); text-transform: uppercase;
+  color: var(--color-text-muted); padding: var(--space-1) 0; }
+.conf-table td { padding: var(--space-1) var(--space-2) var(--space-1) 0;
+  border-top: 1px solid var(--color-divider); vertical-align: top; }

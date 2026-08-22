@@ -2,19 +2,18 @@
 //! tree plus helpers that always know their line numbers.
 
 use crate::diagnostics::Diagnostic;
+use crate::vfs::Vfs;
 use marked_yaml::types::{MarkedMappingNode, MarkedScalarNode, MarkedSequenceNode};
 use marked_yaml::Node;
-use std::path::Path;
 
-/// Read + parse one YAML file. On failure, pushes a malformed-YAML error
-/// (spec §6) and returns None. `line_offset` shifts reported lines — used for
-/// frontmatter, which starts mid-file.
+/// Read + parse one YAML file from the workspace source. On failure, pushes a
+/// malformed-YAML error (spec §6) and returns None.
 pub fn load_file(
-    abs: &Path,
+    vfs: &dyn Vfs,
     rel: &str,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<(Node, String)> {
-    let text = match std::fs::read_to_string(abs) {
+    let text = match vfs.read(rel) {
         Ok(t) => t,
         Err(e) => {
             diags.push(Diagnostic::error(rel, 0, format!("cannot read file: {e}")));

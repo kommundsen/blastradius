@@ -4,10 +4,10 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::model::*;
+use crate::vfs::Vfs;
 use crate::yaml;
 use marked_yaml::types::MarkedMappingNode;
 use marked_yaml::Node;
-use std::path::Path;
 
 /// Raw relation before resolution — validate::cross_validate resolves.
 #[derive(Debug, Clone)]
@@ -25,13 +25,12 @@ pub struct RawRelation {
 }
 
 pub fn parse_model_file(
-    root: &Path,
+    vfs: &dyn Vfs,
     rel: &str,
     ws: &mut Workspace,
     diags: &mut Vec<Diagnostic>,
 ) {
-    let abs = root.join(rel);
-    let Some((node, _)) = yaml::load_file(&abs, rel, diags) else {
+    let Some((node, _)) = yaml::load_file(vfs, rel, diags) else {
         return;
     };
     let Some(map) = yaml::as_mapping(&node, rel, "model file", diags) else {

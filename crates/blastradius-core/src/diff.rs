@@ -7,6 +7,7 @@
 //! elements.
 
 use crate::model::{Relation, Workspace};
+use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -102,4 +103,133 @@ pub fn diff(base: &Workspace, current: &Workspace) -> ModelDiff {
     }
 
     out
+}
+
+// ---- renderer payload -------------------------------------------------------
+
+#[derive(Serialize)]
+pub struct DiffPayload {
+    /// The base revision this diff is against (short id or refspec).
+    pub base: String,
+    pub elements: Vec<DiffElement>,
+    pub relations: Vec<DiffRelation>,
+    /// Views whose pinned layout differs, with the moved/added/removed pin ids
+    /// — excluded from the semantic diff proper (spec/git-and-diff.md), shown
+    /// only behind the layout toggle.
+    pub layout: Vec<LayoutChange>,
+}
+
+#[derive(Serialize)]
+pub struct DiffElement {
+    pub id: String,
+    /// added | removed | changed
+    pub change: &'static str,
+    /// Element data — from the current model when present, else from base
+    /// (removed elements need this to render as ghosts).
+    pub element: crate::snapshot::SnapElement,
+}
+
+#[derive(Serialize)]
+pub struct DiffRelation {
+    /// Resolved endpoints, renderer-ready.
+    pub from: String,
+    pub to: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    pub change: &'static str,
+}
+
+#[derive(Serialize)]
+pub struct LayoutChange {
+    pub view: String,
+    pub pins: Vec<String>,
+}
+
+fn change_str(c: Change) -> &'static str {
+    match c {
+        Change::Added => "added",
+        Change::Removed => "removed",
+        Change::Changed => "changed",
+    }
+}
+
+/// The semantic diff in renderer form. Both workspaces must be valid.
+pub fn diff_payload(base_label: &str, base: &Workspace, current: &Workspace) -> DiffPayload {
+    let d = diff(base, current);
+
+    let snap_el = |ws: &Workspace, id: &str| -> Option<crate::snapshot::SnapElement> {
+        ws.elements.get(id).map(crate::snapshot::snap_element)
+    };
+
+    let elements = d
+        .elements
+        .iter()
+        .filter_map(|(id, change)| {
+            let element = snap_el(current, id).or_else(|| snap_el(base, id))?;
+            Some(DiffElement { id: id.clone(), change: change_str(*change), element })
+        })
+        .collect();
+
+    // Resolve relation endpoints against whichever side knows them.
+    let resolve = |raw: &str, scope: Option<&str>| {
+        current
+            .resolve(raw, scope)
+            .or_else(|| base.resolve(raw, scope))
+            .unwrap_or_else(|| raw.to_string())
+    };
+    let scope_of = |ws: &Workspace, key: &(String, String, String)| {
+        ws.relations
+            .iter()
+            .find(|r| {
+                r.from == key.0 && r.to == key.1 && r.label.clone().unwrap_or_default() == key.2
+            })
+            .and_then(|r| r.scope.clone())
+    };
+    let relations = d
+        .relations
+        .iter()
+        .map(|(key, change)| {
+            let scope = scope_of(current, key).or_else(|| scope_of(base, key));
+            DiffRelation {
+                from: resolve(&key.0, scope.as_deref()),
+                to: resolve(&key.1, scope.as_deref()),
+                label: (!key.2.is_empty()).then(|| key.2.clone()),
+                change: change_str(*change),
+            }
+        })
+        .collect();
+
+    // Pinned-layout differences per view id.
+    let mut layout = Vec::new();
+    let base_views: BTreeMap<&str, _> = base.views.iter().map(|v| (v.id.as_str(), v)).collect();
+    for v in &current.views {
+        let base_pins = base_views.get(v.id.as_str()).map(|b| &b.layout);
+        let mut pins: Vec<String> = Vec::new();
+        for (id, xy) in &v.layout {
+            if base_pins.and_then(|b| b.get(id)) != Some(xy) {
+                pins.push(id.clone());
+            }
+        }
+        if let Some(bp) = base_pins {
+            for id in bp.keys() {
+                if !v.layout.contains_key(id) {
+                    pins.push(id.clone());
+                }
+            }
+        }
+        if !pins.is_empty() {
+            pins.sort();
+            layout.push(LayoutChange { view: v.id.clone(), pins });
+        }
+    }
+    for (id, b) in &base_views {
+        if !current.views.iter().any(|v| v.id == *id) && !b.layout.is_empty() {
+            layout.push(LayoutChange {
+                view: id.to_string(),
+                pins: b.layout.keys().cloned().collect(),
+            });
+        }
+    }
+
+    DiffPayload { base: base_label.to_string(), elements, relations, layout }
 }

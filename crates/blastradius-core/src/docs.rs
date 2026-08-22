@@ -3,12 +3,11 @@
 
 use crate::diagnostics::Diagnostic;
 use crate::model::{is_valid_slug, Doc, Workspace};
+use crate::vfs::Vfs;
 use crate::yaml;
-use std::path::Path;
 
-pub fn parse_doc_file(root: &Path, rel: &str, ws: &mut Workspace, diags: &mut Vec<Diagnostic>) {
-    let abs = root.join(rel);
-    let text = match std::fs::read_to_string(&abs) {
+pub fn parse_doc_file(vfs: &dyn Vfs, rel: &str, ws: &mut Workspace, diags: &mut Vec<Diagnostic>) {
+    let text = match vfs.read(rel) {
         Ok(t) => t,
         Err(e) => {
             diags.push(Diagnostic::error(rel, 0, format!("cannot read file: {e}")));

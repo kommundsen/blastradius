@@ -55,6 +55,8 @@ When the repository has merge conflicts touching workspace files:
 - Conflicted model files are inherently STALE (conflict markers do not parse).
   The engine additionally reads stage 2 ("ours") and stage 3 ("theirs") via
   git2 and parses each side.
+- The canvas renders the **ours** side (stage-2 overlay) — the on-disk files
+  carry conflict markers and do not parse, but the model must stay viewable.
 - Elements that differ between the sides render `.is-conflict` (hatched) with
   badge `!`; the inspector shows ours/theirs field values read-only,
   side by side.

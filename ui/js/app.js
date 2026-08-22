@@ -9,13 +9,20 @@ import { layoutView, GRID } from './layout.js';
 // browser, so the frontend is developable and testable headless.
 const tauri = window.__TAURI__;
 const invoke = tauri?.core?.invoke
-  ? (cmd) => tauri.core.invoke(cmd)
-  : async (cmd) => {
+  ? (cmd, args) => tauri.core.invoke(cmd, args)
+  : async (cmd, args) => {
       if (cmd === 'workspace_snapshot') {
         const res = await fetch('mock/snapshot.json');
         return res.json();
       }
       if (cmd === 'workspace_root') return '(mock)';
+      // git commands answer from an optional fixture; absent = no repo.
+      const git = await fetch('mock/git.json').then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      if (cmd === 'git_status') return git?.status ?? null;
+      if (cmd === 'git_diff') return git?.diff ?? null;
+      if (cmd === 'git_history') return git?.history ?? [];
+      if (cmd === 'git_conflicts') return git?.conflicts ?? null;
+      if (cmd === 'snapshot_at') return git?.snapshots?.[args?.refspec] ?? null;
       throw new Error('unknown command ' + cmd);
     };
 const listen = tauri?.event?.listen ? (ev, cb) => tauri.event.listen(ev, cb) : () => {};
@@ -30,6 +37,15 @@ const state = {
   pan: { x: 0, y: 0 },
   layout: null,       // last layout result
   doc: null,          // open doc id in the side panel, else null
+  // ── git (phase 2) ──
+  git: null,          // git_status payload | null (no repo)
+  conflicts: null,    // git_conflicts payload | null
+  diff: null,         // git_diff payload when diff mode is on
+  diffOn: false,
+  diffBase: null,     // explicit base ref, else server default (merge-base)
+  showLayoutDiff: false,
+  history: null,      // commit list when the History panel is open
+  travel: null,       // { refspec, snapshot } during time-travel
 };
 
 const $ = (id) => document.getElementById(id);
@@ -39,6 +55,7 @@ const els = {
   canvas: $('canvas'), sideTitle: $('side-title'), sideBody: $('side-body'),
   sideBack: $('side-back'), levelSeg: $('level-seg'), diagChips: $('diag-chips'),
   hint: $('hint'), themeBtn: $('theme-btn'),
+  gitChips: $('git-chips'), diffBtn: $('diff-btn'), historyBtn: $('history-btn'),
 };
 
 let elk = null;
@@ -52,12 +69,20 @@ window.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function reload() {
+  if (state.travel) {
+    // Time-travelling renders a fixed revision; external edits only refresh
+    // the git chrome so the user sees new commits/conflicts appear.
+    await refreshGit();
+    renderGitChrome();
+    return;
+  }
   try {
     state.snapshot = await invoke('workspace_snapshot');
   } catch (e) {
     els.breadcrumb.textContent = 'No workspace — launch as: blastradius-app <workspace-dir>';
     return;
   }
+  await refreshGit();
   // default scope: first system
   if (!state.scopeInit) {
     const sys = state.snapshot.elements.find((e) => e.kind === 'system');
@@ -65,14 +90,29 @@ async function reload() {
     state.scopeInit = true;
   }
   renderDiagnostics();
+  renderGitChrome();
   renderTree();
   await renderCanvas({ animate: false });
   renderSide();
 }
 
+async function refreshGit() {
+  try {
+    state.git = await invoke('git_status');
+    state.conflicts = state.git ? await invoke('git_conflicts') : null;
+    if (state.diffOn && state.git) {
+      state.diff = await invoke('git_diff', { base: state.diffBase });
+    } else if (!state.diffOn) {
+      state.diff = null;
+    }
+  } catch (e) {
+    state.git = null; state.conflicts = null; state.diff = null;
+  }
+}
+
 // ---- canvas -----------------------------------------------------------------
 async function renderCanvas({ animate = true } = {}) {
-  const snap = state.snapshot;
+  const snap = effectiveSnapshot();
   const view = computeView(snap, state.level, state.scope);
   const viewDef = findViewDef(snap, state.level, state.scope);
   const layout = await layoutView(elk, view, resolvePins(viewDef, view));
@@ -83,10 +123,23 @@ async function renderCanvas({ animate = true } = {}) {
   // nodes
   els.nodes.textContent = '';
   const elById = new Map(snap.elements.map((e) => [e.id, e]));
+  const changeById = diffChangeMap();
+  const conflictById = conflictMap();
+  const movedPins = state.showLayoutDiff ? movedPinIds(viewDef) : new Set();
   for (const n of layout.nodes) {
     const el = elById.get(n.id);
     const div = document.createElement('div');
     div.className = nodeClass(el);
+    const conflict = conflictById.get(n.id);
+    const change = changeById.get(n.id);
+    if (conflict) div.classList.add('is-conflict');
+    else if (change) div.classList.add('is-' + change);
+    const badge = conflict ? ['!', 'Merge conflict']
+      : change === 'added' ? ['+', 'Added vs base']
+      : change === 'removed' ? ['−', 'Removed vs base']
+      : change === 'changed' ? ['~', 'Modified vs base']
+      : movedPins.has(n.id) ? ['⌖', 'Pin moved (layout only)']
+      : null;
     div.style.cssText = `left:${n.x}px;top:${n.y}px;width:${n.width}px;position:absolute`;
     div.tabIndex = 0;
     div.setAttribute('role', 'button');
@@ -96,6 +149,13 @@ async function renderCanvas({ animate = true } = {}) {
       `<span class="node-kicker">${esc(kicker(el))}</span>` +
       `<span class="node-title">${esc(el.name)}</span>` +
       (childCount(el) ? `<span class="node-meta">${childCount(el)}</span>` : '');
+    if (badge) {
+      const b = document.createElement('span');
+      b.className = 'node-badge';
+      b.title = badge[1];
+      b.innerHTML = `<span aria-hidden="true">${badge[0]}</span><span class="sr-only">${badge[1]}</span>`;
+      div.appendChild(b);
+    }
     div.addEventListener('click', () => select(n.id));
     div.addEventListener('dblclick', () => dive(n.id));
     div.addEventListener('keydown', (ev) => {
@@ -115,6 +175,9 @@ async function renderCanvas({ animate = true } = {}) {
     if (e.direction === 'both') cls += ' is-bidirectional';
     if (e.direction === 'none') cls += ' is-undirected';
     if (!e.exact) cls += ' is-secondary';
+    const relChange = diffRelChange(e.from, e.to);
+    if (relChange === 'added') cls += ' is-added';
+    if (relChange === 'removed') cls += ' is-removed';
     path.setAttribute('class', cls);
     path.setAttribute('d', d);
     els.edges.appendChild(path);
@@ -243,7 +306,9 @@ function wireChrome() {
   $('zoom-in').addEventListener('click', () => { state.zoom *= 1.2; applyCamera(); });
   $('zoom-out').addEventListener('click', () => { state.zoom /= 1.2; applyCamera(); });
   $('zoom-reset').addEventListener('click', () => { state.zoom = 1; state.pan = { x: 0, y: 0 }; applyCamera(); });
-  els.sideBack.addEventListener('click', () => { state.doc = null; renderSide(); });
+  els.sideBack.addEventListener('click', () => { state.doc = null; state.history = null; renderSide(); });
+  els.diffBtn.addEventListener('click', toggleDiff);
+  els.historyBtn.addEventListener('click', openHistory);
 
   // theme cycle: auto -> light -> dark
   let theme = 'auto';
@@ -316,7 +381,7 @@ function syncLevelSeg() {
 
 // ---- tree -------------------------------------------------------------------
 function renderTree() {
-  const t = treeModel(state.snapshot);
+  const t = treeModel(effectiveSnapshot());
   const rows = [];
   rows.push(`<span class="tree-label">Model</span>`);
   for (const c of t.context) rows.push(treeRow(c.el ?? c, 0, '◦'));
@@ -335,7 +400,10 @@ function renderTree() {
 }
 
 function treeRow(el, depth, glyph) {
-  const active = state.selected === el.id ? ' is-active' : '';
+  let active = state.selected === el.id ? ' is-active' : '';
+  const change = diffChangeMap().get(el.id);
+  if (change === 'added') active += ' is-added';
+  if (change === 'removed') active += ' is-removed';
   const pad = depth ? ` style="padding-left:${14 + depth * 14}px"` : '';
   return `<button class="tree-row${active}" data-id="${esc(el.id)}"${pad}>` +
     `<span class="glyph">${glyph}</span>${esc(el.name)}</button>`;
@@ -367,6 +435,7 @@ async function focusElement(id) {
 
 // ---- side panel -------------------------------------------------------------
 function renderSide() {
+  if (state.history) return renderHistory();
   if (state.doc) return renderDoc(state.doc);
   els.sideBack.hidden = true;
   const id = state.selected;
@@ -375,7 +444,7 @@ function renderSide() {
     els.sideBody.innerHTML = `<p class="side-empty text-muted">Select an element to inspect it.</p>`;
     return;
   }
-  const snap = state.snapshot;
+  const snap = effectiveSnapshot();
   const el = snap.elements.find((e) => e.id === id);
   if (!el) return;
   els.sideTitle.textContent = 'Inspector';
@@ -411,10 +480,14 @@ function renderSide() {
   } else {
     html += `<span class="text-muted" style="font-size:var(--text-sm)">None linked.</span>`;
   }
+  html += conflictSection(id);
   html += `</div>`;
   els.sideBody.innerHTML = html;
   for (const btn of els.sideBody.querySelectorAll('[data-doc]')) {
     btn.addEventListener('click', () => { state.doc = btn.dataset.doc; renderSide(); });
+  }
+  for (const btn of els.sideBody.querySelectorAll('[data-editfile]')) {
+    btn.addEventListener('click', () => invoke('open_in_editor', { rel: btn.dataset.editfile }).catch(() => {}));
   }
 }
 
@@ -467,6 +540,195 @@ function renderDiagnostics() {
       els.canvas.appendChild(list);
     });
   }
+}
+
+// ---- git: diff, conflicts, history, time-travel (phase 2) -------------------
+
+/** The snapshot being rendered: the working tree, a travelled revision, and —
+ * in diff mode — augmented with base-side ghosts for removed elements and
+ * removed relations, so deletions stay reviewable (spec/git-and-diff.md). */
+function effectiveSnapshot() {
+  const snap = state.travel ? state.travel.snapshot : state.snapshot;
+  if (!state.diffOn || !state.diff || state.travel) return snap;
+  const have = new Set(snap.elements.map((e) => e.id));
+  const ghosts = state.diff.elements
+    .filter((d) => d.change === 'removed' && !have.has(d.id))
+    .map((d) => d.element);
+  const ghostRels = state.diff.relations
+    .filter((r) => r.change === 'removed')
+    .map((r) => ({ from: r.from, to: r.to, label: r.label ?? null, protocol: null, direction: 'forward' }));
+  if (!ghosts.length && !ghostRels.length) return snap;
+  return { ...snap, elements: [...snap.elements, ...ghosts], relations: [...snap.relations, ...ghostRels] };
+}
+
+function diffChangeMap() {
+  if (!state.diffOn || !state.diff) return new Map();
+  return new Map(state.diff.elements.map((d) => [d.id, d.change]));
+}
+
+function diffRelChange(from, to) {
+  if (!state.diffOn || !state.diff) return null;
+  // Rendered edges are lifted to the current altitude (data.computeView), so a
+  // diff relation matches when each endpoint is the rendered id or one of its
+  // descendants. First match wins on aggregated edges.
+  const under = (id, ancestor) => id === ancestor || id.startsWith(ancestor + '.');
+  const hit = state.diff.relations.find((r) => under(r.from, from) && under(r.to, to));
+  return hit?.change ?? null;
+}
+
+function conflictMap() {
+  const out = new Map();
+  for (const c of state.conflicts?.elements ?? []) out.set(c.id, c);
+  return out;
+}
+
+/** Pins listed as moved for the current view, resolved to full ids. */
+function movedPinIds(viewDef) {
+  const out = new Set();
+  if (!state.diffOn || !state.diff || !viewDef) return out;
+  const change = state.diff.layout.find((l) => l.view === viewDef.id);
+  for (const pin of change?.pins ?? []) {
+    out.add(viewDef.scope ? viewDef.scope + '.' + pin : pin);
+    out.add(pin);
+  }
+  return out;
+}
+
+function renderGitChrome() {
+  const g = state.git;
+  els.diffBtn.hidden = !g;
+  els.historyBtn.hidden = !g;
+  if (!g) {
+    els.gitChips.innerHTML = '';
+    return;
+  }
+  let html = `<span class="tag tag-neutral" style="font-family:var(--font-mono)">⎇ ${esc(g.branch)}</span>`;
+  if (g.conflicted.length) {
+    html += `<span class="tag tag-danger">${g.conflicted.length} conflicted</span>`;
+  } else if (g.dirty) {
+    html += `<span class="tag tag-neutral">${g.dirty} modified</span>`;
+  }
+  if (g.ahead) html += `<span class="tag tag-neutral">↑${g.ahead}</span>`;
+  if (g.behind) html += `<span class="tag tag-neutral">↓${g.behind}</span>`;
+  if (state.diffOn && state.diff) {
+    const n = (c) => state.diff.elements.filter((e) => e.change === c).length;
+    if (n('added')) html += `<span class="tag tag-success">${n('added')} added</span>`;
+    if (n('changed')) html += `<span class="tag tag-warning">${n('changed')} changed</span>`;
+    if (n('removed')) html += `<span class="tag tag-danger">${n('removed')} removed</span>`;
+    if (state.diff.layout.length) {
+      const pins = state.diff.layout.reduce((a, l) => a + l.pins.length, 0);
+      html += `<button class="tag ${state.showLayoutDiff ? 'tag-accent' : 'tag-neutral'}" id="layout-toggle"
+        title="Layout-only changes are excluded from the diff — toggle to mark moved pins">⌖ ${pins} pin${pins > 1 ? 's' : ''}</button>`;
+    }
+    if (!state.diff.elements.length && !state.diff.relations.length) {
+      html += `<span class="tag tag-neutral">no semantic changes</span>`;
+    }
+  }
+  els.gitChips.innerHTML = html;
+  document.getElementById('layout-toggle')?.addEventListener('click', async () => {
+    state.showLayoutDiff = !state.showLayoutDiff;
+    renderGitChrome();
+    await renderCanvas({ animate: false });
+  });
+  els.diffBtn.classList.toggle('is-on', state.diffOn);
+}
+
+async function toggleDiff() {
+  state.diffOn = !state.diffOn;
+  if (state.diffOn) {
+    state.diff = await invoke('git_diff', { base: state.diffBase });
+    if (!state.diff) {
+      state.diffOn = false; // no repo / no base
+    }
+  } else {
+    state.diff = null;
+    state.showLayoutDiff = false;
+  }
+  renderGitChrome();
+  renderTree();
+  await renderCanvas({ animate: false });
+}
+
+async function openHistory() {
+  state.history = await invoke('git_history');
+  state.doc = null;
+  renderHistory();
+}
+
+function renderHistory() {
+  els.sideTitle.textContent = 'History';
+  els.sideBack.hidden = false;
+  const rows = (state.history ?? []).map((c) => {
+    const when = new Date(c.time * 1000).toISOString().slice(0, 10);
+    const isBase = state.diffBase === c.id;
+    return `<div class="hist-row${isBase ? ' is-base' : ''}">
+      <span class="sum">${esc(c.summary)}</span>
+      <span class="meta">${esc(c.short)} · ${esc(c.author)} · ${when}</span>
+      <span class="acts">
+        <button class="btn btn-ghost" data-view="${esc(c.id)}">view</button>
+        <button class="btn btn-ghost" data-base="${esc(c.id)}">${isBase ? 'base ✓' : 'set as diff base'}</button>
+      </span>
+    </div>`;
+  });
+  els.sideBody.innerHTML = rows.join('') ||
+    `<p class="side-empty text-muted">No commits touch this workspace yet.</p>`;
+  for (const b of els.sideBody.querySelectorAll('[data-view]')) {
+    b.addEventListener('click', () => travelTo(b.dataset.view));
+  }
+  for (const b of els.sideBody.querySelectorAll('[data-base]')) {
+    b.addEventListener('click', async () => {
+      state.diffBase = b.dataset.base;
+      state.diffOn = true;
+      state.diff = await invoke('git_diff', { base: state.diffBase });
+      renderGitChrome();
+      renderHistory();
+      renderTree();
+      await renderCanvas({ animate: false });
+    });
+  }
+}
+
+async function travelTo(refspec) {
+  const snapshot = await invoke('snapshot_at', { refspec });
+  if (!snapshot) return;
+  state.travel = { refspec, snapshot };
+  state.selected = null;
+  renderTravelBanner();
+  renderTree();
+  await renderCanvas({ animate: false });
+}
+
+async function returnToPresent() {
+  state.travel = null;
+  document.querySelector('.travel-banner')?.remove();
+  await reload();
+}
+
+function renderTravelBanner() {
+  document.querySelector('.travel-banner')?.remove();
+  const b = document.createElement('div');
+  b.className = 'travel-banner';
+  b.innerHTML = `<span>Viewing <b style="font-family:var(--font-mono)">${esc(state.travel.refspec.slice(0, 8))}</b> — read-only</span>
+    <button class="btn btn-ghost" id="travel-return">Return to working tree</button>`;
+  els.canvas.appendChild(b);
+  document.getElementById('travel-return').addEventListener('click', returnToPresent);
+}
+
+/** Conflict details for the inspector, when the selected element is conflicted. */
+function conflictSection(id) {
+  const c = conflictMap().get(id);
+  if (!c) return '';
+  const row = (label, side) => side
+    ? `<tr><td>${esc(label)}</td><td>${esc(side.name)}</td><td>${esc(side.tech ?? '')}</td></tr>`
+    : `<tr><td>${esc(label)}</td><td colspan="2" class="text-muted">not present</td></tr>`;
+  const files = (state.git?.conflicted ?? [])
+    .map((f) => `<button class="doc-link" data-editfile="${esc(f)}">↗ resolve ${esc(f)} in editor</button>`)
+    .join('');
+  return `<div class="insp-section">Merge conflict</div>
+    <table class="conf-table">
+      <thead><tr><th>side</th><th>name</th><th>tech</th></tr></thead>
+      <tbody>${row('ours', c.ours)}${row('theirs', c.theirs)}</tbody>
+    </table>${files}`;
 }
 
 // ---- util -------------------------------------------------------------------

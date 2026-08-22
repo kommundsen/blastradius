@@ -22,8 +22,11 @@
       <label class="seg-opt"><input type="radio" name="lvl" value="L3">L3</label>
       <label class="seg-opt is-disabled" title="Code level — not modelled in v1 (ADR-0004)"><input type="radio" name="lvl" value="L4" disabled>L4</label>
     </span>
+    <span id="git-chips"></span>
     <span id="diag-chips"></span>
     <span class="app-bar-spacer"></span>
+    <button class="btn btn-secondary" id="diff-btn" hidden title="Semantic diff vs base (spec/git-and-diff.md)">Diff</button>
+    <button class="btn btn-secondary" id="history-btn" hidden>History</button>
     <button class="btn btn-secondary bar-drop-2" id="theme-btn" title="Theme: follow OS">Theme</button>
   </header>
 
