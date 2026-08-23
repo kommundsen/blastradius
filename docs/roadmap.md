@@ -197,18 +197,21 @@ deliberately deferred again (same cost/hardware decision as 0.2.0).
 
 1. **L4 code introspection** — source-derived elements below L3, the
    payoff ADR-0014's repo-root anchor was built for. **Language priority
-   is C#/.NET and JavaScript/TypeScript** (the user's stack), not Rust.
+   is C#/.NET and JavaScript/TypeScript** (the user's stack), plus
+   Rust added 2026-08-23 so this repo's own crates dogfood the feature.
    Shape settled 2026-08-23 in ADR-0016 + `spec/l4-introspection.md`:
-   per-language out-of-process extractors on the native compiler APIs
-   (TypeScript compiler API; Roslyn syntax-level — the engines beneath
-   the language servers, not the LSP protocol and not tree-sitter),
-   emitting a common facts JSON committed under `docs/model/derived/`
-   with a CI staleness gate; modules + types granularity; components
-   opt in via a repo-root-relative `source:` mapping; derived elements
-   read-only, never written into workspace YAML.
-   *Exit:* dive below an opted-in component and see the real code graph —
-   dogfooded on `ui/js/` (the Canvas UI's actual module/import graph at
-   L4), with a C# fixture corpus exercising the same path in tests.
+   per-language extractors on the native compiler APIs (TypeScript
+   compiler API; Roslyn syntax-level; `syn` built into core for Rust —
+   the engines beneath the language servers, not the LSP protocol and
+   not tree-sitter), emitting a common facts JSON committed under
+   `docs/model/derived/` with a CI staleness gate; modules + types
+   granularity; strictly opt-in per component via a repo-root-relative
+   `source:` mapping (hand-modeled L4 stays a first-class peer);
+   derived elements read-only, never written into workspace YAML.
+   *Exit:* dive below an opted-in component and see the real code
+   graph — dogfooded on `ui/js/` (TypeScript) and a Core component's
+   Rust modules, with a C# fixture corpus exercising the same path in
+   tests.
 2. **Agent workflow deepening** — MCP conflict resolution (the recorded
    ADR-0015 follow-up), plus richer read tools where task-shaped gaps
    show up (e.g. rendering a view for an agent, richer model queries).

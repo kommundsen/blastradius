@@ -14,7 +14,8 @@ Accepted — 2026-08-23
 
 0.3.0 theme 1 derives L4 (code-level) elements beneath components that
 opt in with a `source:` mapping, with C#/.NET and JavaScript/TypeScript
-as the priority languages (the user's stack; Rust deferred). The roadmap
+as the priority languages (the user's stack), plus Rust so this repo's
+own crates dogfood the feature. The roadmap
 left the extraction mechanism open: vendored tree-sitter grammars vs
 shallow heuristic parsing. A third family was raised during planning:
 the language servers (tsserver, the C# Dev Kit language service,
@@ -52,13 +53,16 @@ underneath is the open part.
 
 ## Decision
 
-- **Thin out-of-process extractors, one per language**, each written in
-  the language's own runtime against its compiler platform:
-  `extractors/typescript/` (Node, TypeScript compiler API) and
-  `extractors/dotnet/` (dotnet tool, Roslyn **syntax-level** — no
-  MSBuildWorkspace in v1; semantic mode is a recorded follow-up).
-  Rust: deferred; candidates are `syn` (embeddable in core directly),
-  rustdoc JSON, or rust-analyzer, decided when scheduled.
+- **Thin extractors, one per language**, each written against its
+  native compiler platform. TypeScript and C# run out-of-process in
+  their own runtimes: `extractors/typescript/` (Node, TypeScript
+  compiler API) and `extractors/dotnet/` (dotnet tool, Roslyn
+  **syntax-level** — no MSBuildWorkspace in v1; semantic mode is a
+  recorded follow-up). **Rust is the exception that proves the schema**:
+  `syn` is an ordinary Rust library, so the Rust extractor is built
+  into core itself (a compile-time dependency, no runtime toolchain) —
+  it speaks the same facts schema internally, chosen over rustdoc JSON
+  (nightly-only) and rust-analyzer (the rejected LSP shape).
 - **One common facts schema** (JSON, versioned) is the only contract
   between extractors and core. Core spawns the extractor, validates the
   facts, and derives read-only elements; **core itself stays free of
@@ -82,9 +86,11 @@ underneath is the open part.
 ## Consequences
 
 - Toolchains are needed only by whoever runs extraction; everyone else
-  consumes committed facts. The dogfood workspace extracts `ui/js`, so
-  CI's existing Node is sufficient for our own staleness gate; the C#
-  path is exercised by a fixture corpus.
+  consumes committed facts. The dogfood workspace extracts `ui/js`
+  (Node, already in CI) **and our own Rust crates** (built-in, always
+  available), so two of three extractors run against real production
+  code in the staleness gate; the C# path is exercised by a fixture
+  corpus.
 - The conformance suite's element/doc pins are unaffected: derived
   elements live outside the workspace files and are counted separately.
 - Facts edges that cross component boundaries are recorded but not yet

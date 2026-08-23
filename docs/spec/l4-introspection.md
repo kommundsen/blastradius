@@ -9,7 +9,17 @@ elements: [blastradius.core.model-service, blastradius.cli, blastradius.ui.canva
 
 Implements ADR-0016. Components opt in to a source mapping; per-language
 extractors emit a common facts file; core derives read-only L4 elements
-from it. Language priority: TypeScript/JavaScript and C#/.NET.
+from it. Languages in scope: TypeScript/JavaScript and C#/.NET (the
+priority stack) plus Rust (built-in, dogfooding this repo's own crates).
+
+**Introspection is optional, per component.** L4 is an ordinary model
+level first: users can hand-model code-level children in the YAML like
+any other element — editable, sync-engine-managed, no toolchain
+involved. A component only gets derived elements if it carries a
+`source:` mapping; without one, nothing runs and nothing is generated.
+The two styles coexist even on the same component: derived elements
+live under the reserved `.src.` id segment, hand-modeled children
+outside it, so neither can collide with or overwrite the other.
 
 ## The `source:` mapping
 
@@ -20,7 +30,7 @@ components:
   canvas:
     name: Canvas
     source:
-      language: typescript        # typescript | csharp
+      language: typescript        # typescript | csharp | rust
       root: ui/js                 # repo-root-relative (ADR-0014 anchor)
       include: ["**/*.mjs"]       # optional, extractor defaults apply
       exclude: ["**/*.test.mjs"]  # optional
@@ -112,8 +122,9 @@ blastradius introspect [<component-id>] [--check]
   schema-invalid output fails the command with the extractor's stderr.
 - `--check`: extract to memory and byte-compare against the committed
   file; nonzero exit on drift. This is the CI staleness gate, same
-  pattern as the snapshot gate. CI runs `--check` for the dogfood
-  TypeScript mapping (Node is already in the frontend job); the C#
+  pattern as the snapshot gate. CI runs `--check` for both dogfood
+  mappings — TypeScript in the frontend job (Node is already there)
+  and Rust in the validate job (built-in, no extra toolchain); the C#
   extractor is gated by its own fixture tests, not by dogfood.
 
 Extractor commands (overridable per mapping with `extractor:`, for
@@ -123,6 +134,7 @@ monorepos with pinned toolchains):
 |------------|---------------------------------------------------|
 | typescript | `node <repo>/extractors/typescript/extract.mjs`   |
 | csharp     | `dotnet run --project <repo>/extractors/dotnet -c Release` |
+| rust       | built into core (`syn`) — no external process     |
 
 The defaults resolve against the Blastradius install dir first, then
 the repo, so users don't need the extractors vendored in their repo.
@@ -182,14 +194,41 @@ whether the solution builds.
   solution exists, falling back to syntax-level. Deliberately excluded
   from v1 for its SDK-version fragility.
 
-## Rust and other languages
+## Rust extractor
 
-Deferred (user priority). Recorded candidates for Rust: `syn`
-(embeddable in core directly — the one language that wouldn't need an
-external process), rustdoc JSON, rust-analyzer. The facts schema is the
-extension point: any tool that emits valid facts is a Blastradius
-extractor, which is also the future SCIP/LSIF import path (ADR-0016
-option 3).
+Built into core as a module on `syn` (compile-time dependency; no
+external process, no toolchain requirement at extraction time — the one
+language where "spawn the extractor" is a function call). Syntax-level,
+same honesty rules as C#.
+
+- Input: `**/*.rs` under `root`, minus `target/` and the mapping's
+  excludes. Files parse with `syn::parse_file`; a file that fails to
+  parse is reported as a warning and skipped, never fatal.
+- **Elements**: modules from the file tree and inline `mod` blocks
+  (id = crate-relative module path, `src/git.rs` → `git`,
+  `src/model/loader.rs` → `model.loader`); `struct`/`enum`/`trait`
+  declarations become children of their module. `impl` blocks are not
+  elements; they contribute edges.
+- **Edges**: `use` declarations resolved syntactically against the
+  extracted corpus (`crate::`/`self::`/`super::` paths; glob imports
+  dropped) produce `imports`; `impl Trait for Type` where both sides
+  are in the corpus produces `implements`; path references in
+  signatures and bodies matched against the corpus produce
+  `references`. Ambiguous or external names are dropped, not guessed.
+- **Honest limit**: `syn` sees surface syntax only — macro-generated
+  items (`#[derive]`, proc-macros) are invisible, and re-exports via
+  `pub use` are followed one level, not transitively. Good enough for
+  module/type structure, which is what L4 draws.
+- Dogfood: a mapping on a Core component using `include` globs (e.g.
+  `blastradius.core.git-service` ← `crates/blastradius-core/src` with
+  `include: [git.rs, resolve.rs]`) — this also exercises the glob
+  semantics that the whole-directory TypeScript dogfood doesn't.
+
+## Other languages
+
+The facts schema is the extension point: any tool that emits valid
+facts is a Blastradius extractor, which is also the future SCIP/LSIF
+import path (ADR-0016 option 3).
 
 ## App & MCP behavior
 
@@ -212,9 +251,14 @@ option 3).
 1. Diving below `blastradius.ui.canvas` in the app shows the real
    `ui/js` module/import graph, from committed facts, with click-through
    to source.
-2. `blastradius introspect --check` green in CI on the dogfood mapping;
-   double-run determinism asserted in tests.
-3. C# fixture corpus round-trips through the dotnet extractor with
+2. Diving below the Rust-mapped Core component shows its real
+   module/type graph via the built-in extractor.
+3. `blastradius introspect --check` green in CI on both dogfood
+   mappings; double-run determinism asserted in tests.
+4. C# fixture corpus round-trips through the dotnet extractor with
    byte-exact facts in tests, without any MSBuild/restore step.
-4. Derived elements are visibly read-only: `apply_operation` against
+5. Derived elements are visibly read-only: `apply_operation` against
    one returns the source-file-pointing error, covered by a test.
+6. A component with no `source:` mapping is completely untouched by
+   the feature — hand-modeled L4 children remain editable as ordinary
+   elements (covered by a test).
