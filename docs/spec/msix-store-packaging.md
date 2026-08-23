@@ -148,6 +148,32 @@ All from the repo root in PowerShell.
       roadmap: the ADR-0011 native-window verification pass and the
       5-minute-stranger exit run.
 
+## One-time: submission API credentials (owner-only, for CI — 0.3.0 theme 3)
+
+The Store submission API (msstore-cli in CI) authenticates as an Entra
+app registration associated with the Partner Center account. Individual
+accounts registered with a personal Microsoft account have **no tenant**,
+so the "Azure AD applications" tab is invisible until step 0 is done:
+
+0. **Associate a tenant**: Partner Center → Account settings →
+   Organization profile → **Tenants** → *Create new Azure AD* (free; a
+   fresh `*.onmicrosoft.com` tenant existing only to hold the CI app)
+   or *Associate Azure AD* (an existing tenant). Associations are
+   sticky — keep the new tenant's admin credentials safe; losing them
+   orphans the app registration.
+1. **Register the app**: entra.microsoft.com as the tenant admin →
+   App registrations → New registration (`blastradius-ci`, single
+   tenant, no redirect URI). Record the **client ID** and **tenant
+   ID**; Certificates & secrets → New client secret — the value shows
+   once; note the expiry, it must be rotated.
+2. **Associate the app**: Partner Center → User management → the now
+   visible **Azure AD applications** tab → add `blastradius-ci` with
+   the **Manager** role (the submission API requires it).
+3. **GitHub secrets** on the repo: `PARTNER_CENTER_TENANT_ID`,
+   `PARTNER_CENTER_CLIENT_ID`, `PARTNER_CENTER_CLIENT_SECRET`. These
+   three are the only secret values in the whole pipeline (the
+   manifest identity values are public, committed deliberately).
+
 ## Per release: submit
 
 13. **Pack unsigned for the Store** (the Store signs; upload wants your
