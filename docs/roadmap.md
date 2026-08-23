@@ -190,6 +190,36 @@ bot), conflicts last (hardest).
 Version note: Store packages are `0.2.0.0` (the fourth digit is the
 Store's; spec/msix-store-packaging.md).
 
+## 0.3.0 — planned (2026-08-23)
+
+Three user-selected themes; macOS/Linux distribution was considered and
+deliberately deferred again (same cost/hardware decision as 0.2.0).
+
+1. **L4 code introspection** — source-derived elements below L3, the
+   payoff ADR-0014's repo-root anchor was built for. **Language priority
+   is C#/.NET and JavaScript/TypeScript** (the user's stack), not Rust.
+   Shape to be fixed in an ADR before building: components opt in via a
+   `source:` mapping in the model YAML (path + language); derived elements
+   are read-only, computed at open/watch time, never written into the
+   workspace files; the parser strategy (vendored tree-sitter grammars vs
+   deliberately-shallow heuristic parsing of imports/usings/namespaces) is
+   the open decision the ADR must settle.
+   *Exit:* dive below an opted-in component and see the real code graph —
+   dogfooded on `ui/js/` (the Canvas UI's actual module/import graph at
+   L4), with a C# fixture corpus exercising the same path in tests.
+2. **Agent workflow deepening** — MCP conflict resolution (the recorded
+   ADR-0015 follow-up), plus richer read tools where task-shaped gaps
+   show up (e.g. rendering a view for an agent, richer model queries).
+   *Exit:* an MCP client resolves a manufactured merge conflict
+   end-to-end through the server (integration-tested in tests/mcp.rs),
+   and the skill/onboarding text teaches the new tools.
+3. **Release ops automation** — msstore-cli submission from CI (tag push
+   → Store submission; needs Partner Center API credentials as GitHub
+   secrets, an owner step), the arm64 MSIX in the same submission, and
+   the owed 5-minute-stranger exit run against the Store build.
+   *Exit:* 0.3.0 itself is submitted to the Store by CI, x64 + arm64,
+   with the stranger run's result recorded here.
+
 ## v2 themes (not scheduled)
 
 Hosted share links (ADR-0009's payload), in-app conflict resolution, PR-bot
