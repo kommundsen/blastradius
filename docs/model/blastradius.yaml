@@ -70,7 +70,7 @@ containers:
         description: Read-only repository access — status, revision materialisation for diff, conflict stages, history (ADR-0007).
       exporter:
         name: Exporter
-        description: Self-contained HTML snapshot, SVG/PNG assembly; headless-capable for CI (ADR-0009).
+        description: "Self-contained HTML snapshot and SVG/PNG assembly, all headless-capable for CI (ADR-0009); the PR diff bot renders through the same pipeline."
       importer:
         name: Structurizr Importer
         description: One-way DSL import with fidelity report (ADR-0002).
