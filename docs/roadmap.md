@@ -258,6 +258,15 @@ deliberately deferred again (same cost/hardware decision as 0.2.0).
    the owed 5-minute-stranger exit run against the Store build.
    *Exit:* 0.3.0 itself is submitted to the Store by CI, x64 + arm64,
    with the stranger run's result recorded here.
+   **In progress 2026-08-23**: credentials created (via the Entra app +
+   Partner Center association; the tenant-association wrinkles and the
+   `msstore reconfigure` shortcut are in spec/msix-store-packaging.md);
+   `.github/workflows/release.yml` landed — tag push `v*` builds
+   x64+arm64, bundles one `.msixupload`, submits via msstore-cli;
+   `tools/pack-msix.ps1` gained `-Arch arm64`. Remaining: the
+   `PARTNER_CENTER_SELLER_ID` secret + `STORE_PRODUCT_ID` variable
+   (owner), then the exit runs live on the 0.3.0 tag, plus the
+   stranger run.
 
 ## v2 themes (not scheduled)
 

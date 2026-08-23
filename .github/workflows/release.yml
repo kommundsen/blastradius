@@ -1,0 +1,78 @@
+# Release: tag push -> build x64 + arm64 MSIX -> submit to the Microsoft
+# Store via msstore-cli (spec/msix-store-packaging.md, 0.3.0 theme 3).
+#
+# Needs (owner-configured, see the spec's credentials section):
+#   secrets: PARTNER_CENTER_TENANT_ID, PARTNER_CENTER_SELLER_ID,
+#            PARTNER_CENTER_CLIENT_ID, PARTNER_CENTER_CLIENT_SECRET
+#   variables: STORE_PRODUCT_ID  (the app's 9N... Store ID — public, not a secret)
+#
+# The MSIX artifacts upload before the Store steps run, so a submission
+# failure still leaves installable packages on the run.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  store-submit:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Tag must match the release version
+        shell: pwsh
+        run: |
+          $manifest = Get-Content packaging\msix\Package.appxmanifest -Raw
+          if ($manifest -notmatch 'Version="(\d+\.\d+\.\d+)\.0"') { throw 'manifest version not found' }
+          $version = $Matches[1]
+          if ("${{ github.ref_name }}" -ne "v$version") {
+            throw "tag ${{ github.ref_name }} does not match manifest version $version — bump the three version surfaces first (spec/msix-store-packaging.md)"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+        id: version
+
+      - name: Install winapp CLI
+        shell: pwsh
+        run: winget install microsoft.winappcli --accept-source-agreements --accept-package-agreements --disable-interactivity
+
+      - name: Pack x64 (unsigned, Store signs)
+        shell: pwsh
+        run: .\tools\pack-msix.ps1
+
+      - name: Pack arm64
+        shell: pwsh
+        run: .\tools\pack-msix.ps1 -Arch arm64
+
+      - name: Bundle .msixupload (both architectures, one submission)
+        shell: pwsh
+        run: |
+          $v = "${{ steps.version.outputs.version }}.0"
+          Compress-Archive -Path packaging\msix\*.msix -DestinationPath "Blastradius_$v.zip"
+          Rename-Item "Blastradius_$v.zip" "Blastradius_$v.msixupload"
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v5
+        with:
+          name: msix-packages
+          path: |
+            packaging/msix/*.msix
+            *.msixupload
+
+      - name: Setup Microsoft Store Developer CLI
+        uses: microsoft/microsoft-store-apppublisher@v1
+
+      - name: Configure Microsoft Store Developer CLI
+        shell: pwsh
+        run: msstore reconfigure --tenantId ${{ secrets.PARTNER_CENTER_TENANT_ID }} --sellerId ${{ secrets.PARTNER_CENTER_SELLER_ID }} --clientId ${{ secrets.PARTNER_CENTER_CLIENT_ID }} --clientSecret ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+
+      - name: Submit to the Store
+        shell: pwsh
+        run: |
+          if ('${{ vars.STORE_PRODUCT_ID }}' -eq '') { throw 'STORE_PRODUCT_ID repository variable is not set (the 9N... Store ID from msstore apps list)' }
+          $v = "${{ steps.version.outputs.version }}.0"
+          msstore publish packaging/msix --inputFile "Blastradius_$v.msixupload" --appId ${{ vars.STORE_PRODUCT_ID }} --verbose

@@ -169,10 +169,15 @@ so the "Azure AD applications" tab is invisible until step 0 is done:
 2. **Associate the app**: Partner Center → User management → the now
    visible **Azure AD applications** tab → add `blastradius-ci` with
    the **Manager** role (the submission API requires it).
-3. **GitHub secrets** on the repo: `PARTNER_CENTER_TENANT_ID`,
+3. **GitHub secrets** on the repo — four, matching msstore-cli's CI
+   parameters (`msstore reconfigure --tenantId --sellerId --clientId
+   --clientSecret`): `PARTNER_CENTER_TENANT_ID`,
+   `PARTNER_CENTER_SELLER_ID` (Account settings → Account identifiers),
    `PARTNER_CENTER_CLIENT_ID`, `PARTNER_CENTER_CLIENT_SECRET`. These
-   three are the only secret values in the whole pipeline (the
-   manifest identity values are public, committed deliberately).
+   are the only secret values in the whole pipeline (the manifest
+   identity values are public, committed deliberately). Plus one
+   repository **variable** (public): `STORE_PRODUCT_ID`, the app's
+   `9N…` Store ID (`msstore apps list`, or the listing URL).
 
 Setup wrinkles hit on 2026-08-23: the "Azure AD applications" pivot in
 User management stays invisible until the tenant is associated at the
@@ -206,6 +211,25 @@ three credential values for the GitHub secrets.
     updates are just a version bump + repack + new submission — the Store
     delivers them to users automatically, so this build never carries a
     self-updater.
+
+## Per release: CI submission (0.3.0+, the default path)
+
+Steps 13–15 are automated by `.github/workflows/release.yml`: pushing a
+tag `v<x.y.z>` builds **x64 and arm64** (`tools/pack-msix.ps1` twice,
+the arm64 leg cross-compiled via `aarch64-pc-windows-msvc`), refuses a
+tag that disagrees with the manifest version, bundles both `.msix` into
+one `.msixupload` (a zip — one submission carries both architectures),
+uploads them as run artifacts **before** any Store step (a failed
+submission still yields installable packages), then configures
+msstore-cli from the four secrets and runs `msstore publish` against
+`STORE_PRODUCT_ID`. Listing metadata (screenshots, description,
+ratings) carries over from the previous submission — CI only replaces
+packages. The manual loop above remains valid as the fallback and for
+the first-ever submission of a new product.
+
+So a release is: bump the three version surfaces → commit → `git tag
+v<x.y.z>` → `git push origin v<x.y.z>` → watch the `release` workflow →
+certification proceeds in Partner Center as usual.
 
 ## Troubleshooting
 
