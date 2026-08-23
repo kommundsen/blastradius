@@ -87,6 +87,19 @@ the Store signs the package.
 
 ## Per release: build, pack, test locally
 
+**Use the script** — it is the loop below with the footguns removed:
+
+```powershell
+.\tools\pack-msix.ps1            # unsigned, for Store upload
+.\tools\pack-msix.ps1 -DevCert   # dev-signed, for local install testing
+```
+
+It refuses to run unless the manifest, `Cargo.toml`, and `tauri.conf.json`
+agree on the version, always rebuilds release (never packs whatever is
+lying in `target\release`), and verifies the staged exe self-reports the
+manifest's version before packing. The manual steps below document what
+it does.
+
 All from the repo root in PowerShell.
 
 9. **Build both binaries** (release; the exe embeds the `ui/` assets):
@@ -158,6 +171,21 @@ All from the repo root in PowerShell.
     self-updater.
 
 ## Troubleshooting
+
+**Shipped stale binaries under a new version number** (happened on
+0.2.0.0, 2026-08-23): the package was hand-packed from
+`target
+eleaselastradius-app.exe` that predated the release's
+code — a 0.1.0-era binary certified and published under the 0.2.0.0
+label, and the fix could only be forward (0.2.1.0 resubmission; Store
+versions cannot be replaced after certification). Root cause: the pack
+step trusted whatever exe was on disk. `tools/pack-msix.ps1` exists so
+this cannot recur — rebuild is unconditional and the exe's
+ProductVersion is checked against the manifest. A second footgun from
+the same day: `winapp init` regenerates `Package.appxmanifest` with
+`Executable="$targetnametoken$.exe"`, which packs fine with one exe but
+refuses with two — the committed manifest pins `blastradius-app.exe`;
+don't let a re-init revert it.
 
 **System-wide ~1s freezes while the installed package is foreground**
 (observed 2026-08-22, on step 12's local smoke test): moving the cursor
