@@ -246,3 +246,89 @@ fn introspect_tool_extracts_and_derived_elements_answer() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// 0.3.0 theme 2 exit criterion (ADR-0015 follow-up): an MCP client resolves
+/// a manufactured merge conflict end-to-end through the server — sees it via
+/// git_conflicts, decides per element, resolve_conflicts splices + stages,
+/// and the workspace comes back clean.
+#[test]
+fn mcp_client_resolves_a_merge_conflict_end_to_end() {
+    use git2::{Repository, Signature};
+
+    let dir = std::env::temp_dir().join(format!("blastradius-mcp-resolve-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    // comment on purpose: the resolution must carry it through untouched
+    const SHOP: &str = "system: shop\ncontainers:\n  # storefront — reviewed quarterly\n  web:\n    name: Web App\n    tech: React\n";
+    // Scope every git2 object: the manufacture borrows must all die before
+    // the cleanup at the end of the test.
+    {
+    let repo = Repository::init(&dir).unwrap();
+    let sig = Signature::now("test", "test@example.com").unwrap();
+    let write = |rel: &str, text: &str| {
+        let p = dir.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, text).unwrap();
+    };
+    let commit_all = |msg: &str| {
+        let mut index = repo.index().unwrap();
+        index.add_all(["*"].iter(), git2::IndexAddOption::DEFAULT, None).unwrap();
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let parent = repo.head().ok().and_then(|h| h.peel_to_commit().ok());
+        let parents: Vec<&git2::Commit> = parent.iter().collect();
+        repo.commit(Some("HEAD"), &sig, &sig, msg, &tree, &parents).unwrap()
+    };
+
+    write("blastradius.yaml", "workspace:\n  name: T\n  version: 1\nmodel:\n  include: [model/*.yaml]\n");
+    write("model/shop.yaml", SHOP);
+    let base = commit_all("base");
+
+    write("model/shop.yaml", &SHOP.replace("name: Web App", "name: Storefront"));
+    let mine = commit_all("mine");
+
+    let base_commit = repo.find_commit(base).unwrap();
+    repo.branch("side", &base_commit, false).unwrap();
+    repo.set_head("refs/heads/side").unwrap();
+    repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force())).unwrap();
+    write("model/shop.yaml", &SHOP.replace("name: Web App", "name: Shop Frontend"));
+    commit_all("side");
+    let mine_ac = repo.find_annotated_commit(mine).unwrap();
+    repo.merge(&[&mine_ac], None, None).unwrap();
+    assert!(repo.index().unwrap().has_conflicts(), "merge must conflict");
+    }
+
+    // The agent's view: status shows the conflict, git_conflicts shapes it.
+    let mut s = McpServer::new(&dir);
+    let status = tool(&mut s, "git_status", json!({})).unwrap();
+    assert_eq!(status["repository"], true);
+    let conflicts = tool(&mut s, "git_conflicts", json!({})).unwrap();
+    let el = &conflicts["conflicts"]["elements"][0];
+    assert_eq!(el["id"], "shop.web");
+    assert_eq!(el["ours"]["name"], "Shop Frontend");
+    assert_eq!(el["theirs"]["name"], "Storefront");
+
+    // Decide: take the incoming rename.
+    let out = tool(
+        &mut s,
+        "resolve_conflicts",
+        json!({"resolution": {"elements": {"shop.web": "theirs"}}}),
+    )
+    .unwrap();
+    assert_eq!(out["staged"][0], "model/shop.yaml");
+
+    // Byte-clean on the ours base (comment intact), staged, conflict gone.
+    let text = std::fs::read_to_string(dir.join("model/shop.yaml")).unwrap();
+    assert_eq!(text, SHOP.replace("name: Web App", "name: Storefront"));
+    assert!(text.contains("# storefront — reviewed quarterly"));
+    let reopened = Repository::open(&dir).unwrap();
+    assert!(!reopened.index().unwrap().has_conflicts(), "resolution must be staged");
+    drop(reopened);
+    let after = tool(&mut s, "git_conflicts", json!({})).unwrap();
+    assert_eq!(after["conflicts"], Value::Null);
+    // and the reloaded model serves the chosen name
+    let elx = tool(&mut s, "element", json!({"id": "shop.web"})).unwrap();
+    assert_eq!(elx["name"], "Storefront");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

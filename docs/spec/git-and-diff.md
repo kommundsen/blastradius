@@ -68,6 +68,12 @@ When the repository has merge conflicts touching workspace files:
   before writing, then stages via the user's own `git add` (libgit2 stays
   read-only). Whole-system divergence resolves per file. The
   "resolve in editor" affordance remains for markdown and exotic cases.
+- **MCP resolution** (shipped 2026-08-23, 0.3.0 theme 2): the same
+  pipeline is agent-callable — `git_status` and `git_conflicts` read
+  repository state (conflicts element-shaped, ours/theirs field values
+  inline), `resolve_conflicts` applies a per-element resolution and
+  stages it; the commit stays the user's. Integration-tested end to
+  end against a manufactured merge conflict in tests/mcp.rs.
 
 ## History
 

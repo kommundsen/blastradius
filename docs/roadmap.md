@@ -133,6 +133,11 @@ still owed and belongs with the packaged build, where "install" does not mean
 
 ## 0.2.0 — planned (2026-08-23)
 
+**Store status**: 0.2.0.0 was submitted with stale 0.1.0-era binaries
+(spec/msix-store-packaging.md Troubleshooting); the corrective
+**0.2.1.0 is certified and public in the Store as of 2026-08-23** —
+this release's features are what users actually receive.
+
 **Shipped ahead of the themes** (2026-08-23): repo-root opening + the
 manifest rename (ADR-0014). Open a repo root anywhere — app, CLI, MCP —
 and the workspace inside is discovered (content-sniffed, never
@@ -235,6 +240,18 @@ deliberately deferred again (same cost/hardware decision as 0.2.0).
    *Exit:* an MCP client resolves a manufactured merge conflict
    end-to-end through the server (integration-tested in tests/mcp.rs),
    and the skill/onboarding text teaches the new tools.
+   **Shipped 2026-08-23, exits met.** `git_status`, `git_conflicts`
+   (element-shaped, ours/theirs inline), and `resolve_conflicts` ride
+   the ADR-0015 pipeline through the MCP server; the exit-criterion
+   test manufactures a real merge conflict with git2 and resolves it
+   entirely through the tools (byte-clean, comment preserved, staged,
+   model reloaded). The onboarding primer (all four agent formats) and
+   the dogfood SKILL.md now teach conflicts + L4 introspection — the
+   dogfood copy also caught up with the ADR-0014 manifest rename.
+   Deferred, recorded: a render-a-view tool — agents consume structure
+   better as JSON today (`element`, `blast_radius`, `model_diff`), the
+   render path is node-side, and no task has needed pixels yet;
+   revisit when one does.
 3. **Release ops automation** — msstore-cli submission from CI (tag push
    → Store submission; needs Partner Center API credentials as GitHub
    secrets, an owner step), the arm64 MSIX in the same submission, and

@@ -325,6 +325,7 @@ name = "blastradius-cli"
 version = "0.2.1"
 dependencies = [
  "blastradius-core",
+ "git2",
  "serde_json",
 ]
 

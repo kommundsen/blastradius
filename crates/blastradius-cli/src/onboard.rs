@@ -185,7 +185,20 @@ fn primer(rel: &str) -> String {
          - Markdown docs with a `doc:` frontmatter block are part of the model;\n\
          \x20 their `elements:` links must point at real element ids.\n\
          - Keep the model in sync with reality: when you add, remove, or rewire\n\
-         \x20 a real component, mirror it in the model in the same change.\n"
+         \x20 a real component, mirror it in the model in the same change.\n\
+         - `git_status` and `git_conflicts` read repository state. A merge\n\
+         \x20 conflict in the model resolves per element: read `git_conflicts`\n\
+         \x20 (each conflicted element carries ours/theirs field values), then\n\
+         \x20 call `resolve_conflicts` with {{elements: {{\"<id>\": \"ours\"|\"theirs\"}}}}\n\
+         \x20 — choices splice onto the chosen side (comments survive), files\n\
+         \x20 are validated and staged via the user's own git, and the commit\n\
+         \x20 stays the user's. Anything undecided keeps ours.\n\
+         - Components with a `source:` mapping have derived L4 code elements\n\
+         \x20 (modules/types extracted from source). They answer in\n\
+         \x20 `find_elements`, `element`, and `blast_radius` (code-level\n\
+         \x20 fan-in), marked `derived: true` — read-only; edit the source\n\
+         \x20 instead, then run the `introspect` tool to refresh the committed\n\
+         \x20 facts. `blast_radius` on a derived id shows real code dependents.\n"
     )
 }
 

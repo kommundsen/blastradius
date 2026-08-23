@@ -16,3 +16,6 @@ serde_json = "1"
 [dev-dependencies]
 serde_json = "1"
 blastradius-core = { path = "../blastradius-core" }
+# Manufacturing real merge conflicts for the MCP resolution exit criterion
+# (0.3.0 theme 2) — same vendored build the core already carries.
+git2 = { version = "0.20", default-features = false, features = ["vendored-libgit2"] }

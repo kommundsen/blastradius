@@ -104,7 +104,12 @@ impl McpServer {
                 "instructions": "Query and edit the Blastradius architecture model \
                     (C4, YAML-in-repo). Start with workspace_summary; use blast_radius \
                     before changing an element; edits via apply_operation are \
-                    format-preserving splices, and undo reverts the last one.",
+                    format-preserving splices, and undo reverts the last one. \
+                    git_status/git_conflicts read repository state; a merge \
+                    conflict resolves per element through resolve_conflicts \
+                    (staged via the user's git — the commit stays theirs). \
+                    introspect derives read-only L4 code elements for \
+                    components with a source: mapping.",
             })),
             "ping" => Ok(json!({})),
             "tools/list" => Ok(json!({ "tools": tool_definitions() })),
@@ -141,6 +146,12 @@ impl McpServer {
             "element" => self.element(&str_arg("id").ok_or("id is required")?),
             "blast_radius" => self.blast_radius(&str_arg("id").ok_or("id is required")?),
             "introspect" => self.introspect_tool(str_arg("component")),
+            "git_status" => self.git_status_tool(),
+            "git_conflicts" => self.git_conflicts_tool(),
+            "resolve_conflicts" => {
+                let res = args.get("resolution").cloned().ok_or("resolution is required")?;
+                self.resolve_conflicts_tool(res)
+            }
             "validate" => Ok(self.validate()),
             "model_diff" => self.model_diff(str_arg("base")),
             "doc" => self.doc(&str_arg("id").ok_or("id is required")?),
@@ -535,6 +546,54 @@ impl McpServer {
 }
 
 impl McpServer {
+    /// Repository state for agents (ADR-0007 surfaces, read-only): branch,
+    /// dirty and conflicted files. No repo is an answer, not an error.
+    fn git_status_tool(&self) -> Result<Value, String> {
+        let Some(ctx) = GitContext::discover(&self.root) else {
+            return Ok(json!({"repository": false}));
+        };
+        let status = ctx.status()?;
+        Ok(json!({
+            "repository": true,
+            "status": serde_json::to_value(&status).map_err(|e| e.to_string())?,
+        }))
+    }
+
+    /// The current merge conflict, element-shaped (ADR-0015): conflicted
+    /// files plus per-element ours/theirs field values.
+    fn git_conflicts_tool(&self) -> Result<Value, String> {
+        let Some(ctx) = GitContext::discover(&self.root) else {
+            return Ok(json!({"repository": false, "conflicts": null}));
+        };
+        match ctx.conflicts(&self.root)? {
+            None => Ok(json!({"repository": true, "conflicts": null})),
+            Some(c) => Ok(json!({
+                "repository": true,
+                "conflicts": serde_json::to_value(&c).map_err(|e| e.to_string())?,
+                "hint": "decide per element and call resolve_conflicts \
+                    {resolution: {elements: {\"<id>\": \"ours\"|\"theirs\"}, \
+                    files: {\"<rel>\": \"ours\"|\"theirs\"}}} — anything \
+                    undecided keeps ours; files: is the whole answer for \
+                    conflicted views/docs",
+            })),
+        }
+    }
+
+    /// Apply an ADR-0015 resolution: CST splices onto the chosen side, files
+    /// written and staged via the user's own git; the commit stays theirs.
+    fn resolve_conflicts_tool(&mut self, resolution: Value) -> Result<Value, String> {
+        let ctx = GitContext::discover(&self.root).ok_or("not inside a git repository")?;
+        let res: blastradius_core::resolve::Resolution =
+            serde_json::from_value(resolution).map_err(|e| format!("bad resolution: {e}"))?;
+        let staged = blastradius_core::resolve::resolve(&ctx, &self.root, &res)?;
+        self.engine.reload_all();
+        Ok(json!({
+            "staged": staged,
+            "diagnostics": self.diagnostics_json(),
+            "note": "resolved files are written and staged — committing (and any merge --continue) is the user's move",
+        }))
+    }
+
     /// Run L4 extraction for opted-in components and reload the workspace —
     /// the MCP face of `blastradius introspect` (spec/l4-introspection.md).
     fn introspect_tool(&mut self, component: Option<String>) -> Result<Value, String> {
@@ -646,6 +705,26 @@ fn tool_definitions() -> Vec<Value> {
             "name": "doc",
             "description": "Read a model-registered document (ADR, spec, PRD...) by doc id: metadata, linked elements, and the markdown body.",
             "inputSchema": obj(json!({"id": {"type": "string", "description": "doc id from workspace_summary"}}), vec!["id"]),
+        }),
+        json!({
+            "name": "git_status",
+            "description": "Repository state (read-only, ADR-0007): current branch, dirty workspace files, conflicted files. {repository: false} when the workspace is not in a git repo.",
+            "inputSchema": obj(json!({}), vec![]),
+        }),
+        json!({
+            "name": "git_conflicts",
+            "description": "The current merge conflict, element-shaped (ADR-0015): conflicted workspace files plus per-element ours/theirs field values where both sides changed the same element. null when there is no conflict. Follow up with resolve_conflicts.",
+            "inputSchema": obj(json!({}), vec![]),
+        }),
+        json!({
+            "name": "resolve_conflicts",
+            "description": "Resolve the current merge conflict from per-element decisions (ADR-0015): each choice is applied as a format-preserving splice onto the chosen side's text (comments survive), files are validated before writing, written, and staged via the user's own git — the commit stays the user's. Anything undecided keeps ours. `files` picks a whole side for conflicted files without element conflicts (views, docs).",
+            "inputSchema": obj(json!({
+                "resolution": {"type": "object", "properties": {
+                    "elements": {"type": "object", "description": "element id -> \"ours\" | \"theirs\"", "additionalProperties": {"type": "string", "enum": ["ours", "theirs"]}},
+                    "files": {"type": "object", "description": "workspace-relative file -> \"ours\" | \"theirs\"", "additionalProperties": {"type": "string", "enum": ["ours", "theirs"]}},
+                }},
+            }), vec!["resolution"]),
         }),
         json!({
             "name": "apply_operation",
