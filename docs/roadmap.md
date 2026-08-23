@@ -274,6 +274,14 @@ deliberately deferred again (same cost/hardware decision as 0.2.0).
 
 ## v2 themes (not scheduled)
 
+**Bundled in-app help** (idea 2026-08-23, follows dropping Pages
+hosting): ship a curated *user-facing* doc set inside the app — getting
+started, model-format reference, keyboard shortcuts, privacy policy —
+rendered by the existing docs-panel machinery (offline, versioned with
+the binary, no hosting). Deliberately not the dogfood ADR/spec site:
+that is contributor material, already readable in-app by opening this
+repo, and stays a CI artifact.
+
 Hosted share links (ADR-0009's payload), in-app conflict resolution, PR-bot
 diff rendering in CI, L4 source-derived elements, deployment views, headless
 SVG/PNG export via a node script over ui/js/layout.js (spec/export.md v1
