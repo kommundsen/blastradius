@@ -10,14 +10,14 @@ containers:
     description: Window, menus, packaging, updates; hosts the WebView and the Core; owns the IPC boundary (ADR-0005).
     components:
       window:
-        description: "Native window, welcome screen, File-Open dialog, workspace switching (watcher retired by generation)."
+        description: "Native window, welcome screen, File-Open dialog, workspace switching."
         name: "Window & Lifecycle"
       ipc-bridge:
-        description: "The 14 command handlers bridging WebView invoke/events to the core library (ADR-0005: WebView renders, Rust owns truth)."
+        description: The command handlers bridging WebView invoke/events to the core library (ADR-0005).
         tech: Tauri 2
         name: IPC Bridge
       watcher:
-        description: External-edit detection (workspace files + git metadata); feeds the sync engine single inbound path; echo suppression by content hash. Lives in the app crate — was mis-modelled under Core until 2026-08-22.
+        description: "External-edit detection (workspace files + git metadata); feeds the sync engine's single inbound path; echo suppression by content hash."
         tech: notify
         name: File Watcher
 
