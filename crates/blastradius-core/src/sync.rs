@@ -130,7 +130,13 @@ impl SyncEngine {
     fn refresh_file_cache(&mut self, diags: &[Diagnostic]) {
         // cache every file the manifest resolved, plus the manifest itself
         let vfs = DiskVfs::new(&self.root);
-        let mut wanted: BTreeSet<String> = ["workspace.yaml".to_string()].into();
+        // seed with both manifest names — the read filter below drops the absent
+        // one, and a legacy->new rename is then just another external change
+        let mut wanted: BTreeSet<String> = [
+            crate::manifest::MANIFEST.to_string(),
+            crate::manifest::LEGACY_MANIFEST.to_string(),
+        ]
+        .into();
         if let Some(m) = crate::manifest::load(&vfs, &mut Vec::new()) {
             wanted.extend(m.model_files.iter().cloned());
             wanted.extend(m.view_files.iter().cloned());
@@ -153,7 +159,11 @@ impl SyncEngine {
     pub fn external_scan(&mut self) -> bool {
         let mut changed: Vec<FileChange> = Vec::new();
         let vfs = DiskVfs::new(&self.root);
-        let mut current: BTreeSet<String> = ["workspace.yaml".to_string()].into();
+        let mut current: BTreeSet<String> = [
+            crate::manifest::MANIFEST.to_string(),
+            crate::manifest::LEGACY_MANIFEST.to_string(),
+        ]
+        .into();
         if let Some(m) = crate::manifest::load(&vfs, &mut Vec::new()) {
             current.extend(m.model_files.iter().cloned());
             current.extend(m.view_files.iter().cloned());

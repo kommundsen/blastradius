@@ -878,7 +878,7 @@ fn build_output(p: Parser) -> Result<Import, String> {
     }
 
     files.insert(
-        "workspace.yaml".into(),
+        "blastradius.yaml".into(),
         format!(
             "# Imported from Structurizr DSL — see import-report.md\nworkspace:\n  name: {}\n  version: 1\nmodel:\n  include: [model/*.yaml]\nviews:\n  include: [views/*.yaml]\ndocs:\n  include: [\"*.md\"]\n",
             yaml(&workspace_name)

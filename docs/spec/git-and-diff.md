@@ -12,7 +12,7 @@ user's own tooling writes to it.
 
 ## Detection & status
 
-On workspace open, walk up from `workspace.yaml` to find `.git`. Absent → all
+On workspace open, walk up from the manifest to find `.git`. Absent → all
 git UI is hidden (not disabled). Present → the chrome shows branch, dirty
 count and ahead/behind (design system: `⎇ main` tag + semantic tags), updated
 on watcher events and window focus.

@@ -69,7 +69,7 @@ fn unknown_version_refuses_with_upgrade_message() {
     let (ws, diags) = load("unknown-version");
     let errs = errors(&diags);
     assert_eq!(errs.len(), 1, "{diags:?}");
-    assert_eq!(errs[0].file, "workspace.yaml");
+    assert_eq!(errs[0].file, "blastradius.yaml");
     assert_eq!(errs[0].line, 3, "version: field is on line 3");
     assert!(errs[0].message.contains("newer than this build"), "{}", errs[0].message);
     // version gate = no partial parse (spec §1)

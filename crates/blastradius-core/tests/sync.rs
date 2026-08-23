@@ -65,7 +65,7 @@ relations:
 
 fn setup(name: &str) -> (TempWs, SyncEngine) {
     let t = temp_ws(name);
-    write(&t.dir, "workspace.yaml", MANIFEST);
+    write(&t.dir, "blastradius.yaml", MANIFEST);
     write(&t.dir, "model/shop.yaml", SHOP);
     let engine = SyncEngine::open(&t.dir);
     assert!(engine.stale.is_empty(), "{:?}", engine.diagnostics);
@@ -224,7 +224,7 @@ fn operation_that_would_invalidate_is_refused() {
 #[test]
 fn duplicate_yaml_key_reports_exact_line() {
     let t = temp_ws("dupkey");
-    write(&t.dir, "workspace.yaml", MANIFEST);
+    write(&t.dir, "blastradius.yaml", MANIFEST);
     write(
         &t.dir,
         "model/shop.yaml",

@@ -133,6 +133,15 @@ still owed and belongs with the packaged build, where "install" does not mean
 
 ## 0.2.0 — planned (2026-08-23)
 
+**Shipped ahead of the themes** (2026-08-23): repo-root opening + the
+manifest rename (ADR-0014). Open a repo root anywhere — app, CLI, MCP —
+and the workspace inside is discovered (content-sniffed, never
+filename-trusted); several hits raise a picker in the app and an explicit
+candidate list in the CLI. The manifest is now `blastradius.yaml`
+(self-identifying; legacy `workspace.yaml` loads with a deprecation
+warning). The app knowing the repo root is the anchor for future
+L4 source-derived elements.
+
 Three themes, user-selected from the deferred pool; macOS packaging was
 considered and deliberately not taken (the $99/year Apple Developer ID and
 Mac-hardware loop stay an open decision). Store updates are cheap, so 0.2.0

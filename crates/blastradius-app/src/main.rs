@@ -125,9 +125,9 @@ fn workspace_root(state: State<AppState>) -> Option<String> {
 /// watcher, start a fresh one. The frontend reloads everything afterwards.
 fn open_root(app: &tauri::AppHandle, state: &State<AppState>, root: PathBuf) -> Result<String, String> {
     let root = root.canonicalize().unwrap_or(root);
-    if !root.join("workspace.yaml").is_file() {
+    if !blastradius_core::discover::is_workspace_dir(&root) {
         return Err(format!(
-            "{}: not a Blastradius workspace (no workspace.yaml) — use \"New workspace\" to scaffold one",
+            "{}: not a Blastradius workspace (no blastradius.yaml) — use \"New workspace\" to scaffold one",
             root.display()
         ));
     }
@@ -138,9 +138,33 @@ fn open_root(app: &tauri::AppHandle, state: &State<AppState>, root: PathBuf) -> 
     Ok(root.display().to_string())
 }
 
+/// Open a folder. A repo root works too: discovery finds the workspace(s)
+/// below it — one hit opens directly, several come back as `candidates` for
+/// the frontend's picker (ADR-0014).
 #[tauri::command]
-fn workspace_open(app: tauri::AppHandle, state: State<AppState>, path: String) -> Result<String, String> {
-    open_root(&app, &state, PathBuf::from(path))
+fn workspace_open(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+    path: String,
+) -> Result<serde_json::Value, String> {
+    let root = PathBuf::from(&path);
+    let root = root.canonicalize().unwrap_or(root);
+    if !blastradius_core::discover::is_workspace_dir(&root) {
+        let hits = blastradius_core::discover::discover_workspaces(&root);
+        match hits.as_slice() {
+            [] => {} // fall through: open_root's error names the folder picked
+            [one] => {
+                return open_root(&app, &state, one.clone())
+                    .map(|p| serde_json::json!({ "opened": p }));
+            }
+            many => {
+                let candidates: Vec<String> =
+                    many.iter().map(|p| p.display().to_string()).collect();
+                return Ok(serde_json::json!({ "candidates": candidates }));
+            }
+        }
+    }
+    open_root(&app, &state, root).map(|p| serde_json::json!({ "opened": p }))
 }
 
 /// Native folder picker. Async so the modal dialog never blocks the IPC
@@ -156,7 +180,7 @@ fn pick_folder() -> Option<String> {
 fn workspace_init(app: tauri::AppHandle, state: State<AppState>, path: String) -> Result<String, String> {
     let root = PathBuf::from(&path);
     let root = root.canonicalize().unwrap_or(root);
-    if !root.join("workspace.yaml").is_file() {
+    if !blastradius_core::discover::is_workspace_dir(&root) {
         let name = root
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -180,7 +204,7 @@ fn workspace_init(app: tauri::AppHandle, state: State<AppState>, path: String) -
 #[tauri::command]
 fn workspace_demo(app: tauri::AppHandle, state: State<AppState>) -> Result<String, String> {
     let dir = std::env::temp_dir().join("blastradius-demo");
-    if !dir.join("workspace.yaml").is_file() {
+    if !blastradius_core::discover::is_workspace_dir(&dir) {
         for (rel, text) in blastradius_core::scaffold::starter_workspace("Acme Payments") {
             let target = dir.join(&rel);
             if let Some(parent) = target.parent() {
@@ -353,7 +377,7 @@ fn startup_root() -> Option<PathBuf> {
         .map(PathBuf::from)
         .or_else(|| Some(std::env::current_dir().ok()?.join("docs")))?;
     let root = candidate.canonicalize().unwrap_or(candidate);
-    root.join("workspace.yaml").is_file().then_some(root)
+    blastradius_core::discover::is_workspace_dir(&root).then_some(root)
 }
 
 fn main() {

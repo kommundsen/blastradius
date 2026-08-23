@@ -8,6 +8,7 @@
 
 pub mod diagnostics;
 pub mod diff;
+pub mod discover;
 pub mod docs;
 pub mod export;
 pub mod git;
@@ -33,7 +34,8 @@ pub use model::Workspace;
 /// Highest schema version this build understands (spec §1).
 pub const SCHEMA_VERSION: u64 = 1;
 
-/// Load a workspace folder (the directory containing `workspace.yaml`).
+/// Load a workspace folder (the directory containing `blastradius.yaml`,
+/// or the legacy `workspace.yaml`).
 pub fn load_workspace(root: &Path) -> (Workspace, Vec<Diagnostic>) {
     load_workspace_vfs(&vfs::DiskVfs::new(root))
 }

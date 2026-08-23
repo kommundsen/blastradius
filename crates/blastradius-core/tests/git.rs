@@ -62,7 +62,7 @@ fn shop_v2() -> &'static str {
 fn revision_loading_and_semantic_diff_between_commits() {
     let t = temp_repo("diff");
     // workspace lives in a subfolder — exercises the prefix path
-    write(&t.dir, "docs/workspace.yaml", MANIFEST);
+    write(&t.dir, "docs/blastradius.yaml", MANIFEST);
     write(&t.dir, "docs/model/shop.yaml", shop_v1());
     let c1 = commit_all(&t, "v1");
     write(&t.dir, "docs/model/shop.yaml", shop_v2());
@@ -105,7 +105,7 @@ fn revision_loading_and_semantic_diff_between_commits() {
 #[test]
 fn history_lists_only_workspace_commits() {
     let t = temp_repo("history");
-    write(&t.dir, "docs/workspace.yaml", MANIFEST);
+    write(&t.dir, "docs/blastradius.yaml", MANIFEST);
     write(&t.dir, "docs/model/shop.yaml", shop_v1());
     commit_all(&t, "workspace v1");
     write(&t.dir, "src/other.txt", "unrelated");
@@ -122,7 +122,7 @@ fn history_lists_only_workspace_commits() {
 #[test]
 fn status_reports_branch_and_dirty_workspace_files() {
     let t = temp_repo("status");
-    write(&t.dir, "docs/workspace.yaml", MANIFEST);
+    write(&t.dir, "docs/blastradius.yaml", MANIFEST);
     write(&t.dir, "docs/model/shop.yaml", shop_v1());
     commit_all(&t, "v1");
 
@@ -140,7 +140,7 @@ fn status_reports_branch_and_dirty_workspace_files() {
 #[test]
 fn conflict_sides_parse_and_differ() {
     let t = temp_repo("conflict");
-    write(&t.dir, "workspace.yaml", MANIFEST); // workspace at repo root: prefix = ""
+    write(&t.dir, "blastradius.yaml", MANIFEST); // workspace at repo root: prefix = ""
     write(&t.dir, "model/shop.yaml", shop_v1());
     let base = commit_all(&t, "base");
 

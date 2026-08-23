@@ -119,7 +119,7 @@ fn init_flags_drive_the_extras() {
         .output()
         .unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
-    assert!(dir.join("workspace.yaml").is_file());
+    assert!(dir.join("blastradius.yaml").is_file());
     assert!(!dir.join(".git").exists(), "--no-git respected");
     assert!(dir.join(".mcp.json").is_file());
     assert!(dir.join(".codex/config.toml").is_file());

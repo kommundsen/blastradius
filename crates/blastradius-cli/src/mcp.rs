@@ -25,20 +25,25 @@ pub struct McpServer {
     engine: SyncEngine,
 }
 
-/// Resolve the workspace folder like the desktop app does: the argument, or
-/// the current directory, falling back to `./docs` (the dogfood layout).
+/// Resolve the workspace folder like the desktop app does: the argument (or
+/// the current directory), with workspace discovery below it — so a repo
+/// root works, and the dogfood `./docs` layout is just the common case.
 pub fn resolve_root(arg: Option<&str>) -> Result<PathBuf, String> {
     let base = PathBuf::from(arg.unwrap_or("."));
-    let candidates = [base.clone(), base.join("docs")];
-    for c in &candidates {
-        if c.join("workspace.yaml").is_file() {
-            return Ok(c.canonicalize().unwrap_or_else(|_| c.clone()));
-        }
+    let hits = blastradius_core::discover::discover_workspaces(&base);
+    match hits.as_slice() {
+        [one] => Ok(one.canonicalize().unwrap_or_else(|_| one.clone())),
+        [] => Err(format!(
+            "{}: no blastradius.yaml here or below — pass a workspace folder (or run `blastradius init`)",
+            base.display()
+        )),
+        many => Err(format!(
+            "{}: {} workspaces found — pass one explicitly:\n{}",
+            base.display(),
+            many.len(),
+            many.iter().map(|p| format!("  {}", p.display())).collect::<Vec<_>>().join("\n")
+        )),
     }
-    Err(format!(
-        "{}: no workspace.yaml here or in ./docs — pass a workspace folder (or run `blastradius init`)",
-        base.display()
-    ))
 }
 
 /// Blocking serve loop: one JSON-RPC message per stdin line, responses on

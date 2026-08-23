@@ -74,7 +74,8 @@ They arrive through the free tier and are the top-of-funnel.
 
 ### In
 
-- **Workspace**: open a folder containing `workspace.yaml`; multi-file model
+- **Workspace**: open a folder containing `blastradius.yaml` — or a repo
+  root, and the workspace inside is discovered; multi-file model
   with include globs; file watcher reloads on external edits
   (spec/model-format.md).
 - **Model semantics**: C4 people, software systems, containers, components;

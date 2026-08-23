@@ -13,7 +13,9 @@ disagree, it is a bug in one of them and CI should have caught it.
 
 ## 1. Workspace
 
-A workspace is a folder containing `workspace.yaml`:
+A workspace is a folder containing a `blastradius.yaml` manifest
+(ADR-0014; the pre-0.2.0 name `workspace.yaml` still loads with a
+deprecation warning, and `blastradius.yaml` wins when both exist):
 
 ```yaml
 workspace:

@@ -24,7 +24,7 @@ pub fn starter_workspace(name: &str) -> Vec<(String, String)> {
     let mut files = Vec::new();
 
     files.push((
-        "workspace.yaml".to_string(),
+        "blastradius.yaml".to_string(),
         format!(
             "# {name} — Blastradius workspace manifest.\n\
              # The model is plain YAML in this folder: the app, the CLI, and CI all read\n\
@@ -184,7 +184,7 @@ mod tests {
 pub fn benchmark_workspace(systems: usize) -> Vec<(String, String)> {
     let mut files = Vec::new();
     files.push((
-        "workspace.yaml".to_string(),
+        "blastradius.yaml".to_string(),
         "workspace:\n  name: Benchmark\n  version: 1\nmodel:\n  include: [model/*.yaml]\nviews:\n  include: [views/*.yaml]\n".to_string(),
     ));
     let mut ctx = String::from("people:\n");

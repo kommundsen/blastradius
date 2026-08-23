@@ -16,7 +16,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, 'site');
 const marked = createRequire(import.meta.url)(join(root, 'ui/vendor/marked.min.js'));
 
-// same globs as docs/workspace.yaml declares for its docs
+// same globs as docs/blastradius.yaml declares for its docs
 const sources = ['', 'adr', 'spec']
   .flatMap((dir) =>
     readdirSync(join(root, 'docs', dir), { withFileTypes: true })

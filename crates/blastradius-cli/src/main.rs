@@ -8,14 +8,20 @@ use std::process::ExitCode;
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
-        Some("validate") => validate(args.get(1).map(String::as_str).unwrap_or(".")),
+        Some("validate") => resolving(args.get(1), validate),
         Some("diff") => match (args.get(1), args.get(2)) {
-            (Some(a), Some(b)) => diff(a, b),
+            (Some(a), Some(b)) => match (resolve(a), resolve(b)) {
+                (Ok(a), Ok(b)) => diff(&a, &b),
+                (Err(c), _) | (_, Err(c)) => c,
+            },
             _ => usage(),
         },
-        Some("snapshot") => snapshot(args.get(1).map(String::as_str).unwrap_or(".")),
+        Some("snapshot") => resolving(args.get(1), snapshot),
         Some("gitdiff") => match args.get(1) {
-            Some(dir) => gitdiff(dir, args.get(2).map(String::as_str), args.get(3).map(String::as_str)),
+            Some(dir) => match resolve(dir) {
+                Ok(dir) => gitdiff(&dir, args.get(2).map(String::as_str), args.get(3).map(String::as_str)),
+                Err(c) => c,
+            },
             None => usage(),
         },
         Some("export") => export(&args[1..]),
@@ -32,6 +38,25 @@ fn main() -> ExitCode {
             _ => usage(),
         },
         _ => usage(),
+    }
+}
+
+/// Workspace-taking commands accept a repo root too: discovery finds the
+/// workspace below it (ADR-0014); ambiguity is an error listing the hits.
+fn resolve(dir: &str) -> Result<String, ExitCode> {
+    match blastradius_cli::mcp::resolve_root(Some(dir)) {
+        Ok(p) => Ok(p.display().to_string()),
+        Err(e) => {
+            eprintln!("{e}");
+            Err(ExitCode::from(2))
+        }
+    }
+}
+
+fn resolving(dir: Option<&String>, run: fn(&str) -> ExitCode) -> ExitCode {
+    match resolve(dir.map(String::as_str).unwrap_or(".")) {
+        Ok(d) => run(&d),
+        Err(c) => c,
     }
 }
 
@@ -204,6 +229,10 @@ fn export(args: &[String]) -> ExitCode {
     let (Some(dir), Some(out)) = (dir, out) else {
         return usage();
     };
+    let dir = match resolve(&dir) {
+        Ok(d) => d,
+        Err(c) => return c,
+    };
     let root = Path::new(&dir);
     let (ws, diags) = blastradius_core::load_workspace(root);
     if has_errors(&diags) {
@@ -263,7 +292,7 @@ fn init(args: &[String]) -> ExitCode {
     let dir = dir.unwrap_or_else(|| ".".to_string());
     let root = Path::new(&dir);
 
-    let fresh = !root.join("workspace.yaml").is_file();
+    let fresh = !root.join("blastradius.yaml").is_file() && !root.join("workspace.yaml").is_file();
     if fresh {
         let name = name.unwrap_or_else(|| {
             root.canonicalize()

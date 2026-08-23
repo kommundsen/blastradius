@@ -47,7 +47,7 @@ const VIEW: &str = "view: containers\nscope: shop\nlevel: L2\nlayout:\n  web: [2
 
 fn setup(name: &str) -> (TempWs, SyncEngine) {
     let t = temp_ws(name);
-    write(&t.dir, "workspace.yaml", MANIFEST);
+    write(&t.dir, "blastradius.yaml", MANIFEST);
     write(&t.dir, "model/shop.yaml", SHOP);
     write(&t.dir, "views/containers.yaml", VIEW);
     let engine = SyncEngine::open(&t.dir);

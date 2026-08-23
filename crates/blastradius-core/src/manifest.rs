@@ -1,10 +1,29 @@
-//! `workspace.yaml` — the single entry point (ADR-0004), and the include-glob
-//! expansion. Globs support `*` (one segment) and `**` (any depth) only
-//! (spec §1); anything fancier is a manifest error, not a silent no-match.
+//! `blastradius.yaml` — the single entry point (ADR-0004, renamed by
+//! ADR-0014; the legacy `workspace.yaml` still loads with a deprecation
+//! warning), and the include-glob expansion. Globs support `*` (one
+//! segment) and `**` (any depth) only (spec §1); anything fancier is a
+//! manifest error, not a silent no-match.
 
 use crate::diagnostics::Diagnostic;
 use crate::vfs::Vfs;
 use crate::yaml;
+
+/// The manifest filename — self-identifying so repo-root discovery never
+/// mistakes another tool's `workspace.yaml` for ours (ADR-0014).
+pub const MANIFEST: &str = "blastradius.yaml";
+/// The pre-0.2.0 name, still read with a deprecation warning.
+pub const LEGACY_MANIFEST: &str = "workspace.yaml";
+
+/// Which manifest name this workspace uses, preferring the current one.
+pub fn manifest_rel(vfs: &dyn Vfs) -> Option<&'static str> {
+    if vfs.read(MANIFEST).is_ok() {
+        Some(MANIFEST)
+    } else if vfs.read(LEGACY_MANIFEST).is_ok() {
+        Some(LEGACY_MANIFEST)
+    } else {
+        None
+    }
+}
 
 pub struct Manifest {
     pub name: String,
@@ -14,13 +33,25 @@ pub struct Manifest {
 }
 
 pub fn load(vfs: &dyn Vfs, diags: &mut Vec<Diagnostic>) -> Option<Manifest> {
-    let rel = "workspace.yaml";
-    if vfs.read(rel).is_err() {
-        diags.push(Diagnostic::error(rel, 0, "workspace.yaml not found — not a workspace"));
+    let Some(rel) = manifest_rel(vfs) else {
+        diags.push(Diagnostic::error(MANIFEST, 0, "blastradius.yaml not found — not a workspace"));
         return None;
+    };
+    if rel == LEGACY_MANIFEST {
+        diags.push(Diagnostic::warning(
+            rel,
+            0,
+            "deprecated manifest name — rename workspace.yaml to blastradius.yaml",
+        ));
+    } else if vfs.read(LEGACY_MANIFEST).is_ok() {
+        diags.push(Diagnostic::warning(
+            LEGACY_MANIFEST,
+            0,
+            "ignored — blastradius.yaml takes precedence; delete or merge this file",
+        ));
     }
     let (node, _text) = yaml::load_file(vfs, rel, diags)?;
-    let map = yaml::as_mapping(&node, rel, "workspace.yaml", diags)?;
+    let map = yaml::as_mapping(&node, rel, "the manifest", diags)?;
 
     // workspace: { name, version }
     let ws = map.get_node("workspace").and_then(|n| match n {

@@ -730,7 +730,8 @@ function renderWelcome() {
       <button class="btn btn-ghost" id="welcome-demo">Try a demo workspace</button>
     </div>
     <p class="text-muted welcome-foot">A workspace is any folder with a
-      <span style="font-family:var(--font-mono)">workspace.yaml</span> —
+      <span style="font-family:var(--font-mono)">blastradius.yaml</span> — open it
+      directly or pick the repo root and it is found for you.
       <span style="font-family:var(--font-mono)">blastradius init</span> scaffolds one from the CLI.</p>
   </div>`;
   els.canvas.appendChild(w);
@@ -751,11 +752,37 @@ async function openWorkspaceFlow(mode) {
   try {
     const path = await invoke('pick_folder');
     if (!path) return; // dialog cancelled
-    await invoke(mode === 'new' ? 'workspace_init' : 'workspace_open', { path });
+    const res = await invoke(mode === 'new' ? 'workspace_init' : 'workspace_open', { path });
+    // a repo root holding several workspaces comes back as candidates
+    if (res?.candidates) return pickWorkspaceDialog(res.candidates);
     await switchedWorkspace();
   } catch (e) {
     toast(String(e));
   }
+}
+
+/** The picked folder is a monorepo with several workspaces: let the user choose. */
+function pickWorkspaceDialog(candidates) {
+  const opts = candidates
+    .map((p) => `<option value="${esc(p)}">${esc(p)}</option>`)
+    .join('');
+  openDialog({
+    title: 'Choose a workspace',
+    body: `<div class="dlg-field">
+      <label for="dlg-ws">This folder contains ${candidates.length} workspaces</label>
+      <select class="input" id="dlg-ws">${opts}</select>
+    </div>`,
+    confirm: 'Open',
+    onConfirm: async () => {
+      try {
+        await invoke('workspace_open', { path: document.getElementById('dlg-ws').value });
+        await switchedWorkspace();
+      } catch (e) {
+        toast(String(e));
+        return false;
+      }
+    },
+  });
 }
 
 /** Full state reset — a different workspace means a different everything. */

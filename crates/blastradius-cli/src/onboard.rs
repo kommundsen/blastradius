@@ -31,7 +31,7 @@ pub fn git_root(dir: &Path) -> Option<PathBuf> {
 }
 
 /// Apply the selected extras. `workspace` is the folder holding
-/// workspace.yaml; agent config lands at the git root (agents run there),
+/// the manifest; agent config lands at the git root (agents run there),
 /// falling back to the workspace folder itself. Returns a human-readable
 /// action log; soft failures are logged, not fatal.
 pub fn setup(workspace: &Path, opts: &SetupOptions) -> Vec<String> {
@@ -166,7 +166,7 @@ fn primer(rel: &str) -> String {
     let loc = if rel == "." { "this folder".to_string() } else { format!("`{rel}/`") };
     format!(
         "This repository contains a Blastradius workspace in {loc} — a C4\n\
-         architecture model as plain YAML (workspace.yaml + model/ + views/),\n\
+         architecture model as plain YAML (blastradius.yaml + model/ + views/),\n\
          versioned like source code.\n\
          \n\
          When architecture is relevant:\n\
