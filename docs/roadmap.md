@@ -198,12 +198,14 @@ deliberately deferred again (same cost/hardware decision as 0.2.0).
 1. **L4 code introspection** — source-derived elements below L3, the
    payoff ADR-0014's repo-root anchor was built for. **Language priority
    is C#/.NET and JavaScript/TypeScript** (the user's stack), not Rust.
-   Shape to be fixed in an ADR before building: components opt in via a
-   `source:` mapping in the model YAML (path + language); derived elements
-   are read-only, computed at open/watch time, never written into the
-   workspace files; the parser strategy (vendored tree-sitter grammars vs
-   deliberately-shallow heuristic parsing of imports/usings/namespaces) is
-   the open decision the ADR must settle.
+   Shape settled 2026-08-23 in ADR-0016 + `spec/l4-introspection.md`:
+   per-language out-of-process extractors on the native compiler APIs
+   (TypeScript compiler API; Roslyn syntax-level — the engines beneath
+   the language servers, not the LSP protocol and not tree-sitter),
+   emitting a common facts JSON committed under `docs/model/derived/`
+   with a CI staleness gate; modules + types granularity; components
+   opt in via a repo-root-relative `source:` mapping; derived elements
+   read-only, never written into workspace YAML.
    *Exit:* dive below an opted-in component and see the real code graph —
    dogfooded on `ui/js/` (the Canvas UI's actual module/import graph at
    L4), with a C# fixture corpus exercising the same path in tests.
