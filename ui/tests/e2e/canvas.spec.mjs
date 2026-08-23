@@ -37,7 +37,7 @@ test('exit-criterion flow: dive to git-service, open ADR-0007', async ({ page })
   await node('Git Service').first().click();
   const side = page.locator('#side-body');
   await expect(side).toContainText('blastradius.core.git-service');
-  await expect(side).toContainText('Read-only repository access');
+  await expect(side).toContainText('Repository access');
 
   await side.locator('[data-doc="adr-0007"]').click();
   await expect(page.locator('#side-title')).toHaveText('adr-0007');
