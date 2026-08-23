@@ -35,7 +35,7 @@
 
   <Applications>
     <Application Id="Blastradius"
-      Executable="$targetnametoken$.exe"
+      Executable="blastradius-app.exe"
       EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
         DisplayName="Blastradius"
