@@ -2,7 +2,7 @@
 doc: spec-l4-introspection
 type: spec
 status: draft
-elements: [blastradius.core.model-service, blastradius.cli, blastradius.ui.canvas]
+elements: [blastradius.core.introspector, blastradius.cli, blastradius.ui.canvas]
 ---
 
 # Spec: L4 code introspection
@@ -110,7 +110,7 @@ read-only elements beneath the owning component:
 ## CLI
 
 ```
-blastradius introspect [<component-id>] [--check]
+blastradius introspect [dir] [component-id] [--check]
 ```
 
 - No argument: extract every opted-in component. With an id: just that
@@ -122,10 +122,10 @@ blastradius introspect [<component-id>] [--check]
   schema-invalid output fails the command with the extractor's stderr.
 - `--check`: extract to memory and byte-compare against the committed
   file; nonzero exit on drift. This is the CI staleness gate, same
-  pattern as the snapshot gate. CI runs `--check` for both dogfood
-  mappings — TypeScript in the frontend job (Node is already there)
-  and Rust in the validate job (built-in, no extra toolchain); the C#
-  extractor is gated by its own fixture tests, not by dogfood.
+  pattern as the snapshot gate. CI's validate job runs `--check` for
+  both dogfood mappings (Rust is built in; TypeScript uses the runner's
+  Node plus the `typescript` dev dependency); the C# extractor is gated
+  by its fixture test (`extractors/dotnet/test.sh`), not by dogfood.
 
 Extractor commands (overridable per mapping with `extractor:`, for
 monorepos with pinned toolchains):
@@ -232,12 +232,15 @@ import path (ADR-0016 option 3).
 
 ## App & MCP behavior
 
-- **Canvas**: an opted-in component renders a dive affordance (same
-  grammar as container→component). L4 uses the existing deterministic
-  layout pipeline; derived elements get a `derived` chip and the module
-  file name as kicker; `stale: true` adds the staleness badge. The
-  inspector shows `path` and offers open-in-editor at `path:line`
-  (existing `open_in_editor` command).
+- **Canvas**: an opted-in component dives like a container (same
+  grammar); one more dive steps from a module into its types, and
+  Escape climbs back out. L4 uses the existing deterministic layout
+  pipeline with no pinning (derived layouts are pure auto-layout);
+  derived nodes carry a kind kicker with a derived marker ("Module ·
+  derived") and monospace, case-preserving titles; a stale graph badges
+  the breadcrumb and dashes the nodes. The inspector shows `path:line`
+  and opens the file via the `open_source` command (repo-root-relative,
+  unlike `open_in_editor`'s workspace-relative paths).
 - **MCP**: derived elements appear in `find_elements`, `element`, and
   `blast_radius` (marked `derived: true`) — an agent asking for the
   blast radius of a module sees real code-level fan-in. Write tools

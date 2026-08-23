@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "language": "csharp",
+  "extractor": "blastradius-extract-cs 0.1.0",
+  "component": "shop.backend.billing",
+  "root": "src",
+  "sourceDigest": "sha256:cce4b9f133560a062e51c4fc67bbe1fb12232ec5f2ac1add088e0c3d6c93a569",
+  "elements": [
+    {
+      "id": "Acme",
+      "kind": "namespace",
+      "name": "Acme",
+      "path": "src/Billing/Invoice.Totals.cs"
+    },
+    {
+      "id": "Acme.Billing",
+      "kind": "namespace",
+      "name": "Billing",
+      "parent": "Acme",
+      "path": "src/Billing/Invoice.Totals.cs"
+    },
+    {
+      "id": "Acme.Billing.Invoice",
+      "kind": "class",
+      "name": "Invoice",
+      "parent": "Acme.Billing",
+      "path": "src/Billing/Invoice.Totals.cs",
+      "line": 3
+    },
+    {
+      "id": "Acme.Billing.InvoiceLine",
+      "kind": "record",
+      "name": "InvoiceLine",
+      "parent": "Acme.Billing",
+      "path": "src/Billing/Invoice.cs",
+      "line": 3
+    },
+    {
+      "id": "Acme.Shipping",
+      "kind": "namespace",
+      "name": "Shipping",
+      "parent": "Acme",
+      "path": "src/Shipping/Shipment.cs"
+    },
+    {
+      "id": "Acme.Shipping.Carrier",
+      "kind": "enum",
+      "name": "Carrier",
+      "parent": "Acme.Shipping",
+      "path": "src/Shipping/Shipment.cs",
+      "line": 10
+    },
+    {
+      "id": "Acme.Shipping.ITracked",
+      "kind": "interface",
+      "name": "ITracked",
+      "parent": "Acme.Shipping",
+      "path": "src/Shipping/Shipment.cs",
+      "line": 5
+    },
+    {
+      "id": "Acme.Shipping.Shipment",
+      "kind": "class",
+      "name": "Shipment",
+      "parent": "Acme.Shipping",
+      "path": "src/Shipping/Shipment.cs",
+      "line": 16
+    }
+  ],
+  "edges": [
+    {
+      "from": "Acme.Billing.Invoice",
+      "to": "Acme.Billing.InvoiceLine",
+      "kind": "references"
+    },
+    {
+      "from": "Acme.Shipping.Shipment",
+      "to": "Acme.Billing.Invoice",
+      "kind": "references"
+    },
+    {
+      "from": "Acme.Shipping.Shipment",
+      "to": "Acme.Shipping.Carrier",
+      "kind": "references"
+    },
+    {
+      "from": "Acme.Shipping.Shipment",
+      "to": "Acme.Shipping.ITracked",
+      "kind": "implements"
+    }
+  ]
+}

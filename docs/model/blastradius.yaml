@@ -29,7 +29,10 @@ containers:
       canvas:
         name: Canvas
         tech: SVG + DOM camera layer
-        description: Zooming diagram surface — nodes, edges, diff states, continuous L1→L3 camera.
+        description: Zooming diagram surface — nodes, edges, diff states, continuous L1→L4 camera.
+        source:            # L4 dogfood: the canvas's real module graph (spec/l4-introspection.md)
+          language: typescript
+          root: ui/js
       yaml-panel:
         name: YAML Panel
         tech: plain-text editor (v1)
@@ -68,12 +71,20 @@ containers:
         name: Git Service
         tech: git2 / libgit2
         description: "Repository access — status, revision materialisation for diff, conflict stages, history (ADR-0007); applies in-app conflict resolutions as splices on the chosen side, staged via the user's own git (ADR-0015)."
+        source:            # L4 dogfood via the built-in Rust extractor; include globs exercised on purpose
+          language: rust
+          root: crates/blastradius-core/src
+          include: [git.rs, resolve.rs]
       exporter:
         name: Exporter
         description: "Self-contained HTML snapshot and SVG/PNG assembly, all headless-capable for CI (ADR-0009); the PR diff bot renders through the same pipeline."
       importer:
         name: Structurizr Importer
         description: One-way DSL import with fidelity report (ADR-0002).
+      introspector:
+        name: L4 Introspector
+        tech: syn · external extractors
+        description: "Derives read-only code-level elements from `source:`-mapped components (ADR-0016): built-in Rust extraction, out-of-process TypeScript/C# extractors over a common facts schema, committed under model/derived/ with a staleness digest."
 
 relations:
   - from: architect
@@ -113,6 +124,10 @@ relations:
     to: git-repo
     label: status · blobs · history
     protocol: libgit2
+  - from: core.introspector
+    to: git-repo
+    label: reads mapped source trees
+    protocol: fs
   - from: external-editor
     to: git-repo
     label: concurrent edits

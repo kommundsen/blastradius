@@ -20,6 +20,39 @@ pub struct Snapshot {
     pub views: Vec<SnapView>,
     pub docs: Vec<SnapDoc>,
     pub diagnostics: Vec<SnapDiagnostic>,
+    /// Source-derived L4 graphs, one per opted-in component
+    /// (spec/l4-introspection.md). Read-only by nature, not just by contract.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub derived: Vec<SnapDerived>,
+}
+
+#[derive(Serialize)]
+pub struct SnapDerived {
+    pub component: String,
+    pub language: String,
+    pub stale: bool,
+    pub elements: Vec<SnapDerivedElement>,
+    pub edges: Vec<SnapDerivedEdge>,
+}
+
+#[derive(Serialize)]
+pub struct SnapDerivedElement {
+    pub id: String,
+    /// module | namespace | class | interface | record | enum
+    pub kind: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<u64>,
+}
+
+#[derive(Serialize)]
+pub struct SnapDerivedEdge {
+    pub from: String,
+    pub to: String,
+    pub kind: String,
 }
 
 #[derive(Serialize)]
@@ -172,12 +205,40 @@ pub fn snapshot(vfs: &dyn Vfs, ws: &Workspace, diags: &[Diagnostic]) -> Snapshot
         })
         .collect();
 
+    let derived = ws
+        .derived
+        .iter()
+        .map(|g| SnapDerived {
+            component: g.component.clone(),
+            language: g.language.clone(),
+            stale: g.stale,
+            elements: g
+                .elements
+                .iter()
+                .map(|e| SnapDerivedElement {
+                    id: e.id.clone(),
+                    kind: e.kind.clone(),
+                    name: e.name.clone(),
+                    parent: e.parent.clone(),
+                    path: e.path.clone(),
+                    line: e.line,
+                })
+                .collect(),
+            edges: g
+                .edges
+                .iter()
+                .map(|e| SnapDerivedEdge { from: e.from.clone(), to: e.to.clone(), kind: e.kind.clone() })
+                .collect(),
+        })
+        .collect();
+
     Snapshot {
         name: ws.name.clone(),
         elements,
         relations,
         views,
         docs,
+        derived,
         diagnostics: diags
             .iter()
             .map(|d| SnapDiagnostic {

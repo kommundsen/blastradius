@@ -34,6 +34,24 @@ pub enum Operation {
     SetRelationField { from: String, to: String, label: Option<String>, field: String, value: String },
 }
 
+/// Every element id an operation would touch — used by the derived-element
+/// write guard in `apply`.
+fn op_target_ids(op: &Operation) -> Vec<&str> {
+    match op {
+        Operation::Pin { id, .. } | Operation::Rename { id, .. } | Operation::SetField { id, .. } | Operation::Delete { id } => vec![id],
+        Operation::Create { parent, id, .. } => {
+            let mut v = vec![id.as_str()];
+            if let Some(p) = parent {
+                v.push(p);
+            }
+            v
+        }
+        Operation::AddRelation { from, to, .. }
+        | Operation::DeleteRelation { from, to, .. }
+        | Operation::SetRelationField { from, to, .. } => vec![from, to],
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileChange {
     pub rel: String,
@@ -274,6 +292,16 @@ impl SyncEngine {
     /// Apply one canvas operation as a transaction. Refused while any model
     /// file is stale (spec: canvas read-only while stale).
     pub fn apply(&mut self, op: Operation) -> Result<Transaction, String> {
+        // Derived (introspected) elements are read-only by design
+        // (spec/l4-introspection.md): the code is the source of truth.
+        for id in op_target_ids(&op) {
+            if let Some(d) = self.model.derived_element(id) {
+                return Err(format!(
+                    "{id:?} is derived from source — edit {} instead and re-run `blastradius introspect`",
+                    d.path
+                ));
+            }
+        }
         let stale_model = self.stale_model();
         if !stale_model.is_empty() {
             return Err(format!(

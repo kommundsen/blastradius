@@ -44,9 +44,23 @@ pub struct Element {
     pub description: Option<String>,
     /// `external: true` on a system (spec §3).
     pub external: bool,
+    /// `source:` mapping — components only (spec/l4-introspection.md).
+    pub source: Option<SourceMapping>,
     /// Workspace-relative file that declares this element.
     pub file: String,
     pub line: u64,
+}
+
+/// A component's opt-in to L4 introspection (ADR-0016). Paths are
+/// repo-root-relative; globs are extractor-evaluated.
+#[derive(Debug, Clone)]
+pub struct SourceMapping {
+    pub language: String,
+    pub root: String,
+    pub include: Vec<String>,
+    pub exclude: Vec<String>,
+    /// Override for the extractor command; None = the language default.
+    pub extractor: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,6 +111,47 @@ pub struct Doc {
     pub line: u64,
 }
 
+/// Source-derived L4 elements for one opted-in component, loaded from a
+/// committed facts file (spec/l4-introspection.md). Kept apart from
+/// `Workspace::elements` by design: derived elements never participate in
+/// sync, diff, or authored-element validation, and the conformance counts
+/// stay authored-only (ADR-0016).
+#[derive(Debug, Clone)]
+pub struct DerivedGraph {
+    /// Owning component's dotted id.
+    pub component: ElementId,
+    pub language: String,
+    /// The facts file's sourceDigest — kept for the staleness probe.
+    pub source_digest: String,
+    /// Facts digest disagrees with the working tree (badge, not error).
+    pub stale: bool,
+    pub elements: Vec<DerivedElement>,
+    pub edges: Vec<DerivedEdge>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DerivedElement {
+    /// Full dotted id: `<component>.src.<fact-id>`.
+    pub id: ElementId,
+    /// module | namespace | class | interface | record | enum
+    pub kind: String,
+    pub name: String,
+    /// Full dotted id of the containing module/namespace, if any.
+    pub parent: Option<ElementId>,
+    /// Repo-root-relative source path (forward slashes).
+    pub path: String,
+    /// 1-based declaration line for click-through (types only).
+    pub line: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DerivedEdge {
+    pub from: ElementId,
+    pub to: ElementId,
+    /// imports | references | extends | implements
+    pub kind: String,
+}
+
 /// A fully loaded workspace. `elements` is keyed by dotted id and ordered
 /// (BTreeMap) so that iteration — and therefore diffing and output — is
 /// deterministic (ADR-0006 applies the same principle to layout).
@@ -107,6 +162,8 @@ pub struct Workspace {
     pub relations: Vec<Relation>,
     pub views: Vec<View>,
     pub docs: Vec<Doc>,
+    /// One entry per facts file under `model/derived/`, sorted by component.
+    pub derived: Vec<DerivedGraph>,
 }
 
 impl Workspace {
@@ -123,6 +180,11 @@ impl Workspace {
             }
         }
         None
+    }
+
+    /// Look up a derived (introspected) element by full dotted id.
+    pub fn derived_element(&self, id: &str) -> Option<&DerivedElement> {
+        self.derived.iter().flat_map(|g| g.elements.iter()).find(|e| e.id == id)
     }
 
     /// Relations with both endpoints resolved to dotted ids (spec §3 sibling

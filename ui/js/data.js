@@ -22,13 +22,88 @@ export function byId(snapshot) {
 }
 
 /**
+ * The derived (L4) graph owning an id — the component itself or any
+ * `<component>.src.*` element (spec/l4-introspection.md).
+ */
+export function derivedGraphFor(snapshot, id) {
+  if (!id) return null;
+  return (
+    (snapshot.derived ?? []).find(
+      (g) => id === g.component || id.startsWith(g.component + '.src.')
+    ) ?? null
+  );
+}
+
+/**
+ * The L4 view: derived elements one nesting step below the scope (the
+ * component shows its top-level modules/namespaces; a module shows its
+ * types and submodules). Hierarchy comes from the explicit `parent` field —
+ * fact ids may themselves contain dots, so dot-depth arithmetic is wrong here.
+ */
+function computeDerivedView(snapshot, scope) {
+  const graph = derivedGraphFor(snapshot, scope);
+  if (!graph) return { level: 'L4', scope, nodes: [], edges: [] };
+  const atTop = scope === graph.component;
+  const visible = new Map();
+  for (const el of graph.elements) {
+    if ((el.parent ?? null) === (atTop ? null : scope)) {
+      visible.set(el.id, { ...el, derived: true, stale: graph.stale });
+    }
+  }
+
+  const parentOf = new Map(graph.elements.map((e) => [e.id, e.parent ?? null]));
+  const liftEndpoint = (id) => {
+    for (let cur = id; cur; cur = parentOf.get(cur)) {
+      if (visible.has(cur)) return cur;
+    }
+    return null;
+  };
+
+  const edges = [];
+  const seen = new Map();
+  for (const e of graph.edges) {
+    const from = liftEndpoint(e.from);
+    const to = liftEndpoint(e.to);
+    if (!from || !to || from === to) continue;
+    const back = seen.get(to + '|' + from);
+    if (back) {
+      back.direction = 'both';
+      continue;
+    }
+    const key = from + '|' + to;
+    const existing = seen.get(key);
+    if (existing) {
+      if (existing.label !== e.kind) existing.exact = false; // mixed kinds aggregate
+      continue;
+    }
+    const edge = {
+      from,
+      to,
+      label: e.kind,
+      protocol: null,
+      direction: 'forward',
+      exact: from === e.from && to === e.to,
+    };
+    seen.set(key, edge);
+    edges.push(edge);
+  }
+
+  const nodes = [...visible.values()].sort((a, b) => a.id.localeCompare(b.id));
+  edges.sort((a, b) => (a.from + '|' + a.to).localeCompare(b.from + '|' + b.to));
+  return { level: 'L4', scope, nodes, edges };
+}
+
+/**
  * Compute the elements + relations visible at one altitude.
  *
  * level: "L1" (scope ignored), "L2" (scope = system id), "L3" (scope =
- * container id). Relations are lifted to the deepest visible ancestor of each
- * endpoint and deduplicated; self-loops after lifting are dropped.
+ * container id), "L4" (scope = an opted-in component or a derived element;
+ * nodes come from the committed facts, not the authored model). Relations are
+ * lifted to the deepest visible ancestor of each endpoint and deduplicated;
+ * self-loops after lifting are dropped.
  */
 export function computeView(snapshot, level, scope, includeContext = true) {
+  if (level === 'L4') return computeDerivedView(snapshot, scope);
   const els = byId(snapshot);
   const visible = new Map(); // id -> element
 

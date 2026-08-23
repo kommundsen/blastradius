@@ -14,9 +14,12 @@ fn repo_docs_workspace_is_valid() {
         eprintln!("{d}");
     }
     assert!(!has_errors(&diags));
-    assert_eq!(ws.elements.len(), 24, "element count changed — update this test with the model");
+    assert_eq!(ws.elements.len(), 25, "element count changed — update this test with the model");
     assert_eq!(ws.docs.len(), 26, "registered doc count changed");
     assert_eq!(ws.views.len(), 2);
+    // The dogfood workspace introspects itself (spec/l4-introspection.md):
+    // two committed facts graphs, TypeScript and Rust.
+    assert_eq!(ws.derived.len(), 2, "dogfood derived graph count changed");
     // exactly one frontmatter-less file (docs/README.md), no warnings
     assert_eq!(diags.iter().filter(|d| d.severity == Severity::Info).count(), 1);
     assert_eq!(diags.iter().filter(|d| d.severity == Severity::Warning).count(), 0);

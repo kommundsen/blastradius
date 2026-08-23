@@ -13,6 +13,7 @@ pub mod docs;
 pub mod export;
 pub mod git;
 pub mod import;
+pub mod introspect;
 pub mod manifest;
 pub mod model;
 pub mod parse;
@@ -65,6 +66,7 @@ pub fn load_workspace_vfs(source: &dyn vfs::Vfs) -> (Workspace, Vec<Diagnostic>)
     for file in &manifest.doc_files {
         docs::parse_doc_file(source, file, &mut ws, &mut diags);
     }
+    introspect::load_derived(source, &mut ws, &mut diags);
 
     validate::cross_validate(&ws, &mut diags);
     (ws, diags)

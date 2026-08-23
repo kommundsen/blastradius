@@ -212,6 +212,23 @@ deliberately deferred again (same cost/hardware decision as 0.2.0).
    graph — dogfooded on `ui/js/` (TypeScript) and a Core component's
    Rust modules, with a C# fixture corpus exercising the same path in
    tests.
+   **Shipped 2026-08-23, exits met.** All three extractors landed
+   (core `introspect` module with `syn`; `extractors/typescript/` on
+   the compiler API; `extractors/dotnet/` on Roslyn syntax trees with
+   a byte-exact fixture gate); `blastradius introspect [--check]` +
+   the same-named MCP tool; derived elements graft under `.src.`,
+   answer in find_elements/element/blast_radius (code-level fan-in),
+   and refuse writes with a source-pointing error; the canvas dives
+   component → modules → types with derived/stale styling and an
+   `open_source` inspector link; the cross-language `sourceDigest`
+   staleness probe is verified byte-identical between Node and Rust.
+   Both dogfood mappings are live (`blastradius.ui.canvas` ← ui/js,
+   `blastradius.core.git-service` ← git.rs+resolve.rs, exercising
+   include globs) and CI gates them with `introspect --check`. The
+   gate proved itself during development: editing `ui/js` for the L4
+   canvas work immediately flagged the canvas facts stale. Deferred
+   as recorded in the spec: C# `--semantic` (MSBuildWorkspace) mode,
+   external-dependency rollup nodes, transitive `pub use` following.
 2. **Agent workflow deepening** — MCP conflict resolution (the recorded
    ADR-0015 follow-up), plus richer read tools where task-shaped gaps
    show up (e.g. rendering a view for an agent, richer model queries).

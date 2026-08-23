@@ -191,3 +191,58 @@ fn spawned_binary_speaks_mcp_over_stdio() {
     assert!(status.success());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// L4 introspection through the server (spec/l4-introspection.md): the
+/// introspect tool extracts and commits facts, derived elements answer in the
+/// read tools, and apply_operation refuses to touch them.
+#[test]
+fn introspect_tool_extracts_and_derived_elements_answer() {
+    let dir = scaffolded("introspect");
+    // Make the workspace dir a repo root with a small Rust source tree.
+    std::fs::create_dir_all(dir.join(".git")).unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src/engine.rs"),
+        "pub struct Engine;\n\npub struct Plan;\n\nimpl Engine {\n    pub fn plan(&self) -> Plan {\n        Plan\n    }\n}\n",
+    )
+    .unwrap();
+    // Opt a component in by hand (source: is not an op-editable field).
+    let model = dir.join("model/acme-payments.yaml");
+    let text = std::fs::read_to_string(&model).unwrap();
+    let patched = text.replace(
+        "\x20 app:\n    name: Application\n",
+        "\x20 app:\n    name: Application\n    components:\n      engine:\n        name: Engine\n        source:\n          language: rust\n          root: src\n",
+    );
+    assert_ne!(patched, text, "scaffold shape changed — fix the patch anchor");
+    std::fs::write(&model, patched).unwrap();
+
+    let mut s = McpServer::new(&dir);
+    let out = tool(&mut s, "introspect", json!({})).unwrap();
+    assert_eq!(out["results"][0]["component"], "acme-payments.app.engine");
+    assert_eq!(out["results"][0]["written"], true);
+    assert!(dir.join("model/derived/acme-payments.app.engine.l4.json").is_file());
+
+    // Read tools see the derived elements, marked.
+    let found = tool(&mut s, "find_elements", json!({"query": "Engine", "kind": "class"})).unwrap();
+    let ids: Vec<&str> = found["elements"].as_array().unwrap().iter().filter_map(|e| e["id"].as_str()).collect();
+    assert!(ids.contains(&"acme-payments.app.engine.src.engine.Engine"), "{ids:?}");
+
+    let el = tool(&mut s, "element", json!({"id": "acme-payments.app.engine.src.engine.Engine"})).unwrap();
+    assert_eq!(el["derived"], true);
+    assert_eq!(el["path"], "src/engine.rs");
+
+    let br = tool(&mut s, "blast_radius", json!({"id": "acme-payments.app.engine.src.engine.Plan"})).unwrap();
+    let dependents: Vec<&str> = br["dependents"].as_array().unwrap().iter().filter_map(|d| d["id"].as_str()).collect();
+    assert!(dependents.contains(&"acme-payments.app.engine.src.engine.Engine"), "{dependents:?}");
+
+    // Derived ids are read-only through the write path.
+    let err = tool(
+        &mut s,
+        "apply_operation",
+        json!({"op": {"op": "set-field", "id": "acme-payments.app.engine.src.engine.Engine", "field": "description", "value": "x"}}),
+    )
+    .unwrap_err();
+    assert!(err.contains("derived from source"), "{err}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -43,6 +43,11 @@ fn workspace_snapshot(state: State<AppState>) -> Result<serde_json::Value, Strin
     }
     let mut guard = state.engine.lock().unwrap();
     let engine = guard.get_or_insert_with(|| SyncEngine::open(&root));
+    // Badge lagging L4 facts (spec/l4-introspection.md): a digest recompute,
+    // cheap enough to run on every snapshot.
+    if let Some(repo) = blastradius_core::introspect::find_repo_root(&root) {
+        blastradius_core::introspect::mark_stale(&repo, &mut engine.model);
+    }
     let vfs = blastradius_core::vfs::DiskVfs::new(&root);
     let snap = blastradius_core::snapshot::snapshot(&vfs, &engine.model, &engine.diagnostics);
     serde_json::to_value(&snap).map_err(|e| e.to_string())
@@ -299,10 +304,24 @@ fn resolve_conflicts(
 #[tauri::command]
 fn open_in_editor(state: State<AppState>, rel: String) -> Result<(), String> {
     let root = root_of(&state)?;
+    open_path(&root, &rel, "workspace")
+}
+
+/// Open a repo-root-relative source file — derived (L4) elements point at
+/// code outside the workspace directory (spec/l4-introspection.md).
+#[tauri::command]
+fn open_source(state: State<AppState>, rel: String) -> Result<(), String> {
+    let root = root_of(&state)?;
+    let repo = blastradius_core::introspect::find_repo_root(&root)
+        .ok_or_else(|| "no repository root above the workspace".to_string())?;
+    open_path(&repo, &rel, "repository")
+}
+
+fn open_path(base: &std::path::Path, rel: &str, scope: &str) -> Result<(), String> {
     if rel.contains("..") {
-        return Err("path escapes the workspace".to_string());
+        return Err(format!("path escapes the {scope}"));
     }
-    let path = root.join(&rel);
+    let path = base.join(rel);
     if !path.is_file() {
         return Err(format!("{rel}: not a file"));
     }
@@ -420,6 +439,7 @@ fn main() {
             git_conflicts,
             resolve_conflicts,
             open_in_editor,
+            open_source,
             export_html,
             save_export,
             workspace_open,

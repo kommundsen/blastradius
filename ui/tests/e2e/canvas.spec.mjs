@@ -18,8 +18,9 @@ test('L1 context renders the dogfood model', async ({ page }) => {
   await expect(page.locator('.node.is-person')).toHaveCount(2);
   await expect(page.locator('.node.is-external')).toHaveCount(4);
   await expect(page.locator('#breadcrumb')).toContainText('Context');
-  // the tree lists the whole model regardless of altitude
-  await expect(page.locator('.tree-row')).toHaveCount(24);
+  // the tree lists the whole authored model regardless of altitude
+  // (derived L4 elements stay out of the tree — they are code, not model)
+  await expect(page.locator('.tree-row')).toHaveCount(25);
   expect(page.errors).toEqual([]);
   await page.screenshot({ path: 'test-results/webkit-L1.png', fullPage: true });
 });
@@ -47,6 +48,46 @@ test('exit-criterion flow: dive to git-service, open ADR-0007', async ({ page })
 
   expect(page.errors).toEqual([]);
   await page.screenshot({ path: 'test-results/webkit-L3-adr.png', fullPage: true });
+});
+
+test('L4: dive into introspected code, inspect a derived type', async ({ page }) => {
+  const node = (title) =>
+    page.locator('#nodes .node', { has: page.locator('.node-title', { hasText: title }) });
+
+  await node('Blastradius').dblclick();
+  await node('Core').dblclick();
+  await expect(page.locator('#breadcrumb')).toContainText('Components');
+
+  // Below L3 lies the code: the opted-in component opens its module graph.
+  await node('Git Service').first().dblclick();
+  await expect(page.locator('#breadcrumb')).toContainText('Code');
+  await expect(node('git.rs')).toBeVisible();
+  await expect(node('resolve.rs')).toBeVisible();
+  await expect(page.locator('.node.is-derived')).toHaveCount(2);
+  await expect(node('git.rs').locator('.node-kicker')).toContainText('derived');
+  // resolve.rs imports git.rs — a real edge from the committed facts
+  await expect(page.locator('#edges path.edge')).not.toHaveCount(0);
+
+  // One more step: a module opens its types.
+  await node('resolve.rs').dblclick();
+  await expect(node('Resolution')).toBeVisible();
+  await expect(node('Side')).toBeVisible();
+
+  // Derived inspector: read-only, points at the source file.
+  await node('Resolution').click();
+  const side = page.locator('#side-body');
+  await expect(side).toContainText('Derived from source');
+  await expect(side).toContainText('crates/blastradius-core/src/resolve.rs');
+  await expect(side.locator('#insp-name')).toHaveCount(0); // no rename input
+
+  // Escape climbs back out: types → modules → L3.
+  await page.keyboard.press('Escape');
+  await expect(node('git.rs')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#breadcrumb')).toContainText('Components');
+
+  expect(page.errors).toEqual([]);
+  await page.screenshot({ path: 'test-results/webkit-L4.png', fullPage: true });
 });
 
 test('keyboard: arrows select, Escape rises', async ({ page }) => {

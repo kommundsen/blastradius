@@ -1,7 +1,7 @@
 // Blastradius Phase 1 frontend: read-only rendering of one workspace.
 // The Core owns truth; this file owns pixels. No write path exists here.
 
-import { computeView, findViewDef, docsFor, treeModel, rootOf, depthOf, liftTo, resolvePins } from './data.js';
+import { computeView, findViewDef, docsFor, treeModel, rootOf, depthOf, liftTo, resolvePins, derivedGraphFor } from './data.js';
 import { layoutView, GRID } from './layout.js';
 import { viewSvg, kicker, childCount } from './svg.js';
 
@@ -68,6 +68,7 @@ function mockSync(cmd, args) {
     return t.label;
   }
   if (cmd === 'open_in_editor') return null;
+  if (cmd === 'open_source') return null;
   if (cmd === 'resolve_conflicts') {
     // the fixture is re-fetched per invoke; persist resolution in mockState
     mockState.resolved = true;
@@ -235,8 +236,21 @@ function canEdit() {
     && (staleModel ? staleModel.length === 0 : false);
 }
 
-/** Pinning is per-view: disabled while the current view's file is stale. */
+/** Authored or derived element by id — derived (L4) elements live in the
+ * snapshot's `derived` graphs, not in `elements` (spec/l4-introspection.md). */
+function anyElement(id) {
+  const snap = effectiveSnapshot();
+  const el = snap.elements.find((e) => e.id === id);
+  if (el) return el;
+  const graph = derivedGraphFor(snap, id);
+  const d = graph?.elements.find((e) => e.id === id);
+  return d ? { ...d, derived: true, stale: graph.stale } : null;
+}
+
+/** Pinning is per-view: disabled while the current view's file is stale.
+ * L4 is never pinnable — derived layouts are pure auto-layout. */
 function canPin() {
+  if (state.level === 'L4') return false;
   if (!canEdit()) return false;
   const viewDef = findViewDef(effectiveSnapshot(), state.level, state.scope);
   return !viewDef || !(state.sync?.staleViewIds ?? []).includes(viewDef.id);
@@ -290,7 +304,11 @@ async function renderCanvas({ animate = true } = {}) {
 
   // nodes
   els.nodes.textContent = '';
-  const elById = new Map(snap.elements.map((e) => [e.id, e]));
+  // view.nodes carry the element objects themselves — at L4 those are
+  // derived elements that exist nowhere in snap.elements.
+  const elById = new Map([...snap.elements, ...view.nodes].map((e) => [e.id, e]));
+  const childListFor = (el) =>
+    el.derived ? (derivedGraphFor(snap, el.id)?.elements ?? []) : state.snapshot.elements;
   const changeById = diffChangeMap();
   const conflictById = conflictMap();
   const movedPins = state.showLayoutDiff ? movedPinIds(viewDef) : new Set();
@@ -313,10 +331,11 @@ async function renderCanvas({ animate = true } = {}) {
     div.setAttribute('role', 'button');
     div.dataset.id = n.id;
     if (state.selected === n.id) div.classList.add('is-active');
+    const kids = childCount(el, childListFor(el));
     div.innerHTML =
       `<span class="node-kicker">${esc(kicker(el))}</span>` +
       `<span class="node-title">${esc(el.name)}</span>` +
-      (childCount(el, state.snapshot.elements) ? `<span class="node-meta">${childCount(el, state.snapshot.elements)}</span>` : '');
+      (kids ? `<span class="node-meta">${kids}</span>` : '');
     if (badge) {
       const b = document.createElement('span');
       b.className = 'node-badge';
@@ -387,6 +406,11 @@ async function renderCanvas({ animate = true } = {}) {
 }
 
 function nodeClass(el) {
+  if (el.derived) {
+    let cls = 'node is-component is-derived';
+    if (el.stale) cls += ' is-stale';
+    return cls;
+  }
   const map = { person: 'is-person', system: 'is-system', container: 'is-container', component: 'is-component', external: 'is-system' };
   let cls = 'node ' + (map[el.kind] ?? 'is-system');
   if (el.external) cls += ' is-external';
@@ -438,8 +462,9 @@ function select(id) {
 }
 
 async function dive(id) {
-  const el = state.snapshot.elements.find((e) => e.id === id);
+  const el = anyElement(id);
   if (!el) return;
+  const graph = derivedGraphFor(effectiveSnapshot(), id);
   if (el.kind === 'system' && !el.external && state.level === 'L1') {
     await glideInto(id);
     state.level = 'L2'; state.scope = id;
@@ -447,18 +472,42 @@ async function dive(id) {
     if (!state.snapshot.elements.some((e) => e.parent === id)) return; // nothing inside
     await glideInto(id);
     state.level = 'L3'; state.scope = id;
+  } else if (el.kind === 'component' && state.level === 'L3' && graph?.elements.length) {
+    // Below L3 lies the code (spec/l4-introspection.md): components that opted
+    // into introspection open their derived module graph.
+    await glideInto(id);
+    state.level = 'L4'; state.scope = id;
+  } else if (state.level === 'L4' && el.derived && graph.elements.some((e) => e.parent === id)) {
+    await glideInto(id);
+    state.scope = id; // deeper into the code: module → its types/submodules
   } else {
     return;
   }
   state.zoom = 1; state.pan = { x: 0, y: 0 };
   state.selected = id;
   await renderCanvas({ animate: false });
+  // The node that had focus is gone after the re-render — hand focus to the
+  // canvas immediately (not after the settle animation) so the next keystroke
+  // in the dive/rise flow is never lost.
+  els.canvas.focus({ preventScroll: true });
   await glideSettle('in');
   renderSide();
 }
 
 async function rise() {
-  if (state.level === 'L3') {
+  if (state.level === 'L4') {
+    await glideOut();
+    state.selected = state.scope;
+    const graph = derivedGraphFor(effectiveSnapshot(), state.scope);
+    if (!graph || state.scope === graph.component) {
+      // Back up from the component's code to its container.
+      state.scope = liftTo(state.scope, depthOf(state.scope) - 1);
+      state.level = 'L3';
+    } else {
+      const el = graph.elements.find((e) => e.id === state.scope);
+      state.scope = el?.parent ?? graph.component;
+    }
+  } else if (state.level === 'L3') {
     await glideOut();
     state.selected = state.scope;
     state.scope = liftTo(state.scope, depthOf(state.scope) - 1);
@@ -473,6 +522,7 @@ async function rise() {
   }
   state.zoom = 1; state.pan = { x: 0, y: 0 };
   await renderCanvas({ animate: false });
+  els.canvas.focus({ preventScroll: true });
   await glideSettle('out');
   renderSide();
 }
@@ -808,8 +858,22 @@ function renderBreadcrumb() {
       const el = snap.elements.find((e) => e.id === id);
       if (el) parts.push(`<b>${esc(el.name)}</b>`);
     }
+    // Derived scopes (L4): walk the graph's parent chain — fact ids contain
+    // dots, so the segment loop above cannot see them.
+    const graph = derivedGraphFor(snap, state.scope);
+    if (graph && state.scope !== graph.component) {
+      const chain = [];
+      const byIdMap = new Map(graph.elements.map((e) => [e.id, e]));
+      for (let el = byIdMap.get(state.scope); el; el = el.parent ? byIdMap.get(el.parent) : null) {
+        chain.unshift(`<b>${esc(el.name)}</b>`);
+      }
+      parts.push(...chain);
+    }
   }
-  parts.push({ L1: 'Context', L2: 'Containers', L3: 'Components' }[state.level]);
+  parts.push({ L1: 'Context', L2: 'Containers', L3: 'Components', L4: 'Code' }[state.level]);
+  if (state.level === 'L4' && derivedGraphFor(snap, state.scope)?.stale) {
+    parts.push(`<span class="crumb-stale" title="The committed facts lag the source tree — run blastradius introspect">stale</span>`);
+  }
   els.breadcrumb.innerHTML = parts.join(' / ');
 }
 
@@ -889,9 +953,10 @@ function renderSide() {
     return;
   }
   const snap = effectiveSnapshot();
-  const el = snap.elements.find((e) => e.id === id);
+  const el = snap.elements.find((e) => e.id === id) ?? anyElement(id);
   if (!el) return;
   els.sideTitle.textContent = 'Inspector';
+  if (el.derived) return renderDerivedSide(el);
 
   const rels = snap.relations.filter((r) => r.from === id || r.to === id);
   const docs = docsFor(snap, id);
@@ -952,6 +1017,29 @@ function renderSide() {
         await applyOp({ op: 'rename', id, name });
       }
     });
+  }
+}
+
+/** Inspector for a derived (L4) element: read-only by nature — the source
+ * file is the thing to edit (spec/l4-introspection.md). */
+function renderDerivedSide(el) {
+  const graph = derivedGraphFor(effectiveSnapshot(), el.id);
+  const loc = el.line ? `${el.path}:${el.line}` : el.path;
+  let html = `<div class="insp">`;
+  html += `<span class="insp-kicker">${esc(kicker(el))}</span>`;
+  html += `<span class="insp-title">${esc(el.name)}</span>`;
+  html += `<span class="mono text-muted" style="font-family:var(--font-mono);font-size:var(--text-2xs)">${esc(el.id)}</span>`;
+  html += `<div class="insp-section">Source</div>`;
+  html += `<button class="doc-link" data-opensrc="${esc(el.path)}">` +
+    `<span class="tag tag-outline">${esc(graph?.language ?? 'code')}</span> ${esc(loc)}</button>`;
+  html += `<p class="text-muted" style="font-size:var(--text-sm)">Derived from source — edit the file and re-run <code>blastradius introspect</code>.</p>`;
+  if (el.stale) {
+    html += `<p class="text-muted" style="font-size:var(--text-sm)">⚠ The committed facts lag the source tree.</p>`;
+  }
+  html += `</div>`;
+  els.sideBody.innerHTML = html;
+  for (const btn of els.sideBody.querySelectorAll('[data-opensrc]')) {
+    btn.addEventListener('click', () => invoke('open_source', { rel: btn.dataset.opensrc }).catch(() => {}));
   }
 }
 

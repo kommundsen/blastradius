@@ -140,6 +140,7 @@ impl McpServer {
             "find_elements" => Ok(self.find_elements(str_arg("query"), str_arg("kind"))),
             "element" => self.element(&str_arg("id").ok_or("id is required")?),
             "blast_radius" => self.blast_radius(&str_arg("id").ok_or("id is required")?),
+            "introspect" => self.introspect_tool(str_arg("component")),
             "validate" => Ok(self.validate()),
             "model_diff" => self.model_diff(str_arg("base")),
             "doc" => self.doc(&str_arg("id").ok_or("id is required")?),
@@ -254,15 +255,66 @@ impl McpServer {
             })
             .map(|e| e.id.as_str())
             .collect();
-        let capped: Vec<Value> = matches.iter().take(50).map(|id| self.element_brief(id)).collect();
+        let mut capped: Vec<Value> = matches.iter().take(50).map(|id| self.element_brief(id)).collect();
+        // Derived (L4) elements search too — marked, so agents know they are
+        // read-only code facts, not authored model (spec/l4-introspection.md).
+        let derived: Vec<Value> = self
+            .ws()
+            .derived
+            .iter()
+            .flat_map(|g| g.elements.iter().map(move |e| (g, e)))
+            .filter(|(_, e)| {
+                let kind_ok = kind.as_deref().is_none_or(|k| e.kind == k);
+                let text_ok = q.is_empty()
+                    || e.id.to_lowercase().contains(&q)
+                    || e.name.to_lowercase().contains(&q);
+                kind_ok && text_ok
+            })
+            .map(|(g, e)| {
+                json!({"id": e.id, "kind": e.kind, "name": e.name, "derived": true,
+                       "component": g.component, "path": e.path})
+            })
+            .collect();
+        let total = matches.len() + derived.len();
+        capped.extend(derived.into_iter().take(50usize.saturating_sub(capped.len())));
         json!({
-            "total": matches.len(),
+            "total": total,
             "shown": capped.len(),
             "elements": capped,
         })
     }
 
+    /// Derived (L4) element detail: code-level, read-only, source-pointing
+    /// (spec/l4-introspection.md).
+    fn derived_element_json(&self, id: &str) -> Option<Value> {
+        let ws = self.ws();
+        let graph = ws.derived.iter().find(|g| g.elements.iter().any(|e| e.id == id))?;
+        let d = graph.elements.iter().find(|e| e.id == id)?;
+        let children: Vec<&str> = graph
+            .elements
+            .iter()
+            .filter(|e| e.parent.as_deref() == Some(id))
+            .map(|e| e.id.as_str())
+            .collect();
+        let edge = |from: &str, to: &str, kind: &str| json!({"from": from, "to": to, "kind": kind});
+        let outgoing: Vec<Value> =
+            graph.edges.iter().filter(|e| e.from == id).map(|e| edge(&e.from, &e.to, &e.kind)).collect();
+        let incoming: Vec<Value> =
+            graph.edges.iter().filter(|e| e.to == id).map(|e| edge(&e.from, &e.to, &e.kind)).collect();
+        Some(json!({
+            "id": d.id, "kind": d.kind, "name": d.name, "derived": true,
+            "component": graph.component, "language": graph.language,
+            "path": d.path, "line": d.line, "stale": graph.stale,
+            "children": children,
+            "edges": {"outgoing": outgoing, "incoming": incoming},
+            "note": "derived from source — edit the file and re-run introspect; apply_operation refuses derived ids",
+        }))
+    }
+
     fn element(&self, id: &str) -> Result<Value, String> {
+        if let Some(v) = self.derived_element_json(id) {
+            return Ok(v);
+        }
         let ws = self.ws();
         let el = ws.elements.get(id).ok_or_else(|| unknown_element(ws, id))?;
         let child_prefix = format!("{id}.");
@@ -316,7 +368,41 @@ impl McpServer {
     /// The tool the product is named for: everything implicated when this
     /// element changes — contents, transitive dependents (reverse reachability
     /// over relations), direct dependencies, governing docs, affected views.
+    /// Code-level blast radius for a derived (L4) element: fan-in/fan-out over
+    /// the facts edges — real dependents in source, not modeled relations.
+    fn derived_blast_radius(&self, id: &str) -> Option<Value> {
+        let ws = self.ws();
+        let graph = ws.derived.iter().find(|g| g.elements.iter().any(|e| e.id == id))?;
+        let mut dist: std::collections::BTreeMap<&str, u64> = Default::default();
+        let mut frontier = vec![id];
+        let mut depth = 0u64;
+        while !frontier.is_empty() {
+            depth += 1;
+            let mut next = Vec::new();
+            for e in &graph.edges {
+                if frontier.iter().any(|f| e.to == *f) && e.from != id && !dist.contains_key(e.from.as_str()) {
+                    dist.insert(&e.from, depth);
+                    next.push(e.from.as_str());
+                }
+            }
+            frontier = next;
+        }
+        let dependents: Vec<Value> =
+            dist.iter().map(|(k, d)| json!({"id": k, "distance": d})).collect();
+        let dependencies: Vec<&str> =
+            graph.edges.iter().filter(|e| e.from == id).map(|e| e.to.as_str()).collect();
+        let el = graph.elements.iter().find(|e| e.id == id)?;
+        Some(json!({
+            "id": id, "derived": true, "component": graph.component, "path": el.path,
+            "dependents": dependents, "dependencies": dependencies,
+            "note": "code-level radius from the committed facts; the owning component's modeled radius is blast_radius on the component id",
+        }))
+    }
+
     fn blast_radius(&self, id: &str) -> Result<Value, String> {
+        if let Some(v) = self.derived_blast_radius(id) {
+            return Ok(v);
+        }
         let ws = self.ws();
         if !ws.elements.contains_key(id) {
             return Err(unknown_element(ws, id));
@@ -448,6 +534,56 @@ impl McpServer {
     }
 }
 
+impl McpServer {
+    /// Run L4 extraction for opted-in components and reload the workspace —
+    /// the MCP face of `blastradius introspect` (spec/l4-introspection.md).
+    fn introspect_tool(&mut self, component: Option<String>) -> Result<Value, String> {
+        use blastradius_core::introspect as intro;
+        use blastradius_core::model::ElementKind;
+
+        let repo = intro::find_repo_root(&self.root)
+            .ok_or("no repository root above the workspace — `source:` roots are repo-root-relative")?;
+        let targets: Vec<(String, blastradius_core::model::SourceMapping)> = self
+            .ws()
+            .elements
+            .values()
+            .filter(|e| e.kind == ElementKind::Component && e.source.is_some())
+            .filter(|e| component.as_deref().is_none_or(|c| e.id == c))
+            .map(|e| (e.id.clone(), e.source.clone().expect("filtered")))
+            .collect();
+        if targets.is_empty() {
+            return Err(match component {
+                Some(c) => format!("{c:?} is not a component with a `source:` mapping"),
+                None => "no components opt into introspection — add a `source:` mapping first".into(),
+            });
+        }
+        let mut results = Vec::new();
+        for (id, mapping) in targets {
+            match intro::extract(&repo, &id, &mapping) {
+                Ok((facts, warnings)) => {
+                    let bytes = intro::facts_bytes(&facts);
+                    let path = self.root.join("model").join("derived").join(format!("{id}.l4.json"));
+                    let existing = std::fs::read_to_string(&path).ok().map(|t| t.replace("\r\n", "\n"));
+                    let changed = existing.as_deref() != Some(bytes.as_str());
+                    if changed {
+                        std::fs::create_dir_all(path.parent().expect("has parent"))
+                            .and_then(|()| std::fs::write(&path, &bytes))
+                            .map_err(|e| format!("{id}: {e}"))?;
+                    }
+                    results.push(json!({
+                        "component": id, "written": changed,
+                        "elements": facts.elements.len(), "edges": facts.edges.len(),
+                        "warnings": warnings,
+                    }));
+                }
+                Err(e) => results.push(json!({"component": id, "error": e})),
+            }
+        }
+        self.engine.reload_all();
+        Ok(json!({"results": results, "diagnostics": self.diagnostics_json()}))
+    }
+}
+
 fn unknown_element(ws: &Workspace, id: &str) -> String {
     let near: Vec<&str> = ws
         .elements
@@ -490,6 +626,11 @@ fn tool_definitions() -> Vec<Value> {
             "name": "blast_radius",
             "description": "Impact analysis: everything implicated if this element changes — its contents, transitive dependents (with distance), direct dependencies, governing docs (direct and via parent), and affected views. Use before modifying or deleting anything.",
             "inputSchema": obj(json!({"id": {"type": "string"}}), vec!["id"]),
+        }),
+        json!({
+            "name": "introspect",
+            "description": "Run L4 code introspection for components with a `source:` mapping: extracts modules/types/edges from the mapped source tree and (re)writes the committed facts under model/derived/. Derived elements then appear in find_elements, element, and blast_radius, marked derived — they are read-only; edit the source instead. Omit `component` to extract every opted-in component.",
+            "inputSchema": obj(json!({"component": {"type": "string", "description": "component id; omit for all opted-in components"}}), vec![]),
         }),
         json!({
             "name": "validate",

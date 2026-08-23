@@ -15,10 +15,21 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
       - name: Test (unit, seeded-fault, conformance suites)
         run: cargo test -p blastradius-core -p blastradius-cli
       - name: Dogfood gate — validate docs/
         run: cargo run -p blastradius-cli -- validate docs
+      - name: L4 facts staleness gate (spec/l4-introspection.md)
+        # Both dogfood mappings: Rust is built in; TypeScript needs node + the
+        # typescript package (dev dependency).
+        run: |
+          npm ci
+          cargo run -p blastradius-cli -- introspect docs --check
+      - name: C# extractor fixture gate
+        run: bash extractors/dotnet/test.sh
 
   frontend:
     runs-on: ubuntu-latest
@@ -27,8 +38,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
-      - name: Layout determinism + routing + headless render suites
-        run: node --test ui/tests/determinism.test.mjs ui/tests/routing.test.mjs ui/tests/render.test.mjs
+      - name: Layout determinism + routing + headless render + L4 derivation suites
+        run: node --test ui/tests/determinism.test.mjs ui/tests/routing.test.mjs ui/tests/render.test.mjs ui/tests/derived.test.mjs
       - name: Install Playwright WebKit
         run: |
           npm ci

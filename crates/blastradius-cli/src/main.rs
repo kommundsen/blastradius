@@ -25,6 +25,7 @@ fn main() -> ExitCode {
             None => usage(),
         },
         Some("export") => export(&args[1..]),
+        Some("introspect") => introspect(&args[1..]),
         Some("init") => init(&args[1..]),
         Some("mcp") => match blastradius_cli::mcp::serve(args.get(1).map(String::as_str)) {
             Ok(()) => ExitCode::SUCCESS,
@@ -62,9 +63,116 @@ fn resolving(dir: Option<&String>, run: fn(&str) -> ExitCode) -> ExitCode {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage:\n  blastradius init [dir] [--name <name>]\n  blastradius validate [workspace-dir]\n  blastradius diff <base-dir> <current-dir>\n  blastradius gitdiff <dir> [base-ref] [cur-ref]\n  blastradius snapshot [workspace-dir]\n  blastradius export <dir> -o <file.html> [--with-doc-bodies]\n  blastradius import <workspace.dsl> <out-dir>\n  blastradius mcp [workspace-dir]"
+        "usage:\n  blastradius init [dir] [--name <name>]\n  blastradius validate [workspace-dir]\n  blastradius diff <base-dir> <current-dir>\n  blastradius gitdiff <dir> [base-ref] [cur-ref]\n  blastradius snapshot [workspace-dir]\n  blastradius export <dir> -o <file.html> [--with-doc-bodies]\n  blastradius introspect [dir] [component-id] [--check]\n  blastradius import <workspace.dsl> <out-dir>\n  blastradius mcp [workspace-dir]"
     );
     ExitCode::from(2)
+}
+
+/// Extract L4 facts for opted-in components (spec/l4-introspection.md).
+/// `--check` regenerates without writing and fails on drift — the CI
+/// staleness gate, same pattern as the snapshot gate.
+fn introspect(args: &[String]) -> ExitCode {
+    use blastradius_core::introspect as intro;
+    use blastradius_core::model::ElementKind;
+
+    let check = args.iter().any(|a| a == "--check");
+    let pos: Vec<&str> = args.iter().filter(|a| !a.starts_with("--")).map(String::as_str).collect();
+    let dir = match resolve(pos.first().copied().unwrap_or(".")) {
+        Ok(d) => d,
+        Err(c) => return c,
+    };
+    let only = pos.get(1).copied();
+
+    let ws_dir = Path::new(&dir);
+    let (ws, diags) = blastradius_core::load_workspace(ws_dir);
+    if has_errors(&diags) {
+        for d in &diags {
+            if d.severity == Severity::Error {
+                eprintln!("{d}");
+            }
+        }
+        eprintln!("workspace has errors — fix them before introspecting");
+        return ExitCode::FAILURE;
+    }
+    let Some(repo_root) = intro::find_repo_root(ws_dir) else {
+        eprintln!("no repository root found above {dir} — `source:` roots are repo-root-relative (ADR-0014)");
+        return ExitCode::FAILURE;
+    };
+
+    let targets: Vec<_> = ws
+        .elements
+        .values()
+        .filter(|e| e.kind == ElementKind::Component && e.source.is_some())
+        .filter(|e| only.is_none_or(|id| e.id == id))
+        .collect();
+    if targets.is_empty() {
+        match only {
+            Some(id) => {
+                eprintln!("{id:?} is not a component with a `source:` mapping");
+                return ExitCode::FAILURE;
+            }
+            None => {
+                println!("no components opt into introspection — nothing to do");
+                return ExitCode::SUCCESS;
+            }
+        }
+    }
+
+    let mut drift = false;
+    let mut failed = false;
+    for comp in targets {
+        let mapping = comp.source.as_ref().expect("filtered");
+        match intro::extract(&repo_root, &comp.id, mapping) {
+            Ok((facts, warnings)) => {
+                for w in warnings {
+                    eprintln!("warning: {}: {w}", comp.id);
+                }
+                let bytes = intro::facts_bytes(&facts);
+                let path = ws_dir.join("model").join("derived").join(format!("{}.l4.json", comp.id));
+                let existing = std::fs::read_to_string(&path).ok().map(|t| t.replace("\r\n", "\n"));
+                if check {
+                    if existing.as_deref() == Some(bytes.as_str()) {
+                        println!("{}: up to date", comp.id);
+                    } else {
+                        println!("{}: STALE — run `blastradius introspect` and commit the result", comp.id);
+                        drift = true;
+                    }
+                } else if existing.as_deref() == Some(bytes.as_str()) {
+                    println!("{}: unchanged", comp.id);
+                } else {
+                    if let Some(parent) = path.parent() {
+                        if let Err(e) = std::fs::create_dir_all(parent) {
+                            eprintln!("{}: {e}", parent.display());
+                            failed = true;
+                            continue;
+                        }
+                    }
+                    match std::fs::write(&path, &bytes) {
+                        Ok(()) => println!(
+                            "{}: wrote {} ({} elements, {} edges)",
+                            comp.id,
+                            path.display(),
+                            facts.elements.len(),
+                            facts.edges.len()
+                        ),
+                        Err(e) => {
+                            eprintln!("{}: {e}", path.display());
+                            failed = true;
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("{}: {e}", comp.id);
+                failed = true;
+            }
+        }
+    }
+    if failed || drift {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
 }
 
 /// Emit the renderer snapshot as JSON on stdout — the same shape the Tauri

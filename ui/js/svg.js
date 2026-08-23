@@ -11,7 +11,10 @@ export function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+const DERIVED_KINDS = { module: 'Module', namespace: 'Namespace', class: 'Class', interface: 'Interface', record: 'Record', enum: 'Enum' };
+
 export function kicker(el) {
+  if (el.derived) return `${DERIVED_KINDS[el.kind] ?? el.kind} · derived`;
   const kind = { person: 'Person', system: 'Software system', container: 'Container', component: 'Component', external: 'External system' }[el.kind];
   const label = el.external && el.kind === 'system' ? 'External system' : kind;
   return el.tech ? `${label} · ${el.tech}` : label;
@@ -20,7 +23,7 @@ export function kicker(el) {
 export function childCount(el, elements) {
   const kids = elements.filter((e) => e.parent === el.id).length;
   if (!kids) return null;
-  const noun = el.kind === 'system' ? 'container' : 'component';
+  const noun = el.derived ? 'member' : el.kind === 'system' ? 'container' : 'component';
   return `${kids} ${noun}${kids > 1 ? 's' : ''}`;
 }
 

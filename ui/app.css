@@ -102,6 +102,17 @@ body { margin: 0; overflow: hidden; }
   border-top: 1px solid var(--color-divider); vertical-align: top; }
 
 /* ── phase 3: editing ──────────────────────────────────────────────────── */
+/* L4 derived nodes (spec/l4-introspection.md): code identity — monospace,
+   case-preserving titles; geometry marker in the kind grammar's spirit. */
+.node.is-derived { border-bottom-width: 3px; }
+.node.is-derived .node-title { font-family: var(--font-mono); text-transform: none; font-size: var(--text-sm); }
+.node.is-derived.is-stale { border-style: dashed; }
+#app.can-edit .node.is-derived { cursor: default; } /* no pins at L4 */
+.crumb-stale { color: var(--color-warning); font-size: var(--text-2xs);
+  text-transform: uppercase; letter-spacing: var(--tracking-label);
+  border: 1px solid var(--color-warning); border-radius: var(--radius);
+  padding: 0 4px; background: var(--color-warning-tint); }
+
 .node.is-dragging { opacity: .85; cursor: grabbing; z-index: var(--z-node-active); }
 #app.can-edit .node { cursor: grab; }
 

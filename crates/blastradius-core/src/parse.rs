@@ -107,7 +107,7 @@ fn parse_context_section(
         let (name, tech, description) = fields(body, &id);
         register(
             ws,
-            Element { id, kind, name, tech, description, external: kind == ElementKind::External, file: rel.to_string(), line },
+            Element { id, kind, name, tech, description, external: kind == ElementKind::External, source: None, file: rel.to_string(), line },
             diags,
         );
     }
@@ -133,6 +133,7 @@ fn parse_system(map: &MarkedMappingNode, rel: &str, ws: &mut Workspace, diags: &
             tech: yaml::get_str(map, "tech").map(str::to_string),
             description: yaml::get_str(map, "description").map(str::to_string),
             external,
+            source: None,
             file: rel.to_string(),
             line: sys_line,
         },
@@ -153,7 +154,7 @@ fn parse_system(map: &MarkedMappingNode, rel: &str, ws: &mut Workspace, diags: &
             let (name, tech, description) = fields(cbody, &cid);
             register(
                 ws,
-                Element { id: full.clone(), kind: ElementKind::Container, name, tech, description, external: false, file: rel.to_string(), line: cline },
+                Element { id: full.clone(), kind: ElementKind::Container, name, tech, description, external: false, source: None, file: rel.to_string(), line: cline },
                 diags,
             );
 
@@ -168,9 +169,10 @@ fn parse_system(map: &MarkedMappingNode, rel: &str, ws: &mut Workspace, diags: &
                             continue;
                         }
                         let (name, tech, description) = fields(kbody, &kid);
+                        let source = parse_source(kbody, rel, diags);
                         register(
                             ws,
-                            Element { id: format!("{full}.{kid}"), kind: ElementKind::Component, name, tech, description, external: false, file: rel.to_string(), line: kline },
+                            Element { id: format!("{full}.{kid}"), kind: ElementKind::Component, name, tech, description, external: false, source, file: rel.to_string(), line: kline },
                             diags,
                         );
                     }
@@ -242,6 +244,49 @@ fn parse_relations(
             scope: system.map(str::to_string),
         });
     }
+}
+
+/// Languages with an extractor (spec/l4-introspection.md).
+pub const SOURCE_LANGUAGES: &[&str] = &["typescript", "csharp", "rust"];
+
+/// `source:` mapping on a component (spec/l4-introspection.md). Introspection
+/// is strictly opt-in: absence means the feature does not touch the element.
+fn parse_source(body: &Node, rel: &str, diags: &mut Vec<Diagnostic>) -> Option<SourceMapping> {
+    let Node::Mapping(m) = body else { return None };
+    let src = m.get_node("source")?;
+    let line = yaml::line_of(src);
+    let Node::Mapping(sm) = src else {
+        diags.push(Diagnostic::error(rel, line, "`source:` must be a mapping (language + root)"));
+        return None;
+    };
+    let language = yaml::get_str(sm, "language").unwrap_or_default().to_string();
+    if !SOURCE_LANGUAGES.contains(&language.as_str()) {
+        diags.push(Diagnostic::error(
+            rel,
+            yaml::field_line(sm, "language"),
+            format!("unknown source language {language:?} — expected one of {}", SOURCE_LANGUAGES.join(", ")),
+        ));
+        return None;
+    }
+    let Some(root) = yaml::get_str(sm, "root").map(str::to_string) else {
+        diags.push(Diagnostic::error(rel, line, "`source:` needs `root:` (repo-root-relative)"));
+        return None;
+    };
+    let globs = |key: &str| -> Vec<String> {
+        match sm.get_node(key) {
+            Some(node) => yaml::as_sequence(node)
+                .map(|seq| seq.iter().filter_map(yaml::as_str).map(str::to_string).collect())
+                .unwrap_or_default(),
+            None => Vec::new(),
+        }
+    };
+    Some(SourceMapping {
+        language,
+        root,
+        include: globs("include"),
+        exclude: globs("exclude"),
+        extractor: yaml::get_str(sm, "extractor").map(str::to_string),
+    })
 }
 
 fn fields(body: &Node, id: &str) -> (String, Option<String>, Option<String>) {

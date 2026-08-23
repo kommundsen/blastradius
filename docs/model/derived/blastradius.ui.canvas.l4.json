@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "language": "typescript",
+  "extractor": "blastradius-extract-ts 0.1.0",
+  "component": "blastradius.ui.canvas",
+  "root": "ui/js",
+  "sourceDigest": "sha256:cecf051099a96e0e2e33465325b5700447e731188757fe33a7d703a84f83292d",
+  "elements": [
+    {
+      "id": "app",
+      "kind": "module",
+      "name": "app.js",
+      "path": "ui/js/app.js"
+    },
+    {
+      "id": "data",
+      "kind": "module",
+      "name": "data.js",
+      "path": "ui/js/data.js"
+    },
+    {
+      "id": "layout",
+      "kind": "module",
+      "name": "layout.js",
+      "path": "ui/js/layout.js"
+    },
+    {
+      "id": "svg",
+      "kind": "module",
+      "name": "svg.js",
+      "path": "ui/js/svg.js"
+    },
+    {
+      "id": "viewer",
+      "kind": "module",
+      "name": "viewer.js",
+      "path": "ui/js/viewer.js"
+    }
+  ],
+  "edges": [
+    {
+      "from": "app",
+      "to": "data",
+      "kind": "imports"
+    },
+    {
+      "from": "app",
+      "to": "layout",
+      "kind": "imports"
+    },
+    {
+      "from": "app",
+      "to": "svg",
+      "kind": "imports"
+    },
+    {
+      "from": "svg",
+      "to": "layout",
+      "kind": "imports"
+    }
+  ]
+}

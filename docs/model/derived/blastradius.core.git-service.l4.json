@@ -1,0 +1,156 @@
+{
+  "schema": 1,
+  "language": "rust",
+  "extractor": "blastradius-extract-rust 0.1.0",
+  "component": "blastradius.core.git-service",
+  "root": "crates/blastradius-core/src",
+  "sourceDigest": "sha256:324d2003986c7e63bfc3f02a275e8355c5f6274c74ab187219bf88788661845d",
+  "elements": [
+    {
+      "id": "git",
+      "kind": "module",
+      "name": "git.rs",
+      "path": "crates/blastradius-core/src/git.rs"
+    },
+    {
+      "id": "git.CommitInfo",
+      "kind": "class",
+      "name": "CommitInfo",
+      "parent": "git",
+      "path": "crates/blastradius-core/src/git.rs",
+      "line": 31
+    },
+    {
+      "id": "git.ConflictElement",
+      "kind": "class",
+      "name": "ConflictElement",
+      "parent": "git",
+      "path": "crates/blastradius-core/src/git.rs",
+      "line": 51
+    },
+    {
+      "id": "git.ConflictSide",
+      "kind": "class",
+      "name": "ConflictSide",
+      "parent": "git",
+      "path": "crates/blastradius-core/src/git.rs",
+      "line": 41
+    },
+    {
+      "id": "git.Conflicts",
+      "kind": "class",
+      "name": "Conflicts",
+      "parent": "git",
+      "path": "crates/blastradius-core/src/git.rs",
+      "line": 61
+    },
+    {
+      "id": "git.GitContext",
+      "kind": "class",
+      "name": "GitContext",
+      "parent": "git",
+      "path": "crates/blastradius-core/src/git.rs",
+      "line": 14
+    },
+    {
+      "id": "git.GitStatus",
+      "kind": "class",
+      "name": "GitStatus",
+      "parent": "git",
+      "path": "crates/blastradius-core/src/git.rs",
+      "line": 20
+    },
+    {
+      "id": "git.GitTreeVfs",
+      "kind": "class",
+      "name": "GitTreeVfs",
+      "parent": "git",
+      "path": "crates/blastradius-core/src/git.rs",
+      "line": 327
+    },
+    {
+      "id": "resolve",
+      "kind": "module",
+      "name": "resolve.rs",
+      "path": "crates/blastradius-core/src/resolve.rs"
+    },
+    {
+      "id": "resolve.Resolution",
+      "kind": "class",
+      "name": "Resolution",
+      "parent": "resolve",
+      "path": "crates/blastradius-core/src/resolve.rs",
+      "line": 25
+    },
+    {
+      "id": "resolve.Side",
+      "kind": "enum",
+      "name": "Side",
+      "parent": "resolve",
+      "path": "crates/blastradius-core/src/resolve.rs",
+      "line": 18
+    }
+  ],
+  "edges": [
+    {
+      "from": "git.ConflictElement",
+      "to": "git.ConflictSide",
+      "kind": "references"
+    },
+    {
+      "from": "git.Conflicts",
+      "to": "git.ConflictElement",
+      "kind": "references"
+    },
+    {
+      "from": "git.GitContext",
+      "to": "git.CommitInfo",
+      "kind": "references"
+    },
+    {
+      "from": "git.GitContext",
+      "to": "git.ConflictElement",
+      "kind": "references"
+    },
+    {
+      "from": "git.GitContext",
+      "to": "git.ConflictSide",
+      "kind": "references"
+    },
+    {
+      "from": "git.GitContext",
+      "to": "git.Conflicts",
+      "kind": "references"
+    },
+    {
+      "from": "git.GitContext",
+      "to": "git.GitStatus",
+      "kind": "references"
+    },
+    {
+      "from": "git.GitContext",
+      "to": "git.GitTreeVfs",
+      "kind": "references"
+    },
+    {
+      "from": "resolve",
+      "to": "git",
+      "kind": "imports"
+    },
+    {
+      "from": "resolve",
+      "to": "git.GitContext",
+      "kind": "references"
+    },
+    {
+      "from": "resolve",
+      "to": "resolve.Resolution",
+      "kind": "references"
+    },
+    {
+      "from": "resolve.Resolution",
+      "to": "resolve.Side",
+      "kind": "references"
+    }
+  ]
+}

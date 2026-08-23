@@ -2,7 +2,7 @@
 doc: adr-0016
 type: adr
 status: accepted
-elements: [blastradius.core.model-service, blastradius.cli, blastradius.ui.canvas]
+elements: [blastradius.core.introspector, blastradius.cli, blastradius.ui.canvas]
 ---
 
 # ADR-0016: L4 extraction — compiler-API extractors emitting committed facts
