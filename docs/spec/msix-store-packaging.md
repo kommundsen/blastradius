@@ -200,10 +200,12 @@ three credential values for the GitHub secrets.
     - *Properties*: category **Developer tools**.
     - *Age ratings*: IARC questionnaire (all "no" → E for Everyone).
     - *Privacy*: the app collects and transmits nothing — declare no.
-      [docs/privacy.md](../privacy.md) (published on the docs site as
-      `privacy.html`) is the policy URL if Partner Center or review asks
-      for one — Full trust apps sometimes get asked even with a "no
-      collection" declaration.
+      [docs/privacy.md](../privacy.md) is the policy text if Partner
+      Center or review ever demands a URL — Full trust apps sometimes
+      get asked even with a "no collection" declaration. It currently
+      has no live URL (Pages publishing dropped 2026-08-23); if review
+      insists, host it (re-enable the Pages deploy job, or any static
+      host) and paste the link.
     - *Store listing*: description, at least one screenshot (1366×768+;
       the canvas over the dogfood model is the obvious shot).
 15. **Submit.** Certification typically clears in 24–72 h; full-trust

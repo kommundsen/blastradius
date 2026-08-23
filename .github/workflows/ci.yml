@@ -82,8 +82,10 @@ jobs:
           path: architecture.html
 
   # Docs site (Phase 5): docs/ rendered by tools/build-site.mjs with the live
-  # model export bundled in. The deploy step needs GitHub Pages enabled once,
-  # manually: repo Settings -> Pages -> Source: "GitHub Actions".
+  # model export bundled in. Build-only: Pages publishing was dropped
+  # 2026-08-23 (owner decision) — the artifact upload keeps the site
+  # inspectable per run, and re-adding a deploy job is a paste away if
+  # hosting is ever wanted again.
   site:
     runs-on: ubuntu-latest
     steps:
@@ -101,20 +103,6 @@ jobs:
         uses: actions/upload-pages-artifact@v5
         with:
           path: site
-
-  deploy-site:
-    if: github.ref == 'refs/heads/master'
-    needs: site
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v5
 
   budgets:
     runs-on: ubuntu-latest

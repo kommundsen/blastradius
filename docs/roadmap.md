@@ -93,8 +93,12 @@ Shipped:
 - **A11y audit** — axe-core WCAG A/AA scans of shell, welcome, dialogs, and
   source panel in both themes run in the WebKit gate; all findings fixed.
 - **Docs site** — tools/build-site.mjs renders docs/ with the live model
-  bundled; CI deploys via GitHub Pages from master (one manual step: enable
-  Pages with Source = GitHub Actions in repo settings).
+  bundled; CI builds it every push and uploads the artifact. Pages
+  *publishing* was dropped 2026-08-23 (owner decision — hosting not
+  wanted for now); the build stays as a gate, and a deploy job can be
+  re-added if hosting is ever wanted. Consequence: docs/privacy.md has
+  no live URL — the Store submissions passed with the in-form privacy
+  declaration, so none is currently needed.
 
 Deferred to the packaging release (deliberately, user-decided):
 
