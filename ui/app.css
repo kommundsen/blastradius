@@ -130,6 +130,10 @@ select.input { appearance: auto; }
 .src-err { margin: 0 var(--space-3) var(--space-2); font-family: var(--font-mono);
   font-size: var(--text-2xs); color: var(--color-danger); white-space: pre-wrap; }
 
+/* conflict resolution actions (0.2.0) */
+.conf-actions { display: flex; gap: var(--space-2); margin: var(--space-2) 0; }
+#conf-apply { margin-bottom: var(--space-2); }
+
 /* dialog form rows */
 .dlg-field { display: flex; flex-direction: column; gap: 4px; }
 .dlg-field label { font-size: var(--text-sm); color: var(--color-text-muted); }

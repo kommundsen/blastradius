@@ -16,6 +16,7 @@ pub mod import;
 pub mod manifest;
 pub mod model;
 pub mod parse;
+pub mod resolve;
 pub mod scaffold;
 pub mod snapshot;
 pub mod splice;

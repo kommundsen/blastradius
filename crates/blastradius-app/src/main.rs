@@ -281,6 +281,21 @@ fn git_conflicts(state: State<AppState>) -> Result<Option<serde_json::Value>, St
     }
 }
 
+/// Apply per-element ours/theirs decisions to the current merge conflict
+/// (ADR-0015): rebuilt from the chosen side's stage text via CST splices,
+/// validated, written, and staged through the user's own git binary.
+#[tauri::command]
+fn resolve_conflicts(
+    state: State<AppState>,
+    resolution: serde_json::Value,
+) -> Result<Vec<String>, String> {
+    let root = root_of(&state)?;
+    let ctx = GitContext::discover(&root).ok_or("not inside a git repository")?;
+    let res: blastradius_core::resolve::Resolution =
+        serde_json::from_value(resolution).map_err(|e| format!("bad resolution: {e}"))?;
+    blastradius_core::resolve::resolve(&ctx, &root, &res)
+}
+
 #[tauri::command]
 fn open_in_editor(state: State<AppState>, rel: String) -> Result<(), String> {
     let root = root_of(&state)?;
@@ -403,6 +418,7 @@ fn main() {
             git_history,
             snapshot_at,
             git_conflicts,
+            resolve_conflicts,
             open_in_editor,
             export_html,
             save_export,

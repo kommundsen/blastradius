@@ -174,13 +174,18 @@ bot), conflicts last (hardest).
    *Exit met:* proven live on PR #1 — correct diff
    (`~ element blastradius.core.exporter`), all three view pairs rendered
    and embedded, comment upserted. spec/export.md §CI documents the tool.
-3. **Deeper git workflows** — in-app merge conflict *resolution* (v1
-   detects and displays; resolution today happens in an external editor).
-   Per-element ours/theirs choice in the conflict inspector, written
-   through the sync engine's splices (spec/git-and-diff.md governs).
-   *Exit:* a manufactured merge conflict on `docs/` resolves entirely
-   in-app and ends byte-clean — files valid, comments and formatting
-   intact, `git status` conflict-free.
+3. **Deeper git workflows** — **shipped 2026-08-23** (ADR-0015). The
+   conflict inspector gained keep-ours/keep-theirs per element and one
+   apply action (undecided keep ours). The core `resolve` module rebuilds
+   each conflicted file from the chosen side's stage text via CST splices,
+   validates the whole outcome before writing (invalid resolutions are
+   refused, working tree untouched), and stages through the user's own
+   `git add` — libgit2 stays read-only per ADR-0007.
+   *Exit met:* tests/resolve.rs manufactures real merge conflicts and
+   asserts byte-clean outcomes: the resolved file equals the chosen base
+   with exactly the decided splices, comments intact, index conflict-free,
+   resolution staged, workspace valid. MCP-side resolution is a recorded
+   follow-up (ADR-0015).
 
 Version note: Store packages are `0.2.0.0` (the fourth digit is the
 Store's; spec/msix-store-packaging.md).

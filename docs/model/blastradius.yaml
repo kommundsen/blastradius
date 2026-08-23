@@ -67,7 +67,7 @@ containers:
       git-service:
         name: Git Service
         tech: git2 / libgit2
-        description: Read-only repository access — status, revision materialisation for diff, conflict stages, history (ADR-0007).
+        description: "Repository access — status, revision materialisation for diff, conflict stages, history (ADR-0007); applies in-app conflict resolutions as splices on the chosen side, staged via the user's own git (ADR-0015)."
       exporter:
         name: Exporter
         description: "Self-contained HTML snapshot and SVG/PNG assembly, all headless-capable for CI (ADR-0009); the PR diff bot renders through the same pipeline."

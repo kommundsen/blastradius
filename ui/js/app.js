@@ -25,10 +25,13 @@ const invoke = tauri?.core?.invoke
       const git = location.search.includes('nogit')
         ? null
         : await fetch('mock/git.json').then((r) => (r.ok ? r.json() : null)).catch(() => null);
-      if (cmd === 'git_status') return git?.status ?? null;
+      if (cmd === 'git_status') {
+        const st = git?.status ?? null;
+        return st && mockState.resolved ? { ...st, conflicted: [] } : st;
+      }
       if (cmd === 'git_diff') return git?.diff ?? null;
       if (cmd === 'git_history') return git?.history ?? [];
-      if (cmd === 'git_conflicts') return git?.conflicts ?? null;
+      if (cmd === 'git_conflicts') return mockState.resolved ? null : (git?.conflicts ?? null);
       if (cmd === 'snapshot_at') return git?.snapshots?.[args?.refspec] ?? null;
       return mockSync(cmd, args);
     };
@@ -65,6 +68,11 @@ function mockSync(cmd, args) {
     return t.label;
   }
   if (cmd === 'open_in_editor') return null;
+  if (cmd === 'resolve_conflicts') {
+    // the fixture is re-fetched per invoke; persist resolution in mockState
+    mockState.resolved = true;
+    return ['model/blastradius.yaml'];
+  }
   if (cmd === 'pick_folder') return '(mock)';
   if (cmd === 'workspace_open' || cmd === 'workspace_init' || cmd === 'workspace_demo') {
     // the mock has exactly one workspace: "opening" simply leaves the
@@ -136,6 +144,7 @@ const state = {
   // ── git (phase 2) ──
   git: null,          // git_status payload | null (no repo)
   conflicts: null,    // git_conflicts payload | null
+  conflictChoices: {}, // pending per-element resolution (id -> 'ours'|'theirs')
   diff: null,         // git_diff payload when diff mode is on
   diffOn: false,
   diffBase: null,     // explicit base ref, else server default (merge-base)
@@ -780,7 +789,7 @@ async function switchedWorkspace() {
   Object.assign(state, {
     snapshot: null, level: 'L1', scope: null, selected: null,
     zoom: 1, pan: { x: 0, y: 0 }, layout: null, doc: null,
-    git: null, conflicts: null, diff: null, diffOn: false, diffBase: null,
+    git: null, conflicts: null, conflictChoices: {}, diff: null, diffOn: false, diffBase: null,
     showLayoutDiff: false, history: null, travel: null,
     sync: null, srcFile: null, connectFrom: null, selectedRel: null,
     scopeInit: false,
@@ -928,6 +937,13 @@ function renderSide() {
   for (const btn of els.sideBody.querySelectorAll('[data-editfile]')) {
     btn.addEventListener('click', () => invoke('open_in_editor', { rel: btn.dataset.editfile }).catch(() => {}));
   }
+  for (const btn of els.sideBody.querySelectorAll('[data-conflict-choice]')) {
+    btn.addEventListener('click', () => {
+      state.conflictChoices[btn.dataset.conflictId] = btn.dataset.conflictChoice;
+      renderSide();
+    });
+  }
+  document.getElementById('conf-apply')?.addEventListener('click', applyResolution);
   const nameInput = document.getElementById('insp-name');
   if (nameInput) {
     nameInput.addEventListener('change', async () => {
@@ -1162,13 +1178,22 @@ function renderTravelBanner() {
   document.getElementById('travel-return').addEventListener('click', returnToPresent);
 }
 
-/** Conflict details for the inspector, when the selected element is conflicted. */
+/** Conflict details for the inspector, when the selected element is
+ * conflicted: both sides side-by-side, a keep-ours/theirs choice for THIS
+ * element, and the apply-all action (ADR-0015 — splice-rebuilt from the
+ * chosen side, validated, staged; undecided elements keep ours). */
 function conflictSection(id) {
   const c = conflictMap().get(id);
   if (!c) return '';
   const row = (label, side) => side
     ? `<tr><td>${esc(label)}</td><td>${esc(side.name)}</td><td>${esc(side.tech ?? '')}</td></tr>`
     : `<tr><td>${esc(label)}</td><td colspan="2" class="text-muted">not present</td></tr>`;
+  const chosen = state.conflictChoices[id] ?? 'ours';
+  const pick = (side, label) =>
+    `<button class="btn btn-secondary${chosen === side ? ' is-on' : ''}"
+      data-conflict-choice="${side}" data-conflict-id="${esc(id)}">${label}</button>`;
+  const total = state.conflicts?.elements?.length ?? 0;
+  const decided = Object.keys(state.conflictChoices).length;
   const files = (state.git?.conflicted ?? [])
     .map((f) => `<button class="doc-link" data-editfile="${esc(f)}">↗ resolve ${esc(f)} in editor</button>`)
     .join('');
@@ -1176,7 +1201,25 @@ function conflictSection(id) {
     <table class="conf-table">
       <thead><tr><th>side</th><th>name</th><th>tech</th></tr></thead>
       <tbody>${row('ours', c.ours)}${row('theirs', c.theirs)}</tbody>
-    </table>${files}`;
+    </table>
+    <div class="conf-actions">${pick('ours', 'Keep ours')}${pick('theirs', 'Keep theirs')}</div>
+    <button class="btn btn-primary" id="conf-apply"
+      title="Undecided elements keep ours; the result is validated before anything is written, then staged">
+      Resolve ${total} conflict${total === 1 ? '' : 's'} (${decided} decided)</button>
+    ${files}`;
+}
+
+async function applyResolution() {
+  try {
+    const files = await invoke('resolve_conflicts', {
+      resolution: { elements: state.conflictChoices },
+    });
+    toast(`Resolved & staged: ${files.join(', ')}`);
+    state.conflictChoices = {};
+    await reload();
+  } catch (e) {
+    toast(String(e));
+  }
 }
 
 // ---- editing (phase 3) ------------------------------------------------------

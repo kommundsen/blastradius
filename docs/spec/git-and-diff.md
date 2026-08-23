@@ -60,9 +60,14 @@ When the repository has merge conflicts touching workspace files:
 - Elements that differ between the sides render `.is-conflict` (hatched) with
   badge `!`; the inspector shows ours/theirs field values read-only,
   side by side.
-- **Resolution is external in v1**: a "resolve in editor" affordance opens the
-  file; the watcher picks up the result. In-app resolution is a named v2
-  candidate.
+- **In-app resolution** (shipped 2026-08-23, ADR-0015): the inspector offers
+  keep-ours/keep-theirs per conflicted element and one apply action
+  (undecided elements keep ours). The core rebuilds each conflicted file
+  from the chosen side's stage text with CST splices — comments and
+  formatting of the kept side survive — validates the complete outcome
+  before writing, then stages via the user's own `git add` (libgit2 stays
+  read-only). Whole-system divergence resolves per file. The
+  "resolve in editor" affordance remains for markdown and exotic cases.
 
 ## History
 

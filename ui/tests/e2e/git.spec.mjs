@@ -63,6 +63,23 @@ test('conflict inspector shows ours/theirs and resolve affordance', async ({ pag
   expect(page.errors).toEqual([]);
 });
 
+test('in-app resolution: pick a side, apply, conflict clears (0.2.0)', async ({ page }) => {
+  const node = (t) => page.locator('#nodes .node', { has: page.locator('.node-title', { hasText: t }) });
+  await node('Blastradius').dblclick();
+  await expect(node('Canvas UI').first()).toHaveClass(/is-conflict/);
+  await node('Canvas UI').first().click();
+  const side = page.locator('#side-body');
+  // choose theirs for this element; the choice sticks through the re-render
+  await side.locator('[data-conflict-choice="theirs"]').click();
+  await expect(side.locator('[data-conflict-choice="theirs"]')).toHaveClass(/is-on/);
+  await expect(side.locator('#conf-apply')).toContainText('1 decided');
+  await side.locator('#conf-apply').click();
+  // the mock resolves: conflict state clears everywhere on reload
+  await expect(page.locator('#nodes .node.is-conflict')).toHaveCount(0);
+  await expect(side).not.toContainText('Merge conflict');
+  expect(page.errors).toEqual([]);
+});
+
 test('history: set base recomputes, view travels and returns', async ({ page }) => {
   await page.locator('#history-btn').click();
   await expect(page.locator('#side-title')).toHaveText('History');

@@ -80,6 +80,29 @@ impl GitContext {
         Some(GitContext { repo, prefix })
     }
 
+    /// Workspace-relative path -> repo-relative (for staging).
+    pub(crate) fn to_repo_path(&self, ws_rel: &str) -> String {
+        if self.prefix.is_empty() {
+            ws_rel.to_string()
+        } else {
+            format!("{}/{}", self.prefix, ws_rel)
+        }
+    }
+
+    /// The repository's working directory (bare repos have none).
+    pub(crate) fn workdir(&self) -> Option<std::path::PathBuf> {
+        self.repo.workdir().map(|p| p.to_path_buf())
+    }
+
+    /// Re-read the index and report whether conflicts remain.
+    pub fn has_conflicts(&self) -> bool {
+        self.repo
+            .index()
+            .ok()
+            .and_then(|mut i| i.read(false).ok().map(|()| i.has_conflicts()))
+            .unwrap_or(false)
+    }
+
     /// Repo path -> workspace-relative, when inside the workspace.
     fn from_repo_path(&self, repo_rel: &str) -> Option<String> {
         if self.prefix.is_empty() {
@@ -223,7 +246,7 @@ impl GitContext {
     /// has no conflicts. Always re-reads the index — external tools resolve
     /// conflicts out from under us.
     #[allow(clippy::type_complexity)]
-    fn stage_overrides(
+    pub(crate) fn stage_overrides(
         &self,
     ) -> Result<Option<(Vec<String>, HashMap<String, String>, HashMap<String, String>)>, String>
     {
