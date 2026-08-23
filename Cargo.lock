@@ -307,7 +307,7 @@ dependencies = [
 
 [[package]]
 name = "blastradius-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "blastradius-core",
  "dirs",
@@ -322,7 +322,7 @@ dependencies = [
 
 [[package]]
 name = "blastradius-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "blastradius-core",
  "serde_json",
@@ -330,7 +330,7 @@ dependencies = [
 
 [[package]]
 name = "blastradius-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "git2",
  "marked-yaml",
