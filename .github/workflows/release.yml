@@ -55,8 +55,11 @@ jobs:
         shell: pwsh
         run: |
           $v = "${{ steps.version.outputs.version }}.0"
-          Compress-Archive -Path packaging\msix\*.msix -DestinationPath "Blastradius_$v.zip"
-          Rename-Item "Blastradius_$v.zip" "Blastradius_$v.msixupload"
+          # A dedicated directory: msstore publish takes --inputDirectory and
+          # picks its candidate from it — keep exactly one thing to find.
+          New-Item -ItemType Directory upload | Out-Null
+          Compress-Archive -Path packaging\msix\*.msix -DestinationPath "upload\Blastradius_$v.zip"
+          Rename-Item "upload\Blastradius_$v.zip" "Blastradius_$v.msixupload"
 
       - name: Upload packages
         uses: actions/upload-artifact@v5
@@ -64,7 +67,7 @@ jobs:
           name: msix-packages
           path: |
             packaging/msix/*.msix
-            *.msixupload
+            upload/*.msixupload
 
       - name: Setup Microsoft Store Developer CLI
         uses: microsoft/microsoft-store-apppublisher@v1
@@ -77,6 +80,7 @@ jobs:
         shell: pwsh
         run: |
           if ('${{ vars.STORE_PRODUCT_ID }}' -eq '') { throw 'STORE_PRODUCT_ID repository variable is not set (the 9N... Store ID from msstore apps list)' }
-          $v = "${{ steps.version.outputs.version }}.0"
-          $extra = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { @('--noCommit') } else { @() }
-          msstore publish packaging/msix --inputFile "Blastradius_$v.msixupload" --appId ${{ vars.STORE_PRODUCT_ID }} --verbose @extra
+          $cliArgs = @('publish', 'upload', '--inputDirectory', 'upload', '--appId', '${{ vars.STORE_PRODUCT_ID }}', '--verbose')
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') { $cliArgs += '--noCommit' }
+          msstore @cliArgs
+          if ($LASTEXITCODE -ne 0) { throw 'msstore publish failed' }
