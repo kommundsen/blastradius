@@ -1,9 +1,10 @@
 # Release: tag push -> build x64 + arm64 MSIX -> submit to the Microsoft
-# Store via msstore-cli (spec/msix-store-packaging.md, 0.3.0 theme 3).
+# Store via the submission API (tools/submit-store.ps1 — msstore-cli can't
+# submit prebuilt packages; spec/msix-store-packaging.md, 0.3.0 theme 3).
 #
 # Needs (owner-configured, see the spec's credentials section):
-#   secrets: PARTNER_CENTER_TENANT_ID, PARTNER_CENTER_SELLER_ID,
-#            PARTNER_CENTER_CLIENT_ID, PARTNER_CENTER_CLIENT_SECRET
+#   secrets: PARTNER_CENTER_TENANT_ID, PARTNER_CENTER_CLIENT_ID,
+#            PARTNER_CENTER_CLIENT_SECRET
 #   variables: STORE_PRODUCT_ID  (the app's 9N... Store ID — public, not a secret)
 #
 # The MSIX artifacts upload before the Store steps run, so a submission
@@ -14,7 +15,7 @@ on:
   push:
     tags: ["v*"]
   # Dry run: exercises the whole pipeline but leaves the submission as an
-  # uncommitted draft in Partner Center (msstore publish --noCommit).
+  # uncommitted draft in Partner Center (no -Commit).
   workflow_dispatch:
 
 jobs:
@@ -69,21 +70,15 @@ jobs:
             packaging/msix/*.msix
             upload/*.msixupload
 
-      - name: Setup Microsoft Store Developer CLI
-        uses: microsoft/microsoft-store-apppublisher@v1
-
-      - name: Configure Microsoft Store Developer CLI
+      - name: Submit to the Store (submission API)
         shell: pwsh
-        run: msstore reconfigure --tenantId ${{ secrets.PARTNER_CENTER_TENANT_ID }} --sellerId ${{ secrets.PARTNER_CENTER_SELLER_ID }} --clientId ${{ secrets.PARTNER_CENTER_CLIENT_ID }} --clientSecret ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
-
-      - name: Submit to the Store
-        shell: pwsh
+        env:
+          PARTNER_CENTER_TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          PARTNER_CENTER_CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          PARTNER_CENTER_CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
         run: |
-          if ('${{ vars.STORE_PRODUCT_ID }}' -eq '') { throw 'STORE_PRODUCT_ID repository variable is not set (the 9N... Store ID from msstore apps list)' }
-          # pathOrUrl = packaging/msix: its Package.appxmanifest makes the CLI
-          # detect a "UWP" project (the configurator that publishes prebuilt
-          # .msixupload files); the actual bundle comes from --inputDirectory.
-          $cliArgs = @('publish', 'packaging/msix', '--inputDirectory', 'upload', '--appId', '${{ vars.STORE_PRODUCT_ID }}', '--verbose')
-          if ('${{ github.event_name }}' -eq 'workflow_dispatch') { $cliArgs += '--noCommit' }
-          msstore @cliArgs
-          if ($LASTEXITCODE -ne 0) { throw 'msstore publish failed' }
+          if ('${{ vars.STORE_PRODUCT_ID }}' -eq '') { throw 'STORE_PRODUCT_ID repository variable is not set (the 9N... Store ID)' }
+          $v = "${{ steps.version.outputs.version }}.0"
+          $flags = @('-ReplacePending')
+          if ('${{ github.event_name }}' -eq 'push') { $flags += '-Commit' }  # dispatch = dry run, draft only
+          .\tools\submit-store.ps1 -ProductId '${{ vars.STORE_PRODUCT_ID }}' -UploadZip "upload\Blastradius_$v.msixupload" @flags

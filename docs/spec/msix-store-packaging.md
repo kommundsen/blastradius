@@ -222,8 +222,10 @@ the arm64 leg cross-compiled via `aarch64-pc-windows-msvc`), refuses a
 tag that disagrees with the manifest version, bundles both `.msix` into
 one `.msixupload` (a zip — one submission carries both architectures),
 uploads them as run artifacts **before** any Store step (a failed
-submission still yields installable packages), then configures
-msstore-cli from the four secrets and runs `msstore publish` against
+submission still yields installable packages), then submits through
+**`tools/submit-store.ps1`** — a direct client of the Store submission
+API (token → clone submission → retire old packages → upload the zip to
+the SAS blob → PUT → commit → poll), using three of the secrets and
 `STORE_PRODUCT_ID`. Listing metadata (screenshots, description,
 ratings) carries over from the previous submission — CI only replaces
 packages. The manual loop above remains valid as the fallback and for
@@ -240,6 +242,18 @@ there, then delete the draft. Use it to validate the pipeline before
 the first real tag.
 
 ## Troubleshooting
+
+**msstore-cli cannot submit a prebuilt package** (found 2026-08-23 while
+building the release workflow): `msstore publish` runs project-type
+detection and its UWP/WinUI configurator *executes MSBuild* even just to
+qualify (`IsWinUI3Async`) — a bare `Package.appxmanifest` + prebuilt
+`.msixupload` dies with `MSB1003`. The lower-level `msstore submission
+update` only PUTs JSON and never uploads package files (upload lives
+solely inside the publish flow). Hence `tools/submit-store.ps1` speaks
+the submission REST API directly; the `PARTNER_CENTER_SELLER_ID` secret
+is unused by CI (kept for local msstore-cli use, which does read it).
+The dry runs also proved the rest of the pipe on a hosted runner:
+winget delivers the winapp CLI, and the arm64 cross-build packs clean.
 
 **Shipped stale binaries under a new version number** (happened on
 0.2.0.0, 2026-08-23): the package was hand-packed from
