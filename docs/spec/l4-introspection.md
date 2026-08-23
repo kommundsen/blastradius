@@ -237,7 +237,10 @@ import path (ADR-0016 option 3).
   Escape climbs back out. The header's L4 segment is enabled whenever
   the model has derived graphs and jumps to the nearest introspected
   component (selection first, then current scope, then the first
-  graph); with no `source:` mappings it stays disabled. L4 uses the existing deterministic layout
+  graph); with no `source:` mappings it stays disabled. The model
+  explorer lists derived elements under their component (modules, then
+  types), styled as code; clicking a row jumps the canvas to that
+  element's code altitude. L4 uses the existing deterministic layout
   pipeline with no pinning (derived layouts are pure auto-layout);
   derived nodes carry a kind kicker with a derived marker ("Module ·
   derived") and monospace, case-preserving titles; a stale graph badges

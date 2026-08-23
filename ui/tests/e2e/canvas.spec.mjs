@@ -18,9 +18,11 @@ test('L1 context renders the dogfood model', async ({ page }) => {
   await expect(page.locator('.node.is-person')).toHaveCount(2);
   await expect(page.locator('.node.is-external')).toHaveCount(4);
   await expect(page.locator('#breadcrumb')).toContainText('Context');
-  // the tree lists the whole authored model regardless of altitude
-  // (derived L4 elements stay out of the tree — they are code, not model)
-  await expect(page.locator('.tree-row')).toHaveCount(25);
+  // the tree lists the whole model regardless of altitude: 25 authored
+  // elements + 16 derived L4 rows (5 canvas modules; git-service's 2
+  // modules and 9 types), the latter styled as code
+  await expect(page.locator('.tree-row')).toHaveCount(41);
+  await expect(page.locator('.tree-row.is-derived')).toHaveCount(16);
   expect(page.errors).toEqual([]);
   await page.screenshot({ path: 'test-results/webkit-L1.png', fullPage: true });
 });
@@ -85,6 +87,13 @@ test('L4: dive into introspected code, inspect a derived type', async ({ page })
   await expect(node('git.rs')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.locator('#breadcrumb')).toContainText('Components');
+
+  // The model explorer lists derived rows; clicking one jumps to its code.
+  const treeRow = page.locator('.tree-row.is-derived', { hasText: 'GitContext' });
+  await treeRow.click();
+  await expect(page.locator('#breadcrumb')).toContainText('Code');
+  await expect(node('GitContext')).toBeVisible();
+  await expect(page.locator('#side-body')).toContainText('Derived from source');
 
   expect(page.errors).toEqual([]);
   await page.screenshot({ path: 'test-results/webkit-L4.png', fullPage: true });

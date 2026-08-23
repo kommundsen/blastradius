@@ -477,9 +477,11 @@ async function dive(id) {
     // into introspection open their derived module graph.
     await glideInto(id);
     state.level = 'L4'; state.scope = id;
-  } else if (state.level === 'L4' && el.derived && graph.elements.some((e) => e.parent === id)) {
+  } else if (el.derived && graph.elements.some((e) => e.parent === id)) {
+    // Deeper into the code: module → its types/submodules. Works from the
+    // canvas at L4 and from a tree row at any altitude.
     await glideInto(id);
-    state.scope = id; // deeper into the code: module → its types/submodules
+    state.level = 'L4'; state.scope = id;
   } else {
     return;
   }
@@ -909,11 +911,23 @@ function renderTree() {
   const rows = [];
   rows.push(`<span class="tree-label">Model</span>`);
   for (const c of t.context) rows.push(treeRow(c.el ?? c, 0, '◦'));
+  const snapForTree = effectiveSnapshot();
   for (const s of t.systems) {
     rows.push(treeRow(s.el, 0, '▸'));
     for (const c of s.containers) {
       rows.push(treeRow(c.el, 1, ''));
-      for (const k of c.components) rows.push(treeRow(k, 2, ''));
+      for (const k of c.components) {
+        rows.push(treeRow(k, 2, ''));
+        // Introspected code (L4) nests under its component, visibly code:
+        // modules first, their types one step deeper.
+        const graph = (snapForTree.derived ?? []).find((g) => g.component === k.id);
+        for (const m of graph?.elements.filter((e) => !e.parent) ?? []) {
+          rows.push(treeRow(m, 3, '', ' is-derived'));
+          for (const ty of graph.elements.filter((e) => e.parent === m.id)) {
+            rows.push(treeRow(ty, 4, '', ' is-derived'));
+          }
+        }
+      }
     }
   }
   els.tree.innerHTML = rows.join('');
@@ -923,20 +937,37 @@ function renderTree() {
   }
 }
 
-function treeRow(el, depth, glyph) {
+function treeRow(el, depth, glyph, extra = '') {
   let active = state.selected === el.id ? ' is-active' : '';
   const change = diffChangeMap().get(el.id);
   if (change === 'added') active += ' is-added';
   if (change === 'removed') active += ' is-removed';
   const pad = depth ? ` style="padding-left:${14 + depth * 14}px"` : '';
-  return `<button class="tree-row${active}" data-id="${esc(el.id)}"${pad}>` +
+  return `<button class="tree-row${active}${extra}" data-id="${esc(el.id)}"${pad}>` +
     `<span class="glyph">${glyph}</span>${esc(el.name)}</button>`;
 }
 
 /** Select an element; if it is not visible at the current altitude, go to it. */
 async function focusElement(id) {
   const el = state.snapshot.elements.find((e) => e.id === id);
-  if (!el) return;
+  if (!el) {
+    // Derived (L4) elements: jump the canvas to their code altitude.
+    const graph = derivedGraphFor(effectiveSnapshot(), id);
+    const d = graph?.elements.find((e) => e.id === id);
+    if (!d) return;
+    if (!state.layout?.nodes.some((n) => n.id === id)) {
+      state.level = 'L4';
+      state.scope = d.parent ?? graph.component;
+      state.zoom = 1; state.pan = { x: 0, y: 0 };
+      state.selected = id;
+      await renderCanvas();
+      renderSide();
+      renderTree();
+      return;
+    }
+    select(id);
+    return;
+  }
   const visible = state.layout?.nodes.some((n) => n.id === id);
   if (!visible) {
     const d = depthOf(id);
