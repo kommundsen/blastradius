@@ -669,6 +669,9 @@ function wireResizers() {
       grip.setAttribute('aria-valuenow', String(clamped));
       localStorage.setItem(storageKey, String(clamped));
       if (state.layout) applyCamera(); // the canvas just changed size
+      // CodeMirror caches its measured width; an external resize it didn't
+      // cause (this grip) leaves it showing a stale, wrong-width scrollbar
+      if (cssVar === '--panel-side-w' && srcCm) srcCm.refresh();
     };
     grip.setAttribute('aria-valuemin', String(bounds[0]));
     grip.setAttribute('aria-valuemax', String(bounds[1]));
@@ -1442,6 +1445,8 @@ async function renderSource() {
   srcCm = CodeMirror(document.getElementById('src-editor'), {
     mode: 'yaml',
     lineNumbers: true,
+    lineWrapping: true, // the side panel is 260-480px; unwrapped YAML lines
+                         // (descriptions, tech) routinely forced an h-scroll
     indentUnit: 2,
     tabSize: 2,
     screenReaderLabel: 'YAML source editor',

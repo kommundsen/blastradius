@@ -96,3 +96,19 @@ test('source editor is CodeMirror with YAML highlighting (phase 5)', async ({ pa
   await expect(page.locator('#src-editor .cm-comment').first()).toBeVisible();
   expect(page.errors).toEqual([]);
 });
+
+test('source editor wraps instead of forcing a horizontal scrollbar', async ({ page }) => {
+  await page.locator('#side-mode .seg-opt', { hasText: 'Source' }).click();
+  await expect(page.locator('#src-editor .CodeMirror')).toBeVisible();
+  // shrink the side panel to its minimum (260px) — narrow enough that any
+  // unwrapped YAML line (a description, a tech value) used to overflow
+  const grip = page.locator('#side-grip');
+  await grip.focus();
+  for (let i = 0; i < 20; i++) await grip.press('ArrowRight');
+  await expect(grip).toHaveAttribute('aria-valuenow', '260');
+  const overflow = await page
+    .locator('#src-editor .CodeMirror-scroll')
+    .evaluate((el) => el.scrollWidth - el.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+  expect(page.errors).toEqual([]);
+});
