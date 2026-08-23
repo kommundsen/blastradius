@@ -80,7 +80,10 @@ jobs:
         shell: pwsh
         run: |
           if ('${{ vars.STORE_PRODUCT_ID }}' -eq '') { throw 'STORE_PRODUCT_ID repository variable is not set (the 9N... Store ID from msstore apps list)' }
-          $cliArgs = @('publish', 'upload', '--inputDirectory', 'upload', '--appId', '${{ vars.STORE_PRODUCT_ID }}', '--verbose')
+          # pathOrUrl = packaging/msix: its Package.appxmanifest makes the CLI
+          # detect a "UWP" project (the configurator that publishes prebuilt
+          # .msixupload files); the actual bundle comes from --inputDirectory.
+          $cliArgs = @('publish', 'packaging/msix', '--inputDirectory', 'upload', '--appId', '${{ vars.STORE_PRODUCT_ID }}', '--verbose')
           if ('${{ github.event_name }}' -eq 'workflow_dispatch') { $cliArgs += '--noCommit' }
           msstore @cliArgs
           if ($LASTEXITCODE -ne 0) { throw 'msstore publish failed' }
