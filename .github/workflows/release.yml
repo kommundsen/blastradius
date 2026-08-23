@@ -13,6 +13,9 @@ name: release
 on:
   push:
     tags: ["v*"]
+  # Dry run: exercises the whole pipeline but leaves the submission as an
+  # uncommitted draft in Partner Center (msstore publish --noCommit).
+  workflow_dispatch:
 
 jobs:
   store-submit:
@@ -30,7 +33,7 @@ jobs:
           $manifest = Get-Content packaging\msix\Package.appxmanifest -Raw
           if ($manifest -notmatch 'Version="(\d+\.\d+\.\d+)\.0"') { throw 'manifest version not found' }
           $version = $Matches[1]
-          if ("${{ github.ref_name }}" -ne "v$version") {
+          if ('${{ github.event_name }}' -eq 'push' -and "${{ github.ref_name }}" -ne "v$version") {
             throw "tag ${{ github.ref_name }} does not match manifest version $version — bump the three version surfaces first (spec/msix-store-packaging.md)"
           }
           "version=$version" >> $env:GITHUB_OUTPUT
@@ -75,4 +78,5 @@ jobs:
         run: |
           if ('${{ vars.STORE_PRODUCT_ID }}' -eq '') { throw 'STORE_PRODUCT_ID repository variable is not set (the 9N... Store ID from msstore apps list)' }
           $v = "${{ steps.version.outputs.version }}.0"
-          msstore publish packaging/msix --inputFile "Blastradius_$v.msixupload" --appId ${{ vars.STORE_PRODUCT_ID }} --verbose
+          $extra = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { @('--noCommit') } else { @() }
+          msstore publish packaging/msix --inputFile "Blastradius_$v.msixupload" --appId ${{ vars.STORE_PRODUCT_ID }} --verbose @extra

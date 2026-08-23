@@ -231,6 +231,12 @@ So a release is: bump the three version surfaces → commit → `git tag
 v<x.y.z>` → `git push origin v<x.y.z>` → watch the `release` workflow →
 certification proceeds in Partner Center as usual.
 
+The workflow also has a manual **dry run** (Actions → release → Run
+workflow): the same build/bundle/submit path, but `--noCommit` leaves
+the submission as an uncommitted draft in Partner Center — inspect it
+there, then delete the draft. Use it to validate the pipeline before
+the first real tag.
+
 ## Troubleshooting
 
 **Shipped stale binaries under a new version number** (happened on
