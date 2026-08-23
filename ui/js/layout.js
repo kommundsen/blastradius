@@ -127,11 +127,109 @@ export async function layoutView(elk, view, pins = {}) {
     }
   }
 
+  routeEdges(edges, nodes);
   placeLabels(edges, nodes);
 
   const width = Math.max(pinnedMaxX, ...nodes.map((n) => n.x + n.width), 0) + GRID;
   const height = Math.max(...nodes.map((n) => n.y + n.height), 0) + GRID;
   return { nodes, edges, width, height };
+}
+
+// ---- obstacle-avoiding edge routing (0.2.0, docs/roadmap.md theme 1) --------
+// Edges touching pinned nodes bypass ELK (straight lines), and ELK's own
+// routes don't know the pinned boxes exist — either way an edge can pass
+// under a node. This post-pass reroutes any offending edge through a
+// visibility graph over the inflated corners of every other node: pins stay
+// exactly where the user put them, only the line moves. Deterministic —
+// obstacle order, corner order, and the Dijkstra tie-break are all fixed.
+
+const ROUTE_MARGIN = 12; // clearance kept around nodes when detouring
+
+function routeEdges(edges, nodes) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  for (const e of edges) {
+    const from = byId.get(e.from);
+    const to = byId.get(e.to);
+    if (!from || !to || e.from === e.to) continue;
+    const obstacles = nodes
+      .filter((n) => n.id !== e.from && n.id !== e.to)
+      .map((n) => ({ x: n.x, y: n.y, w: n.width, h: n.height }));
+    if (!obstacles.some((r) => polylineHitsRect(e.points, r))) continue;
+    const detour = findDetour(from, to, obstacles);
+    if (detour) e.points = detour;
+  }
+}
+
+function polylineHitsRect(pts, r) {
+  for (let i = 0; i + 1 < pts.length; i++) {
+    if (segHitsRect(pts[i], pts[i + 1], r)) return true;
+  }
+  return false;
+}
+
+/** Does the open segment p→q pass through the rect's interior? Liang-Barsky
+ * with the rect deflated by eps, so grazing a border never counts. */
+function segHitsRect(p, q, r, eps = 0.5) {
+  const x0 = r.x + eps, y0 = r.y + eps, x1 = r.x + r.w - eps, y1 = r.y + r.h - eps;
+  if (x1 <= x0 || y1 <= y0) return false;
+  const dx = q.x - p.x, dy = q.y - p.y;
+  let t0 = 0, t1 = 1;
+  for (const [den, num] of [[-dx, p.x - x0], [dx, x1 - p.x], [-dy, p.y - y0], [dy, y1 - p.y]]) {
+    if (den === 0) { if (num < 0) return false; continue; }
+    const t = num / den;
+    if (den < 0) { if (t > t1) return false; if (t > t0) t0 = t; }
+    else { if (t < t0) return false; if (t < t1) t1 = t; }
+  }
+  return t1 > t0;
+}
+
+/** Shortest clear polyline from `from` to `to` around `obstacles`: Dijkstra
+ * over the visibility graph of inflated obstacle corners, with a fixed
+ * per-hop penalty so fewer bends win among near-equal routes. Returns null
+ * when no clear route exists (the caller keeps the straight line). */
+function findDetour(from, to, obstacles) {
+  const inflated = obstacles.map((r) => ({
+    x: r.x - ROUTE_MARGIN, y: r.y - ROUTE_MARGIN,
+    w: r.w + 2 * ROUTE_MARGIN, h: r.h + 2 * ROUTE_MARGIN,
+  }));
+  const start = center(from);
+  const goal = center(to);
+  const verts = [start, goal];
+  for (const r of inflated) {
+    verts.push(
+      { x: r.x, y: r.y }, { x: r.x + r.w, y: r.y },
+      { x: r.x, y: r.y + r.h }, { x: r.x + r.w, y: r.y + r.h },
+    );
+  }
+  const clear = (a, b) => !inflated.some((r) => segHitsRect(a, b, r));
+
+  const dist = new Array(verts.length).fill(Infinity);
+  const prev = new Array(verts.length).fill(-1);
+  const done = new Array(verts.length).fill(false);
+  dist[0] = 0;
+  for (;;) {
+    let u = -1;
+    for (let i = 0; i < verts.length; i++) {
+      if (!done[i] && dist[i] < (u === -1 ? Infinity : dist[u])) u = i;
+    }
+    if (u === -1 || u === 1) break;
+    done[u] = true;
+    for (let v = 0; v < verts.length; v++) {
+      if (done[v] || v === u) continue;
+      if (!clear(verts[u], verts[v])) continue;
+      const d = dist[u] + Math.hypot(verts[v].x - verts[u].x, verts[v].y - verts[u].y) + 30;
+      if (d < dist[v]) { dist[v] = d; prev[v] = u; }
+    }
+  }
+  if (dist[1] === Infinity) return null;
+
+  const path = [];
+  for (let i = 1; i !== -1; i = prev[i]) path.unshift(verts[i]);
+  if (path.length < 2) return null;
+  // arrowheads land on borders, not centers — clip the terminal segments
+  path[0] = clipToBox(path[0], path[1], from);
+  path[path.length - 1] = clipToBox(path[path.length - 1], path[path.length - 2], to);
+  return path;
 }
 
 /** Label de-collision: try positions along each edge and keep the first one

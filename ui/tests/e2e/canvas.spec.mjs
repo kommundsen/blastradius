@@ -174,6 +174,61 @@ test('edge labels never sit on node boxes (label de-collision)', async ({ page }
   }
 });
 
+test('edges never pass under node boxes (obstacle routing)', async ({ page }) => {
+  for (const path of ['/index.html?nogit', '/index.html?nogit#l2']) {
+    await page.goto(path);
+    await expect(page.locator('#nodes .node').first()).toBeVisible();
+    if (path.endsWith('#l2')) {
+      await page.locator('#nodes .node', {
+        has: page.locator('.node-title', { hasText: 'Blastradius' }),
+      }).dblclick();
+      await expect(page.locator('#breadcrumb')).toContainText('Containers');
+    }
+    // layout-space geometry: node style positions and raw path points (the
+    // camera transform applies to both equally, so skip it entirely)
+    const bad = await page.evaluate(() => {
+      const boxes = [...document.querySelectorAll('#nodes .node')].map((n) => ({
+        id: n.dataset.id,
+        x: parseFloat(n.style.left), y: parseFloat(n.style.top),
+        w: n.offsetWidth, h: n.offsetHeight,
+      }));
+      const offenders = [];
+      for (const p of document.querySelectorAll('#edges path.edge')) {
+        const pts = p.getAttribute('d').split(/[ML] ?/).filter(Boolean)
+          .map((s) => s.split(',').map(Number)).map(([x, y]) => ({ x, y }));
+        let total = 0;
+        const seg = [];
+        for (let i = 1; i < pts.length; i++) {
+          const l = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+          seg.push(l); total += l;
+        }
+        for (const b of boxes) {
+          if (b.id === p.dataset.from || b.id === p.dataset.to) continue;
+          let inside = 0;
+          const samples = 64;
+          for (let s = 0; s <= samples; s++) {
+            let want = (total * s) / samples;
+            let pt = pts[0];
+            for (let i = 0; i < seg.length; i++) {
+              if (want <= seg[i]) {
+                const t = seg[i] ? want / seg[i] : 0;
+                pt = { x: pts[i].x + (pts[i + 1].x - pts[i].x) * t,
+                       y: pts[i].y + (pts[i + 1].y - pts[i].y) * t };
+                break;
+              }
+              want -= seg[i]; pt = pts[i + 1];
+            }
+            if (pt.x > b.x + 1 && pt.x < b.x + b.w - 1 && pt.y > b.y + 1 && pt.y < b.y + b.h - 1) inside++;
+          }
+          if (inside > 1) offenders.push(`${p.dataset.from}->${p.dataset.to} under ${b.id}`);
+        }
+      }
+      return offenders;
+    });
+    expect(bad, `edges under nodes at ${path}`).toEqual([]);
+  }
+});
+
 test('dropping a node onto another nudges it to clear space (min distance)', async ({ page }) => {
   await page.goto('/index.html?nogit');
   const node = (t) => page.locator('#nodes .node', { has: page.locator('.node-title', { hasText: t }) });

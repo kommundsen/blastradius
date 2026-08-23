@@ -149,12 +149,20 @@ ships when its themes are done, not when it is "big enough". Suggested
 sequence: layout first (self-contained), export second (unlocks the PR
 bot), conflicts last (hardest).
 
-1. **Canvas & layout quality** — two-pass interactive ELK so edges touching
-   pinned nodes get real routing (today they bypass ELK entirely: straight
-   center-to-center lines that pass under nodes). Obstacle-avoiding routing
-   for the general case stays v2.
-   *Exit:* in the dogfood views, no edge segment crosses a node box —
-   e2e-asserted the same way label de-collision is.
+1. **Canvas & layout quality** — **shipped 2026-08-23**, with one recorded
+   deviation: two-pass *interactive ELK* turned out to be the wrong tool
+   (its interactive strategies preserve relative order but recompute
+   coordinates, which would break the pins-are-exact contract). Shipped
+   instead: a deterministic obstacle-avoiding post-pass in ui/js/layout.js —
+   any edge whose polyline crosses a foreign node box is rerouted via
+   Dijkstra over a visibility graph of inflated node corners (fixed
+   per-hop bend penalty, fixed tie-breaks). This covers both offender
+   classes at once: pinned-adjacent straight lines *and* ELK-routed edges
+   that ignored pinned boxes. Pins never move; only lines do.
+   *Exit met:* no edge segment crosses a node box — asserted three ways:
+   unit (ui/tests/routing.test.mjs, incl. a synthetic forced detour and
+   all three dogfood views), determinism (routes byte-identical across
+   runs/instances), and DOM e2e (canvas.spec.mjs, L1 + dive-to-L2).
 2. **Export & PR integration** — headless SVG/PNG export via a node script
    over ui/js/layout.js (lifting spec/export.md's v1 boundary), then a
    PR-bot that renders the semantic model diff on every PR touching

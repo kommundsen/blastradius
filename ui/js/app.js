@@ -346,6 +346,8 @@ async function renderCanvas({ animate = true } = {}) {
     if (relChange === 'removed') cls += ' is-removed';
     path.setAttribute('class', cls);
     path.setAttribute('d', d);
+    path.setAttribute('data-from', e.from);
+    path.setAttribute('data-to', e.to);
     if (e.exact) {
       const hit = document.createElementNS(svgNS, 'path');
       hit.setAttribute('class', 'edge-hit');
