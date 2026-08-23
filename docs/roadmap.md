@@ -163,13 +163,17 @@ bot), conflicts last (hardest).
    unit (ui/tests/routing.test.mjs, incl. a synthetic forced detour and
    all three dogfood views), determinism (routes byte-identical across
    runs/instances), and DOM e2e (canvas.spec.mjs, L1 + dive-to-L2).
-2. **Export & PR integration** — headless SVG/PNG export via a node script
-   over ui/js/layout.js (lifting spec/export.md's v1 boundary), then a
-   PR-bot that renders the semantic model diff on every PR touching
-   `docs/model/` in CI.
-   *Exit:* CI publishes SVG/PNG artifacts on every merge to this repo, and
-   a PR changing the dogfood model gets an automated comment with a
-   rendered before/after.
+2. **Export & PR integration** — **shipped 2026-08-23**. Headless SVG/PNG:
+   tools/render-views.mjs over the app's own pipeline (layout.js + the SVG
+   assembly extracted to ui/js/svg.js, which the in-app Share menu now
+   shares), tokens resolved headlessly from the design system, byte-stable
+   output (ui/tests/render.test.mjs). CI's frontend job publishes both
+   themes as the `architecture-renders` artifact on every push. The
+   `model-diff` workflow posts one sticky comment per model-touching PR:
+   semantic diff + rendered before/after views on a per-PR assets branch.
+   *Exit met:* proven live on PR #1 — correct diff
+   (`~ element blastradius.core.exporter`), all three view pairs rendered
+   and embedded, comment upserted. spec/export.md §CI documents the tool.
 3. **Deeper git workflows** — in-app merge conflict *resolution* (v1
    detects and displays; resolution today happens in an external editor).
    Per-element ours/theirs choice in the conflict inspector, written
