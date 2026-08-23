@@ -90,6 +90,15 @@ test('L4: dive into introspected code, inspect a derived type', async ({ page })
   await page.screenshot({ path: 'test-results/webkit-L4.png', fullPage: true });
 });
 
+test('L4 segment is live and jumps to an introspected component', async ({ page }) => {
+  const l4 = page.locator('#level-seg input[value="L4"]');
+  await expect(l4).toBeEnabled(); // the mock model has derived graphs
+  await page.locator('#level-seg .seg-opt', { hasText: 'L4' }).click();
+  await expect(page.locator('#breadcrumb')).toContainText('Code');
+  await expect(page.locator('.node.is-derived')).not.toHaveCount(0);
+  expect(page.errors).toEqual([]);
+});
+
 test('keyboard: arrows select, Escape rises', async ({ page }) => {
   await page.locator('#canvas').click({ position: { x: 30, y: 200 } });
   await page.keyboard.press('ArrowRight');

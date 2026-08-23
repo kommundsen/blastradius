@@ -625,6 +625,19 @@ async function setLevel(level) {
     if (!container) return;
     state.scope = container;
   }
+  if (level === 'L4') {
+    // need an introspected component: the selection if it has facts, else the
+    // nearest opted-in component under the current scope, else the first one.
+    const snap = effectiveSnapshot();
+    const graphs = snap.derived ?? [];
+    const target =
+      (state.selected && graphs.find((g) => state.selected === g.component || state.selected.startsWith(g.component + '.src.'))?.component) ??
+      (state.scope && graphs.find((g) => g.component.startsWith(state.scope + '.') || g.component === state.scope)?.component) ??
+      graphs[0]?.component;
+    if (!target) return;
+    state.scope = target;
+    state.selected = target;
+  }
   state.level = level;
   state.zoom = 1; state.pan = { x: 0, y: 0 };
   await renderCanvas();
@@ -881,6 +894,12 @@ function syncLevelSeg() {
   for (const input of els.levelSeg.querySelectorAll('input')) {
     input.checked = input.value === state.level;
     input.closest('.seg-opt').classList.toggle('is-active', input.value === state.level);
+    if (input.value === 'L4') {
+      // Live only when the model has introspected components to jump to.
+      const usable = (effectiveSnapshot().derived ?? []).length > 0;
+      input.disabled = !usable;
+      input.closest('.seg-opt').classList.toggle('is-disabled', !usable);
+    }
   }
 }
 

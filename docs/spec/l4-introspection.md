@@ -234,7 +234,10 @@ import path (ADR-0016 option 3).
 
 - **Canvas**: an opted-in component dives like a container (same
   grammar); one more dive steps from a module into its types, and
-  Escape climbs back out. L4 uses the existing deterministic layout
+  Escape climbs back out. The header's L4 segment is enabled whenever
+  the model has derived graphs and jumps to the nearest introspected
+  component (selection first, then current scope, then the first
+  graph); with no `source:` mappings it stays disabled. L4 uses the existing deterministic layout
   pipeline with no pinning (derived layouts are pure auto-layout);
   derived nodes carry a kind kicker with a derived marker ("Module ·
   derived") and monospace, case-preserving titles; a stale graph badges
