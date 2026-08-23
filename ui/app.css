@@ -116,8 +116,10 @@ body { margin: 0; overflow: hidden; }
 #canvas.is-connecting .node { outline: 1px dashed var(--color-accent); outline-offset: 2px; cursor: crosshair; }
 
 /* source editor */
-.src-wrap { display: flex; flex-direction: column; height: 100%; }
-.src-file { margin: var(--space-2) var(--space-3); }
+.src-wrap { display: flex; flex-direction: column; height: 100%; min-width: 0; }
+.src-file { margin: var(--space-2) var(--space-3); width: auto; min-width: 0;
+  max-width: calc(100% - 2 * var(--space-3)); box-sizing: border-box;
+  text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
 select.input { appearance: auto; }
 .src-editor { flex: 1; margin: 0 var(--space-3) var(--space-3); resize: none;
   font-family: var(--font-mono); font-size: var(--text-mono); line-height: var(--leading-code);
