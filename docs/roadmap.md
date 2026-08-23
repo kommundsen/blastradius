@@ -131,6 +131,39 @@ init, welcome screen, File → Open); the measured run with a real stranger is
 still owed and belongs with the packaged build, where "install" does not mean
 `cargo build`.
 
+## 0.2.0 — planned (2026-08-23)
+
+Three themes, user-selected from the deferred pool; macOS packaging was
+considered and deliberately not taken (the $99/year Apple Developer ID and
+Mac-hardware loop stay an open decision). Store updates are cheap, so 0.2.0
+ships when its themes are done, not when it is "big enough". Suggested
+sequence: layout first (self-contained), export second (unlocks the PR
+bot), conflicts last (hardest).
+
+1. **Canvas & layout quality** — two-pass interactive ELK so edges touching
+   pinned nodes get real routing (today they bypass ELK entirely: straight
+   center-to-center lines that pass under nodes). Obstacle-avoiding routing
+   for the general case stays v2.
+   *Exit:* in the dogfood views, no edge segment crosses a node box —
+   e2e-asserted the same way label de-collision is.
+2. **Export & PR integration** — headless SVG/PNG export via a node script
+   over ui/js/layout.js (lifting spec/export.md's v1 boundary), then a
+   PR-bot that renders the semantic model diff on every PR touching
+   `docs/model/` in CI.
+   *Exit:* CI publishes SVG/PNG artifacts on every merge to this repo, and
+   a PR changing the dogfood model gets an automated comment with a
+   rendered before/after.
+3. **Deeper git workflows** — in-app merge conflict *resolution* (v1
+   detects and displays; resolution today happens in an external editor).
+   Per-element ours/theirs choice in the conflict inspector, written
+   through the sync engine's splices (spec/git-and-diff.md governs).
+   *Exit:* a manufactured merge conflict on `docs/` resolves entirely
+   in-app and ends byte-clean — files valid, comments and formatting
+   intact, `git status` conflict-free.
+
+Version note: Store packages are `0.2.0.0` (the fourth digit is the
+Store's; spec/msix-store-packaging.md).
+
 ## v2 themes (not scheduled)
 
 Hosted share links (ADR-0009's payload), in-app conflict resolution, PR-bot
