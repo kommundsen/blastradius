@@ -53,7 +53,7 @@ if ($app.pendingApplicationSubmission) {
 
 # 3. New submission — a clone of the last published one (listing metadata
 #    carries over; only the packages change here).
-$sub = Invoke-RestMethod -Method Post -Uri "$base/submissions" -Headers $headers
+$sub = Invoke-RestMethod -Method Post -Uri "$base/submissions" -Headers $headers -ContentType 'application/json'
 Write-Host "created submission $($sub.id)"
 
 # 4. Packages: retire every cloned package, add one entry per .msix in the zip.
@@ -86,7 +86,7 @@ if (-not $Commit) {
 
 # 7. Commit and poll until the Store takes over (certification proceeds in
 #    Partner Center as usual).
-Invoke-RestMethod -Method Post -Uri "$base/submissions/$($sub.id)/commit" -Headers $headers | Out-Null
+Invoke-RestMethod -Method Post -Uri "$base/submissions/$($sub.id)/commit" -Headers $headers -ContentType 'application/json' | Out-Null
 do {
   Start-Sleep -Seconds 15
   $st = Invoke-RestMethod -Uri "$base/submissions/$($sub.id)/status" -Headers $headers
