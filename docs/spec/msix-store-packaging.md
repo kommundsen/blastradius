@@ -174,6 +174,17 @@ so the "Azure AD applications" tab is invisible until step 0 is done:
    three are the only secret values in the whole pipeline (the
    manifest identity values are public, committed deliberately).
 
+Setup wrinkles hit on 2026-08-23: the "Azure AD applications" pivot in
+User management stays invisible until the tenant is associated at the
+account level (Account settings → Organization profile → Tenants — a
+signed-in Entra session is not an association) AND you are signed in as
+the Partner Center account owner; it renders as a pivot/tab on the User
+management page, not an entry in the Add dropdown. The low-friction
+alternative is `winget install Microsoft.msstorecli` +
+`msstore reconfigure` locally: the wizard signs into Partner Center and
+the tenant, creates the app registration, associates it, and yields the
+three credential values for the GitHub secrets.
+
 ## Per release: submit
 
 13. **Pack unsigned for the Store** (the Store signs; upload wants your
