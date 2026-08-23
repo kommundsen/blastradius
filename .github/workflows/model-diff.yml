@@ -1,0 +1,113 @@
+# PR model-diff bot (0.2.0 theme 2, docs/roadmap.md): every PR that touches
+# the architecture model gets one sticky comment with the semantic diff and
+# rendered before/after views. Renders are pushed to a per-PR assets branch
+# (pr-assets-<n>, force-updated each run) so the comment can embed immutable
+# raw.githubusercontent URLs; the branch is disposable after merge.
+#
+# Same-repo PRs only: fork tokens are read-only, and this repo's PRs are
+# maintainer-authored.
+name: model-diff
+
+on:
+  pull_request:
+    paths:
+      - "docs/model/**"
+      - "docs/views/**"
+      - "docs/blastradius.yaml"
+
+concurrency:
+  group: model-diff-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  diff:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Install Playwright WebKit
+        run: |
+          npm ci
+          npx playwright install --with-deps webkit
+
+      - name: Diff and render both sides
+        run: |
+          set -e
+          BASE_SHA=$(git merge-base "origin/${{ github.base_ref }}" HEAD)
+          git worktree add /tmp/base "$BASE_SHA"
+          cargo build -q -p blastradius-cli
+          BIN=target/debug/blastradius
+          $BIN diff /tmp/base/docs docs | tee diff.txt || true
+          $BIN snapshot docs > head.json
+          node tools/render-views.mjs head.json -o renders/head --png
+          if $BIN snapshot /tmp/base/docs > base.json; then
+            node tools/render-views.mjs base.json -o renders/base --png
+          else
+            echo "base side does not parse — rendering head only" | tee -a diff.txt
+          fi
+
+      - name: Publish renders to the PR assets branch
+        id: assets
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git worktree add --detach /tmp/assets HEAD
+          cd /tmp/assets
+          git checkout --orphan "pr-assets-${{ github.event.pull_request.number }}"
+          git rm -rfq . || true
+          cp -r "$GITHUB_WORKSPACE/renders/." .
+          git add -A
+          git commit -m "model renders for PR #${{ github.event.pull_request.number }}"
+          git push -f origin "HEAD:refs/heads/pr-assets-${{ github.event.pull_request.number }}"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Upsert the sticky PR comment
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- blastradius-model-diff -->';
+            const sha = '${{ steps.assets.outputs.sha }}';
+            const raw = (p) => `https://raw.githubusercontent.com/${process.env.GITHUB_REPOSITORY}/${sha}/${p}`;
+            const diff = fs.readFileSync('diff.txt', 'utf8').trim() || 'no semantic changes';
+
+            const views = fs.readdirSync('renders/head')
+              .filter((f) => f.endsWith('.png'))
+              .sort();
+            const hasBase = fs.existsSync('renders/base');
+            let images = '';
+            for (const f of views) {
+              const title = f.replace('.png', '');
+              images += `\n<details><summary><b>${title}</b></summary>\n\n`;
+              if (hasBase && fs.existsSync(`renders/base/${f}`)) {
+                images += `| base | this PR |\n| --- | --- |\n`;
+                images += `| ![base ${title}](${raw('base/' + f)}) | ![head ${title}](${raw('head/' + f)}) |\n`;
+              } else {
+                images += `![${title}](${raw('head/' + f)})\n`;
+              }
+              images += `\n</details>\n`;
+            }
+
+            const body = `${marker}\n## Architecture model diff\n\n\`\`\`\n${diff}\n\`\`\`\n${images}\n<sub>rendered by the model-diff workflow · assets on \`pr-assets-${context.issue.number}\` (deletable after merge)</sub>`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo, issue_number: context.issue.number, per_page: 100,
+            });
+            const mine = comments.find((c) => c.body?.includes(marker));
+            if (mine) {
+              await github.rest.issues.updateComment({ ...context.repo, comment_id: mine.id, body });
+            } else {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body });
+            }

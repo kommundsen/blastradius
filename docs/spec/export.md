@@ -49,9 +49,18 @@ without a WebView — headless **by construction**: the export embeds elkjs and
 lays out at open time, so build-time layout is never needed. CI publishes the
 artifact on every merge (the Phase 4 exit criterion).
 
-**v1 boundary**: headless SVG/PNG is *not* shipped — deterministic layout
-lives in elkjs (ADR-0006), so a headless raster would need a JS runtime in the
-export path. SVG/PNG are in-app exports serialized from the live layout, with
-fonts embedded via data URIs. If CI ever needs raster output, the route is a
-node script reusing ui/js/layout.js (same engine, same determinism) — recorded
-as a v2 theme, not planned for v1.
+**Headless SVG/PNG** (shipped 2026-08-23, 0.2.0 theme 2 — this lifted the
+v1 boundary): `node tools/render-views.mjs <snapshot.json> -o <dir>
+[--theme dark] [--png] [--scale N]` renders the L1 context plus every
+defined view. It reuses the app's exact pipeline — ui/js/layout.js (same
+elkjs, same determinism) and the SVG assembly extracted into ui/js/svg.js,
+which the in-app Share menu now also consumes — so headless output is
+pixel-identical in structure to what the canvas shows. Design tokens are
+resolved from ui/ds/tokens/colors.css by a small evaluator (var() chains
+plus the one color-mix() pattern the palette uses); fonts embed as data
+URIs. PNG rasterizes the SVG via Playwright WebKit (dev dependency; the
+SVG path needs no browser). Output is byte-identical across runs
+(ui/tests/render.test.mjs) — the PR diff bot depends on that. CI's
+frontend job publishes both themes as the `architecture-renders` artifact
+on every push, and the `model-diff` workflow comments rendered
+before/after views + the semantic diff on any PR touching the model.

@@ -27,14 +27,25 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
-      - name: Layout determinism (ADR-0006)
-        run: node --test ui/tests/determinism.test.mjs
+      - name: Layout determinism + routing + headless render suites
+        run: node --test ui/tests/determinism.test.mjs ui/tests/routing.test.mjs ui/tests/render.test.mjs
       - name: Install Playwright WebKit
         run: |
           npm ci
           npx playwright install --with-deps webkit
       - name: WebKit rendering gate (ADR-0011)
         run: npx playwright test
+      - name: Render SVG/PNG views (spec/export.md headless path)
+        # ui/mock/snapshot.json is the committed live model — regenerated on
+        # every model change (the e2e suites pin against it, so drift fails CI)
+        run: |
+          node tools/render-views.mjs ui/mock/snapshot.json -o renders --png
+          node tools/render-views.mjs ui/mock/snapshot.json -o renders/dark --theme dark --png
+      - name: Upload rendered views
+        uses: actions/upload-artifact@v5
+        with:
+          name: architecture-renders
+          path: renders/
       - name: Upload WebKit screenshots
         if: always()
         uses: actions/upload-artifact@v5

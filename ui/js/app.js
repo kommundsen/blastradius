@@ -3,6 +3,7 @@
 
 import { computeView, findViewDef, docsFor, treeModel, rootOf, depthOf, liftTo, resolvePins } from './data.js';
 import { layoutView, GRID } from './layout.js';
+import { viewSvg, kicker, childCount } from './svg.js';
 
 // ---- shell bridge -----------------------------------------------------------
 // Real IPC under Tauri; mock (fetch of a committed snapshot) in a plain
@@ -306,7 +307,7 @@ async function renderCanvas({ animate = true } = {}) {
     div.innerHTML =
       `<span class="node-kicker">${esc(kicker(el))}</span>` +
       `<span class="node-title">${esc(el.name)}</span>` +
-      (childCount(el) ? `<span class="node-meta">${childCount(el)}</span>` : '');
+      (childCount(el, state.snapshot.elements) ? `<span class="node-meta">${childCount(el, state.snapshot.elements)}</span>` : '');
     if (badge) {
       const b = document.createElement('span');
       b.className = 'node-badge';
@@ -381,19 +382,6 @@ function nodeClass(el) {
   let cls = 'node ' + (map[el.kind] ?? 'is-system');
   if (el.external) cls += ' is-external';
   return cls;
-}
-
-function kicker(el) {
-  const kind = { person: 'Person', system: 'Software system', container: 'Container', component: 'Component', external: 'External system' }[el.kind];
-  const label = el.external && el.kind === 'system' ? 'External system' : kind;
-  return el.tech ? `${label} · ${el.tech}` : label;
-}
-
-function childCount(el) {
-  const kids = state.snapshot.elements.filter((e) => e.parent === el.id).length;
-  if (!kids) return null;
-  const noun = el.kind === 'system' ? 'container' : 'component';
-  return `${kids} ${noun}${kids > 1 ? 's' : ''}`;
 }
 
 /** Zoom about a point in canvas coordinates: the model position under the
@@ -1636,18 +1624,11 @@ function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
-/** Pure SVG of the current view (spec/export.md): rects + text + paths, no
- * foreignObject, fonts embedded as data-URI @font-face so design tools and
- * browsers render it standalone. */
+/** Pure SVG of the current view — colors from the live CSS variables,
+ * fonts fetched and inlined, assembly shared with the headless renderer
+ * (ui/js/svg.js, spec/export.md). */
 async function buildViewSvg() {
-  const l = state.layout;
-  if (!l) throw new Error('nothing to export');
-  const snap = effectiveSnapshot();
-  const elById = new Map(snap.elements.map((e) => [e.id, e]));
-  const pad = GRID;
-  const W = Math.ceil(l.width + pad * 2);
-  const H = Math.ceil(l.height + pad * 2);
-
+  if (!state.layout) throw new Error('nothing to export');
   const colors = {
     bg: cssVar('--canvas-bg') || cssVar('--color-bg'),
     dot: cssVar('--canvas-dot'),
@@ -1659,56 +1640,13 @@ async function buildViewSvg() {
     edge: cssVar('--edge-stroke'),
     key: cssVar('--code-key'),
   };
-
-  const fonts = await embeddedFontCss().catch(() => '');
-
-  let out = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">\n`;
-  out += `<style>${fonts}
-    text{font-family:'Barlow',sans-serif}
-    .t{font-family:'Barlow Condensed',sans-serif;font-weight:600;fill:${colors.text};font-size:15px;letter-spacing:.02em}
-    .k{fill:${colors.key};font-size:9px;letter-spacing:1px}
-    .m{fill:${colors.muted};font-size:10px}
-    .lbl{fill:${colors.muted};font-size:10px;paint-order:stroke fill;stroke:${colors.bg};stroke-width:4px;stroke-linejoin:round}
-  </style>\n`;
-  out += `<rect width="${W}" height="${H}" fill="${colors.bg}"/>\n`;
-  out += `<defs><pattern id="grid" width="${GRID}" height="${GRID}" patternUnits="userSpaceOnUse">
-    <circle cx="1" cy="1" r="1" fill="${colors.dot}"/></pattern>
-  <marker id="arr" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="8" markerHeight="8"
-    orient="auto-start-reverse"><path d="M1.5,1.5 L9,5 L1.5,8.5" fill="none" stroke="${colors.edge}"/></marker></defs>\n`;
-  out += `<rect width="${W}" height="${H}" fill="url(#grid)"/>\n`;
-  out += `<g transform="translate(${pad},${pad})">\n`;
-
-  for (const e of l.edges) {
-    const d = e.points.map((p, i) => (i ? 'L' : 'M') + p.x + ',' + p.y).join(' ');
-    const dash = !e.exact ? ' stroke-dasharray="4 3"' : '';
-    const marker = e.direction === 'none' ? '' : ' marker-end="url(#arr)"' +
-      (e.direction === 'both' ? ' marker-start="url(#arr)"' : '');
-    out += `<path d="${d}" fill="none" stroke="${colors.edge}"${dash}${marker}/>\n`;
-    const label = e.label ?? e.protocol;
-    if (label) {
-      out += `<text class="lbl" x="${e.labelAt.x}" y="${e.labelAt.y}" text-anchor="middle">${esc(label)}</text>\n`;
-    }
-  }
-
-  for (const n of l.nodes) {
-    const el = elById.get(n.id);
-    const external = el.external;
-    const stroke = external ? colors.external : colors.border;
-    const fill = external ? 'none' : colors.fill;
-    const dash = external ? ' stroke-dasharray="5 4"' : '';
-    out += `<rect x="${n.x}" y="${n.y}" width="${n.width}" height="${n.height}" fill="${fill}" stroke="${stroke}"${dash}/>\n`;
-    if (el.kind === 'person') {
-      out += `<circle cx="${n.x + n.width / 2}" cy="${n.y - 1}" r="5" fill="${fill === 'none' ? colors.bg : fill}" stroke="${stroke}"/>\n`;
-    }
-    const kick = (kicker(el) || '').toUpperCase();
-    out += `<text class="k" x="${n.x + 10}" y="${n.y + 18}">${esc(kick)}</text>\n`;
-    out += `<text class="t" x="${n.x + 10}" y="${n.y + 36}">${esc(el.name.toUpperCase())}</text>\n`;
-    const meta = childCount(el);
-    if (meta) out += `<text class="m" x="${n.x + 10}" y="${n.y + 52}">${esc(meta)}</text>\n`;
-  }
-  out += '</g>\n<text class="m" x="' + (W - 8) + '" y="' + (H - 8) +
-    '" text-anchor="end">made with Blastradius</text>\n</svg>\n';
-  return out;
+  const fontCss = await embeddedFontCss().catch(() => '');
+  return viewSvg({
+    layout: state.layout,
+    elements: effectiveSnapshot().elements,
+    colors,
+    fontCss,
+  });
 }
 
 let fontCssCache = null;
