@@ -79,6 +79,6 @@ jobs:
         run: |
           if ('${{ vars.STORE_PRODUCT_ID }}' -eq '') { throw 'STORE_PRODUCT_ID repository variable is not set (the 9N... Store ID)' }
           $v = "${{ steps.version.outputs.version }}.0"
-          $flags = @('-ReplacePending')
-          if ('${{ github.event_name }}' -eq 'push') { $flags += '-Commit' }  # dispatch = dry run, draft only
+          $flags = @{ ReplacePending = $true }
+          if ('${{ github.event_name }}' -eq 'push') { $flags.Commit = $true }  # dispatch = dry run, draft only
           .\tools\submit-store.ps1 -ProductId '${{ vars.STORE_PRODUCT_ID }}' -UploadZip "upload\Blastradius_$v.msixupload" @flags
