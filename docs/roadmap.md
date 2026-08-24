@@ -275,6 +275,46 @@ deliberately deferred again (same cost/hardware decision as 0.2.0).
    Still owed: the 5-minute-stranger run against the published Store
    build, result to be recorded here.
 
+## 0.4.0 — planned (2026-08-24)
+
+Three user-selected themes. macOS/Linux distribution was considered and
+deliberately deferred a third time (same cost/hardware decision; revisit
+at 0.5.0). Going-public execution (the ADR-0017 repo flip: public
+README, CONTRIBUTING, sponsor setup) was considered and left
+unscheduled. Suggested sequence: introspection first (incremental,
+self-contained), deployment views second (heaviest, needs spec work),
+help last — so the help content documents the release's final feature
+set, deployment views included.
+
+1. **Introspection deepening** — the recorded L4 follow-ups from
+   ADR-0016/spec/l4-introspection.md: C# `--semantic` mode
+   (MSBuildWorkspace-backed, resolving cross-project references the
+   syntax-level pass cannot), external-dependency rollup nodes, and
+   transitive `pub use` following for Rust.
+   *Exit (draft):* the C# fixture corpus gains a multi-project solution
+   that syntax mode gets wrong and `--semantic` gets right; external
+   deps render as rollup nodes on an opted-in dogfood component; `pub
+   use` re-exports resolve on this repo's own crates.
+2. **Deployment views** — the C4 deployment diagram: environments,
+   deployment nodes, containerinstances, mapped onto the existing
+   model format and canvas (spec work first — format, then rendering).
+   *Exit (draft):* this repo's own delivery is modelled and rendered —
+   dev machine, CI runners, Store distribution — validating, diveable,
+   and exported like any other view.
+3. **Bundled in-app help** — the sharpened v2 theme (2026-08-24):
+   author the feature-usage doc set — getting started, canvas
+   navigation/diving, editing and pinning, git diff and conflict
+   resolution, L4 introspection setup, export/share, MCP/agent setup,
+   keyboard shortcuts, model-format reference, privacy policy — and
+   ship it in-app via the existing docs-panel machinery (offline,
+   versioned with the binary). The content is the bulk of the work.
+   *Exit:* every shipped feature is reachable from an in-app Help
+   entry point with no network; **plus the owed PRD 5-minute-stranger
+   run**, folded here by decision 2026-08-24: a platform engineer who
+   has never seen the product installs the published 0.4.0 Store build
+   and reaches a rendered model of their own repo in under 5 minutes,
+   unassisted — result recorded in this file.
+
 ## v2 themes (not scheduled)
 
 **Bundled in-app help** (idea 2026-08-23, follows dropping Pages
@@ -291,10 +331,22 @@ dogfood ADR/spec site: that is contributor material aimed at *building*
 the app, already readable in-app by opening this repo, and stays a CI
 artifact — none of it doubles as user help.
 
-Hosted share links (ADR-0009's payload), in-app conflict resolution, PR-bot
-diff rendering in CI, L4 source-derived elements, deployment views, headless
-SVG/PNG export via a node script over ui/js/layout.js (spec/export.md v1
-boundary).
+Pool pruned 2026-08-24 — shipped since it was written: in-app conflict
+resolution (0.2.0), PR-bot diff rendering (0.2.0), headless SVG/PNG
+export (0.2.0), L4 source-derived elements (0.3.0); deployment views
+moved to 0.4.0. Still parked:
+
+- **Hosted share links** (ADR-0009's payload) — demoted from primary
+  commercial thesis by ADR-0017 and hosting is currently unwanted;
+  parked, not scheduled.
+- **Going-public execution** — the ADR-0017 repo flip (public-audience
+  README, CONTRIBUTING, issue templates, sponsor/donation setup, the
+  flip itself). Considered for 0.4.0 and left unscheduled 2026-08-24.
+- **Render-a-view MCP tool** — deferred from 0.3.0; revisit when an
+  agent task actually needs pixels.
+- **macOS/Linux distribution** — deferred at 0.2.0, 0.3.0, and 0.4.0;
+  the $99/year Apple Developer ID and Mac-hardware loop remain the
+  open decision, Linux undecided.
 
 **Layout polish** (diagnosed 2026-08-22, measured in scratch experiment):
 auto-only views are near-optimal already — ELK layered produces 2 crossings
