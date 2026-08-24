@@ -32,6 +32,12 @@ environments:
         to: workstation.dev-build
         label: shares the workspace on disk
         direction: both
+      - from: workstation.terminal
+        to: git-repo
+        label: commit & push
+      - from: workstation
+        to: ci.ubuntu-runner
+        label: triggers on push
 
   ci:
     name: GitHub Actions
@@ -57,8 +63,15 @@ environments:
             description: x64 + arm64 bundled into one .msixupload (ADR-0013).
     relations:
       - from: ubuntu-runner
+        to: git-repo
+        label: checks out
+      - from: ubuntu-runner
         to: windows-runner
         label: gates before packaging
+      - from: windows-runner.msix-packaging
+        to: user-machine.windows.msix-package
+        label: submits to the Store
+        protocol: Partner Center API
 
   user-machine:
     name: End-User Machine
@@ -76,3 +89,8 @@ environments:
               ui: { container: blastradius.ui }
               core: { container: blastradius.core }
               cli: { container: blastradius.cli }
+    relations:
+      - from: windows.msix-package
+        to: git-repo
+        label: reads the user's own workspace
+        direction: both

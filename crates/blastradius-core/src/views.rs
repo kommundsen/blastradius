@@ -21,12 +21,19 @@ pub fn parse_view_file(vfs: &dyn Vfs, rel: &str, ws: &mut Workspace, diags: &mut
     };
     let line = yaml::field_line(map, "view");
 
-    let Some(scope) = yaml::get_str(map, "scope").map(str::to_string) else {
-        diags.push(Diagnostic::error(rel, line, "view needs `scope:`"));
-        return;
+    let level = yaml::get_str(map, "level").unwrap_or("").to_string();
+    // A deployment view may omit `scope:`: that is the overview, which lists
+    // every environment and so is scoped to nothing (ADR-0018). It is the one
+    // view whose subject is the whole deployment rather than one element.
+    let scope = match yaml::get_str(map, "scope").map(str::to_string) {
+        Some(s) => s,
+        None if level == "LD" => String::new(),
+        None => {
+            diags.push(Diagnostic::error(rel, line, "view needs `scope:` (except an `LD` overview)"));
+            return;
+        }
     };
 
-    let level = yaml::get_str(map, "level").unwrap_or("").to_string();
     if !matches!(level.as_str(), "L1" | "L2" | "L3" | "LD") {
         diags.push(Diagnostic::error(
             rel,

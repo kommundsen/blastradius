@@ -473,9 +473,14 @@ impl SyncEngine {
         x: i64,
         y: i64,
     ) -> Result<Vec<FileChange>, String> {
+        // An empty scope is the deployment overview, which the canvas
+        // addresses as no scope at all (ADR-0018).
+        fn view_scope(v: &crate::model::View) -> Option<&str> {
+            (!v.scope.is_empty()).then_some(v.scope.as_str())
+        }
         let existing = self.model.views.iter().find(|v| match view {
             Some(vid) => v.id == vid,
-            None => v.level == level && (level == "L1" || Some(v.scope.as_str()) == scope),
+            None => v.level == level && (level == "L1" || view_scope(v) == scope),
         });
         // pins are written scope-relative when inside the scope (spec §4 style)
         let pin_key = |scope: &str, id: &str| -> String {

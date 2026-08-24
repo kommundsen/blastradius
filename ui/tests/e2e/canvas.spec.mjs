@@ -123,6 +123,13 @@ test('LD: dive the deployment tree down to a container instance', async ({ page 
   // The overview lists every environment, not a containment diagram
   // (ADR-0018): deployment dives like the logical model.
   await expect(page.locator('.node.is-environment')).toHaveCount(3);
+  // And it shows the delivery chain between them. A deployment diagram with
+  // no connectors says nothing about how software actually gets anywhere —
+  // this asserts the relations survive lifting onto the environments.
+  await expect(page.locator('#edges path.edge')).not.toHaveCount(0);
+  await expect(page.locator('#edges text.edge-label')).toContainText(['triggers on push']);
+  await page.screenshot({ path: 'test-results/webkit-LD-overview.png', fullPage: true });
+
   await node('Developer Machine').dblclick();
   await expect(node('Windows 11 Workstation')).toBeVisible();
   await node('Windows 11 Workstation').dblclick();
@@ -135,13 +142,13 @@ test('LD: dive the deployment tree down to a container instance', async ({ page 
   await expect(node('Canvas UI')).toBeVisible();
   await expect(node('Canvas UI').locator('.node-kicker')).toContainText('Container instance');
   await expect(page.locator('#breadcrumb')).toContainText('Blastradius (dev build)');
+  await page.screenshot({ path: 'test-results/webkit-LD.png', fullPage: true });
 
   // Escape climbs back out of the tree.
   await page.locator('#canvas').click({ position: { x: 5, y: 5 } });
   await page.keyboard.press('Escape');
   await expect(node('Terminal')).toBeVisible();
   expect(page.errors).toEqual([]);
-  await page.screenshot({ path: 'test-results/webkit-LD.png', fullPage: true });
 });
 
 test('keyboard: arrows select, Escape rises', async ({ page }) => {

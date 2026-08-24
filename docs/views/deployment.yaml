@@ -1,8 +1,12 @@
-# LD — the deployment overview: the three environments Blastradius lives in
-# (ADR-0018). Diving into one shows its nodes; pins here keep the flow
-# left-to-right in the order things actually happen.
+# LD overview — the three environments Blastradius lives in, and the delivery
+# chain between them (ADR-0018). No `scope:`: the overview's subject is the
+# whole deployment rather than one element, which is the one case a view may
+# omit it. Pins keep the flow left-to-right in the order things happen.
 view: deployment
 name: Deployment
-scope: dev-machine
 level: LD
-include-context: false
+layout:
+  dev-machine: [1, 1]
+  ci: [10, 1]
+  user-machine: [19, 1]
+include-context: true

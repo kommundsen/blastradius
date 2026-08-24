@@ -244,6 +244,28 @@ fn ld_is_a_valid_view_level_and_junk_is_not() {
     assert_eq!(ws.views.len(), 1);
     assert_eq!(ws.views[0].level, "LD");
 
+    // The overview has no scope: its subject is every environment, so pins
+    // are absolute ids. This is the one view that may omit `scope:`.
+    write(
+        &t.dir,
+        "views/production.yaml",
+        "view: deployment\nname: Deployment\nlevel: LD\nlayout:\n  production: [1, 1]\n",
+    );
+    let (ws, diags) = blastradius_core::load_workspace(&t.dir);
+    assert!(!has_errors(&diags), "{diags:?}");
+    assert_eq!(ws.views[0].scope, "");
+    assert!(ws.views[0].layout.contains_key("production"));
+
+    // A pin naming nothing is still an error there.
+    write(&t.dir, "views/production.yaml", "view: deployment\nlevel: LD\nlayout:\n  nope: [1, 1]\n");
+    let (_, diags) = blastradius_core::load_workspace(&t.dir);
+    assert!(diags.iter().any(|d| d.message.contains("layout pins unknown element")), "{diags:?}");
+
+    // Every other level still demands one.
+    write(&t.dir, "views/production.yaml", "view: v\nlevel: L2\n");
+    let (_, diags) = blastradius_core::load_workspace(&t.dir);
+    assert!(diags.iter().any(|d| d.message.contains("needs `scope:`")), "{diags:?}");
+
     // A bad level is an error *and* the view is withheld from the renderer,
     // rather than arriving as a scene it cannot compute.
     write(&t.dir, "views/production.yaml", "view: production\nscope: production\nlevel: L9\n");

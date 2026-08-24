@@ -170,7 +170,9 @@ name: Containers            # optional display name
 scope: blastradius          # element whose children this view shows
 level: L2                   # L1 | L2 | L3 | LD — which altitude this view captures
                             # LD is a deployment view (ADR-0018); its scope is an
-                            # environment or a deployment node
+                            # environment or a deployment node — or omitted, for
+                            # the overview of every environment, whose pins are
+                            # then absolute ids
 layout:                     # pinned positions — grid units (26px cells @ 1×)
   ui: [4, 2]
   core: [10, 4]
@@ -185,6 +187,8 @@ include-context: true       # show people/externals related to scope (default tr
 - Grid units, not pixels: layouts survive zoom and density changes.
 - A workspace with zero view files is valid — every level renders fully
   auto-laid-out.
+- `scope:` is required except on an `LD` overview, the one view whose subject
+  is the whole deployment rather than one element.
 
 ## 5. Documents
 

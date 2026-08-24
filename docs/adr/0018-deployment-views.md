@@ -68,6 +68,12 @@ kinds: `environment`, `deployment-node`, `container-instance`.
   reference is validated, so a deployment cannot drift into naming
   containers that no longer exist — the point of modelling it here
   rather than in prose.
+- The **overview** — every environment at once — is the one view with no
+  scope element, so `scope:` became optional for `LD` views and its pins are
+  absolute ids. Without that, the single most useful deployment picture, the
+  delivery chain between environments, could be neither pinned nor rendered
+  headlessly. It also draws the people and external systems the deployment
+  actually touches, chosen by relation rather than shown wholesale as L1 does.
 - **Recorded follow-ups**: nested-box rendering as an optional display
   mode, should real use ask for it; instance multiplicity (`replicas`)
   as a field rather than repeated elements; and the Structurizr

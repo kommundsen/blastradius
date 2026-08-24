@@ -132,10 +132,13 @@ const fonts = fontCss();
 
 const targets = [{ level: 'L1', scope: null, name: 'context-L1' }];
 for (const v of snapshot.views ?? []) {
+  // A scopeless view (the LD deployment overview) is named by its own id —
+  // there is no scope to name it after.
+  const scope = v.scope || null;
   targets.push({
     level: v.level,
-    scope: v.scope ?? null,
-    name: `${(v.scope ?? 'context').replace(/\./g, '-')}-${v.level}`,
+    scope,
+    name: `${(scope ?? v.id ?? 'context').replace(/\./g, '-')}-${v.level}`,
   });
 }
 

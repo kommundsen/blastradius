@@ -119,6 +119,19 @@ export function computeView(snapshot, level, scope, includeContext = true) {
     for (const el of snapshot.elements) {
       if (el.kind === 'environment') visible.set(el.id, el);
     }
+    // Plus the people and external systems the deployment actually touches —
+    // unlike L1, which shows every context element, this is relation-driven:
+    // an environment talking to a git host is part of the delivery picture,
+    // a reviewer who never touches infrastructure is not.
+    if (includeContext) {
+      for (const r of snapshot.relations) {
+        for (const [a, b] of [[r.from, r.to], [r.to, r.from]]) {
+          if (!visible.has(rootOf(a))) continue;
+          const el = els.get(rootOf(b));
+          if (el && isContext(el)) visible.set(el.id, el);
+        }
+      }
+    }
   } else {
     const scopeDepth = depthOf(scope);
     const childDepth = scopeDepth + 1;
@@ -192,9 +205,12 @@ export function computeView(snapshot, level, scope, includeContext = true) {
 
 /** The view definition (pins) matching a level+scope, if any. */
 export function findViewDef(snapshot, level, scope) {
+  // The deployment overview carries no scope, and arrives as '' from the
+  // snapshot but null from the canvas — normalize before comparing.
+  const norm = (s) => s || null;
   return (
     snapshot.views.find(
-      (v) => v.level === level && (level === 'L1' || v.scope === scope)
+      (v) => v.level === level && (level === 'L1' || norm(v.scope) === norm(scope))
     ) ?? null
   );
 }
