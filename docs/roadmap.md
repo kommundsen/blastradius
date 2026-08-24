@@ -278,7 +278,15 @@ deliberately deferred again (same cost/hardware decision as 0.2.0).
    Still owed: the 5-minute-stranger run against the published Store
    build, result to be recorded here.
 
-## 0.4.0 — planned (2026-08-24)
+## 0.4.0 — released (2026-08-24)
+
+**Cut 2026-08-24**: all three themes shipped; version bumped across the
+three surfaces (`Cargo.toml`, `tauri.conf.json`,
+`packaging/msix/Package.appxmanifest`) and tagged `v0.4.0`, which drives
+the CI submission pipeline proven in 0.3.0. If 0.3.0's submission is
+still pending in Partner Center the submit step refuses rather than
+clobbering it (`tools/submit-store.ps1`), and the MSIX artifacts upload
+first either way.
 
 Three user-selected themes. macOS/Linux distribution was considered and
 deliberately deferred a third time (same cost/hardware decision; revisit
