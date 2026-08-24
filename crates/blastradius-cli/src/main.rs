@@ -133,6 +133,15 @@ fn introspect(args: &[String]) -> ExitCode {
                 if check {
                     if existing.as_deref() == Some(bytes.as_str()) {
                         println!("{}: up to date", comp.id);
+                    } else if fell_back_from_semantic(existing.as_deref(), &facts.extractor) {
+                        // The committed facts were extracted with a semantic
+                        // pass this machine cannot run. Comparing them would
+                        // report drift that no edit caused, so say what is
+                        // actually true (spec/l4-introspection.md).
+                        println!(
+                            "{}: NOT VERIFIED — committed facts are semantic; this machine fell back to syntax",
+                            comp.id
+                        );
                     } else {
                         println!("{}: STALE — run `blastradius introspect` and commit the result", comp.id);
                         drift = true;
@@ -379,6 +388,14 @@ fn export(args: &[String]) -> ExitCode {
 /// repo-level extras: `git init`, MCP registration, and agent skills.
 /// Idempotent: an existing workspace skips the scaffold but still gets the
 /// extras; no existing file is ever overwritten.
+/// True when committed facts record a semantic extraction but this run could
+/// only manage syntax — a machine capability gap, not stale facts. The
+/// extractor string carries the effective mode for exactly this reason.
+fn fell_back_from_semantic(existing: Option<&str>, extractor: &str) -> bool {
+    extractor.contains("(syntax-fallback)")
+        && existing.is_some_and(|t| t.contains("(semantic)"))
+}
+
 fn init(args: &[String]) -> ExitCode {
     use std::io::IsTerminal;
     let mut dir = None;

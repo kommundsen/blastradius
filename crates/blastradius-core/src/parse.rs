@@ -248,6 +248,7 @@ fn parse_relations(
 
 /// Languages with an extractor (spec/l4-introspection.md).
 pub const SOURCE_LANGUAGES: &[&str] = &["typescript", "csharp", "rust"];
+pub const SOURCE_MODES: &[&str] = &["syntax", "semantic"];
 
 /// `source:` mapping on a component (spec/l4-introspection.md). Introspection
 /// is strictly opt-in: absence means the feature does not touch the element.
@@ -280,12 +281,31 @@ fn parse_source(body: &Node, rel: &str, diags: &mut Vec<Diagnostic>) -> Option<S
             None => Vec::new(),
         }
     };
+    let mode = yaml::get_str(sm, "mode").map(str::to_string);
+    if let Some(m) = &mode {
+        if !SOURCE_MODES.contains(&m.as_str()) {
+            diags.push(Diagnostic::error(
+                rel,
+                yaml::field_line(sm, "mode"),
+                format!("unknown source mode {m:?} — expected one of {}", SOURCE_MODES.join(", ")),
+            ));
+            return None;
+        }
+        if m == "semantic" && language != "csharp" {
+            diags.push(Diagnostic::warning(
+                rel,
+                yaml::field_line(sm, "mode"),
+                format!("`mode: semantic` has no effect for {language} — only the C# extractor has a semantic pass"),
+            ));
+        }
+    }
     Some(SourceMapping {
         language,
         root,
         include: globs("include"),
         exclude: globs("exclude"),
         extractor: yaml::get_str(sm, "extractor").map(str::to_string),
+        mode,
     })
 }
 

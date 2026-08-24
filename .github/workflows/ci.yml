@@ -31,7 +31,13 @@ jobs:
         run: |
           npm ci
           cargo run -p blastradius-cli -- introspect docs --check
-      - name: C# extractor fixture gate
+      - uses: actions/setup-dotnet@v5
+        with:
+          # The extractor targets net8.0; semantic mode additionally restores
+          # and loads the fixture solution, so the SDK must be explicit rather
+          # than whatever the runner image happens to ship.
+          dotnet-version: "8.0.x"
+      - name: C# extractor fixture gate (syntax bytes, semantic edge, fallback)
         run: bash extractors/dotnet/test.sh
       - name: TypeScript extractor fixture gate
         run: bash extractors/typescript/test.sh

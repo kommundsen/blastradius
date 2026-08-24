@@ -100,7 +100,13 @@ underneath is the open part.
 
 ## Amendments
 
-- **2026-08-24 (0.4.0)** — transitive `pub use` following landed for the
-  Rust extractor. No boundary moves: it is extractor-internal resolution
-  behavior, owned by the spec. The remaining recorded follow-ups are
-  external-dependency rollup nodes and C# `--semantic` mode.
+- **2026-08-24 (0.4.0)** — all three recorded follow-ups landed:
+  transitive `pub use` following, external-dependency rollup nodes, and
+  C# semantic mode. No boundary moves. In particular the "core stays
+  free of language toolchains" constraint holds: MSBuild is a dependency
+  of the C# extractor process only, semantic mode is opt-in per mapping,
+  and any failure degrades to the syntax pass — so a checkout with no
+  .NET SDK behaves exactly as it did before. The one contract change is
+  that extractors now run from their own directory and receive an
+  absolute `repoRoot`, which stops a target repo's `global.json` from
+  dictating the SDK that builds our extractor.

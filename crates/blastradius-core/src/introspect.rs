@@ -790,6 +790,10 @@ struct ExtractorInput<'a> {
     root: &'a str,
     include: &'a [String],
     exclude: &'a [String],
+    /// Omitted unless the mapping asks for one, so older extractors and the
+    /// TypeScript one see exactly the input they saw before.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mode: Option<&'a str>,
 }
 
 /// Locate the default extractor entry: beside the running binary first
@@ -826,6 +830,19 @@ fn default_command(language: &str, repo_root: &Path) -> Result<Vec<String>, Stri
     ))
 }
 
+/// Where to run an extractor from: the directory of the entry the argv points
+/// at (`node <path>/extract.mjs`, `dotnet run --project <dir>`). None when the
+/// command is a bare override we cannot read a path out of.
+fn extractor_dir(prog: &str, args: &[String]) -> Option<PathBuf> {
+    let entry = match prog {
+        "dotnet" => args.iter().position(|a| a == "--project").and_then(|i| args.get(i + 1)),
+        _ => args.first(),
+    }?;
+    let path = Path::new(entry);
+    let dir = if path.is_dir() { path } else { path.parent()? };
+    dir.is_dir().then(|| dir.to_path_buf())
+}
+
 pub fn run_external(repo_root: &Path, component: &str, mapping: &SourceMapping) -> Result<Facts, String> {
     use std::io::Write;
     use std::process::{Command, Stdio};
@@ -835,18 +852,31 @@ pub fn run_external(repo_root: &Path, component: &str, mapping: &SourceMapping) 
         None => default_command(&mapping.language, repo_root)?,
     };
     let (prog, args) = argv.split_first().ok_or("empty extractor command")?;
+    // Absolute, because the child no longer runs from the repo root (below) —
+    // extractors join `repoRoot` with `root`, so a relative one would resolve
+    // against the wrong directory.
+    let abs_root = repo_root.canonicalize().unwrap_or_else(|_| repo_root.to_path_buf());
     let input = serde_json::to_string(&ExtractorInput {
         component,
-        repo_root: &repo_root.to_string_lossy(),
+        repo_root: &abs_root.to_string_lossy(),
         root: &mapping.root,
         include: &mapping.include,
         exclude: &mapping.exclude,
+        mode: mapping.mode.as_deref(),
     })
     .expect("input serialize");
 
+    // Run the extractor from its own directory, not the target repo. The
+    // .NET muxer resolves `global.json` from the working directory upward, so
+    // launching from a repo that pins an old SDK would try to build our own
+    // net8.0 extractor with it and fail. The extractor receives `repoRoot` on
+    // stdin and switches to it itself where that matters — C# semantic mode
+    // does, so the target solution still loads under the SDK it pins
+    // (spec/l4-introspection.md).
+    let cwd = extractor_dir(prog, args).unwrap_or_else(|| repo_root.to_path_buf());
     let mut child = Command::new(prog)
         .args(args)
-        .current_dir(repo_root)
+        .current_dir(cwd)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

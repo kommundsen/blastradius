@@ -70,6 +70,7 @@ fn mapping() -> SourceMapping {
         include: vec![],
         exclude: vec![],
         extractor: None,
+        mode: None,
     }
 }
 
@@ -169,6 +170,44 @@ containers:
           language: rust
           root: src
 ";
+
+/// `mode:` is opt-in depth for the C# extractor: valid values parse, bad ones
+/// are an error, and asking for semantic on a language without a semantic pass
+/// warns rather than pretending.
+#[test]
+fn source_mode_is_parsed_and_validated() {
+    let with_mode = |lang: &str, mode: &str| {
+        let t = temp(&format!("mode-{lang}-{mode}"));
+        write(&t.dir, "docs/blastradius.yaml", MANIFEST);
+        write(
+            &t.dir,
+            "docs/model/sys.yaml",
+            &MODEL.replace("language: rust", &format!("language: {lang}\n          mode: {mode}")),
+        );
+        let (ws, diags) = blastradius_core::load_workspace(&t.dir.join("docs"));
+        let mode = ws
+            .elements
+            .iter()
+            .find(|(id, _)| id.as_str() == "sys.app.comp")
+            .and_then(|(_, e)| e.source.as_ref())
+            .and_then(|s| s.mode.clone());
+        (mode, diags)
+    };
+
+    let (mode, diags) = with_mode("csharp", "semantic");
+    assert_eq!(mode.as_deref(), Some("semantic"));
+    assert!(!blastradius_core::diagnostics::has_errors(&diags), "{diags:?}");
+
+    // Unknown value: an error, listing what is allowed.
+    let (_, diags) = with_mode("csharp", "deep");
+    assert!(blastradius_core::diagnostics::has_errors(&diags));
+    assert!(diags.iter().any(|d| d.message.contains("unknown source mode")), "{diags:?}");
+
+    // Right value, wrong language: a warning, and the workspace still loads.
+    let (_, diags) = with_mode("rust", "semantic");
+    assert!(!blastradius_core::diagnostics::has_errors(&diags), "{diags:?}");
+    assert!(diags.iter().any(|d| d.message.contains("no effect for rust")), "{diags:?}");
+}
 
 /// End to end: extract, commit the facts, reload — derived elements are
 /// grafted with `.src.` ids and the sync engine refuses to touch them.

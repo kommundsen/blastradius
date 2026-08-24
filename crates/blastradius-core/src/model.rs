@@ -61,6 +61,9 @@ pub struct SourceMapping {
     pub exclude: Vec<String>,
     /// Override for the extractor command; None = the language default.
     pub extractor: Option<String>,
+    /// Extraction depth: `syntax` (default) or `semantic`. Only the C#
+    /// extractor acts on it (spec/l4-introspection.md).
+    pub mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

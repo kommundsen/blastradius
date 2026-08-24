@@ -306,6 +306,24 @@ set, deployment views included.
    fixture chain instead (two façade hops plus an `as` rename), which is
    the honest test; widening the globs was considered and rejected as
    buying nothing observable.
+   **C# semantic mode shipped 2026-08-24, exit met.** Opt in with
+   `mode: semantic` on the source mapping; MSBuildWorkspace loads the
+   target's own solution and resolves edges from symbols. The fixture
+   is a two-project solution where `Alpha.Widget` and `Beta.Widget`
+   share a simple name and the consumer reaches Alpha's through a
+   `global using` in another file: syntax mode sees two candidates and
+   drops the edge, semantic mode resolves
+   `Gamma.Consumer → Alpha.Widget` across the project reference.
+   Failure of any kind (no SDK, no solution, unrestored, load error)
+   degrades to the syntax pass with a stderr warning — never worse
+   than v1 — and the effective mode is recorded in the facts, which is
+   what lets `--check` distinguish "this machine can't run semantic"
+   from "these facts are stale". The semantic check asserts the
+   resolved edge rather than byte-comparing, because semantic output
+   depends on the resolving SDK; the syntax and fallback checks stay
+   byte-exact. Fixed on the way: extractors were spawned from the
+   target repo, so a repo pinning an old SDK in `global.json` would
+   fail to build our own net8.0 extractor — a bug present since 0.3.0.
    **External-dependency rollups shipped 2026-08-24**, all three
    languages, one node per package (`dep.<package>`, kind `dependency`,
    parentless and pathless). Rust reads the first segment of an

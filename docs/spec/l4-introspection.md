@@ -34,6 +34,7 @@ components:
       root: ui/js                 # repo-root-relative (ADR-0014 anchor)
       include: ["**/*.mjs"]       # optional, extractor defaults apply
       exclude: ["**/*.test.mjs"]  # optional
+      mode: syntax                # optional: syntax (default) | semantic
 ```
 
 `root` is relative to the **repository root**, not the workspace
@@ -236,10 +237,41 @@ whether the solution builds.
 - Tested against a fixture corpus (`extractors/dotnet/fixtures/`)
   covering file-scoped namespaces, partials, records, and a
   cross-namespace reference — asserting exact facts bytes.
-- **Follow-up (recorded, not v1)**: `--semantic` mode via
-  `MSBuildWorkspace` for true symbol resolution where a restorable
-  solution exists, falling back to syntax-level. Deliberately excluded
-  from v1 for its SDK-version fragility.
+### Semantic mode (C#)
+
+Opt in per mapping with `mode: semantic` (the extractor also takes a
+`--semantic` flag, which is how `test.sh` drives it). Default stays
+`syntax`; `mode:` on a language with no semantic pass warns.
+
+- **What it buys**: real symbol resolution instead of name matching —
+  same-named types in different projects, global usings, cross-project
+  references. Everything the syntax pass cannot know from one file.
+- **What it does not change**: pass 1 and `sourceDigest`. The element
+  set and the staleness probe are defined by the mapping's file
+  collection, never by MSBuild; only *edges* differ between modes.
+- **Discovery**: one `.sln` under the source root (sorted first, with a
+  note, if several), else every `.csproj`; `bin`/`obj`/dotfile
+  directories skipped. Projects must be restored.
+- **Fallback contract**: any failure — no MSBuild instance, no solution,
+  a project that will not open, no mapped file in a loaded project — is
+  reported on stderr and degrades to the syntax pass, exit 0. Semantic
+  mode is never worse than syntax mode.
+- **Effective mode is recorded** in the facts' `extractor` string:
+  `blastradius-extract-cs 0.3.0 (semantic)` versus `(syntax-fallback)`.
+  This is what lets `introspect --check` tell a machine that *cannot*
+  run the semantic pass apart from facts that are genuinely stale: the
+  former reports "NOT VERIFIED" and passes, the latter fails. Repos
+  using semantic mode should regenerate facts somewhere with a known
+  SDK — CI — rather than from whichever developer machine ran last.
+- **SDK resolution**: extractors are spawned from their own directory,
+  not the target repo, so a repo pinning an old SDK in `global.json`
+  cannot break the extractor's own build. Semantic mode then switches
+  to the repo root before registering the MSBuild locator, so the
+  target solution still loads under the SDK it pins. Extractors receive
+  an absolute `repoRoot` and must not depend on the working directory.
+- **Dependency identity**: rollups still come from the using-directive
+  scan in both modes. Semantic mode could name packages by assembly
+  instead of namespace root — recorded follow-up, not done.
 
 ## Rust extractor
 
