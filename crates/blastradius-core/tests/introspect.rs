@@ -44,6 +44,19 @@ fn rust_fixture(repo: &Path) {
         "src/engine.rs",
         "pub trait Runner {\n    fn run(&self);\n}\n\npub struct Engine;\n\nimpl Runner for Engine {\n    fn run(&self) {}\n}\n\npub enum Mode {\n    Fast,\n    Careful,\n}\n",
     );
+    // A two-hop re-export chain: `deep` re-exports what `facade` re-exports
+    // from `engine`, and `facade` also renames one of them.
+    write(
+        repo,
+        "src/facade.rs",
+        "pub use crate::engine::Engine;\npub use crate::engine::Mode as Speed;\n",
+    );
+    write(repo, "src/deep.rs", "pub use crate::facade::Engine;\n");
+    write(
+        repo,
+        "src/user.rs",
+        "use crate::deep::Engine;\nuse crate::facade::Speed;\n\npub struct User {\n    engine: Engine,\n    speed: Speed,\n}\n",
+    );
     // Unparseable files are skipped with a warning, never fatal.
     write(repo, "src/broken.rs", "fn oops( {\n");
 }
@@ -93,6 +106,26 @@ fn rust_extractor_finds_modules_types_and_edges() {
     assert!(edge("lib", "engine", "imports"), "use crate::engine::Engine → imports; edges: {:?}", facts.edges);
     assert!(edge("engine.Engine", "engine.Runner", "implements"));
     assert!(edge("lib.App", "engine.Engine", "references"), "field type reference; edges: {:?}", facts.edges);
+
+    // Re-exports resolve to the defining module, through two façade hops and
+    // through an `as` rename — not to the façade that forwarded them.
+    assert!(
+        edge("user", "engine", "imports"),
+        "two-hop `pub use` should import from the defining module; edges: {:?}",
+        facts.edges
+    );
+    assert!(!edge("user", "deep", "imports"), "façade should not be the import target; edges: {:?}", facts.edges);
+    assert!(!edge("user", "facade", "imports"), "façade should not be the import target; edges: {:?}", facts.edges);
+    assert!(
+        edge("user.User", "engine.Engine", "references"),
+        "re-exported type reference; edges: {:?}",
+        facts.edges
+    );
+    assert!(
+        edge("user.User", "engine.Mode", "references"),
+        "renamed re-export `Speed` should resolve to engine.Mode; edges: {:?}",
+        facts.edges
+    );
 }
 
 #[test]

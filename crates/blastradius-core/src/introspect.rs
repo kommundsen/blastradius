@@ -302,7 +302,7 @@ pub fn default_include(language: &str) -> Vec<String> {
 
 // ---- the built-in Rust extractor -------------------------------------------
 
-const RUST_EXTRACTOR_VERSION: &str = "blastradius-extract-rust 0.1.0";
+const RUST_EXTRACTOR_VERSION: &str = "blastradius-extract-rust 0.2.0";
 
 struct RustCorpus {
     /// module id -> (path, name)
@@ -311,6 +311,8 @@ struct RustCorpus {
     types: BTreeMap<String, TypeInfo>,
     /// unqualified type name -> ids
     by_name: BTreeMap<String, Vec<String>>,
+    /// module id -> (name it re-exports -> defining type id), from `pub use`
+    exports: BTreeMap<String, BTreeMap<String, String>>,
 }
 
 struct TypeInfo {
@@ -335,7 +337,12 @@ pub fn extract_rust(repo_root: &Path, component: &str, mapping: &SourceMapping) 
     let mut warnings = Vec::new();
 
     // Pass 1: modules and types.
-    let mut corpus = RustCorpus { modules: BTreeMap::new(), types: BTreeMap::new(), by_name: BTreeMap::new() };
+    let mut corpus = RustCorpus {
+        modules: BTreeMap::new(),
+        types: BTreeMap::new(),
+        by_name: BTreeMap::new(),
+        exports: BTreeMap::new(),
+    };
     let mut parsed: Vec<(String, String, syn::File)> = Vec::new(); // (module id, rel, ast)
     for (rel, text) in &files {
         // The module element exists even when the file does not parse — the
@@ -356,7 +363,10 @@ pub fn extract_rust(repo_root: &Path, component: &str, mapping: &SourceMapping) 
         corpus.by_name.entry(info.name.clone()).or_default().push(id.clone());
     }
 
-    // Pass 2: edges.
+    // Pass 2: the re-export table, so pass 3 can see through façade modules.
+    build_exports(&parsed, &mut corpus);
+
+    // Pass 3: edges.
     let mut edges: BTreeSet<(String, String, String)> = BTreeSet::new();
     for (mid, _rel, ast) in &parsed {
         collect_edges(&ast.items, mid, &corpus, &mut edges);
@@ -478,6 +488,11 @@ fn resolve_path(segments: &[String], module: &str, corpus: &RustCorpus) -> Optio
                 if corpus.types.contains_key(&tid) {
                     return Some(Resolved::Type(tid));
                 }
+                // Not defined here — but the module may re-export it, in which
+                // case the dependency is on whoever defines it (spec).
+                if let Some(tid) = corpus.exports.get(&mid).and_then(|e| e.get(&full[cut])) {
+                    return Some(Resolved::Type(tid.clone()));
+                }
             }
             return Some(Resolved::Module(mid));
         }
@@ -490,7 +505,9 @@ enum Resolved {
     Type(String),
 }
 
-fn use_paths(tree: &syn::UseTree, prefix: &mut Vec<String>, out: &mut Vec<Vec<String>>) {
+/// Flatten a use tree into `(path segments, name it binds locally)` pairs —
+/// the binding differs from the last segment under `as` renames.
+fn use_paths(tree: &syn::UseTree, prefix: &mut Vec<String>, out: &mut Vec<(Vec<String>, String)>) {
     match tree {
         syn::UseTree::Path(p) => {
             prefix.push(p.ident.to_string());
@@ -500,12 +517,12 @@ fn use_paths(tree: &syn::UseTree, prefix: &mut Vec<String>, out: &mut Vec<Vec<St
         syn::UseTree::Name(n) => {
             let mut full = prefix.clone();
             full.push(n.ident.to_string());
-            out.push(full);
+            out.push((full, n.ident.to_string()));
         }
         syn::UseTree::Rename(r) => {
             let mut full = prefix.clone();
             full.push(r.ident.to_string());
-            out.push(full);
+            out.push((full, r.rename.to_string()));
         }
         syn::UseTree::Group(g) => {
             for t in &g.items {
@@ -516,6 +533,65 @@ fn use_paths(tree: &syn::UseTree, prefix: &mut Vec<String>, out: &mut Vec<Vec<St
     }
 }
 
+/// Every `pub`/`pub(…)` use in a file, as `(module id, bound name, path)` —
+/// the raw material for the re-export table. Restricted visibilities count:
+/// `pub(crate) use` is visible to every other module in this corpus.
+fn collect_pub_uses(items: &[syn::Item], module: &str, out: &mut Vec<(String, String, Vec<String>)>) {
+    for item in items {
+        match item {
+            syn::Item::Use(u) => {
+                if matches!(u.vis, syn::Visibility::Public(_) | syn::Visibility::Restricted(_)) {
+                    let mut paths = Vec::new();
+                    use_paths(&u.tree, &mut Vec::new(), &mut paths);
+                    for (segs, binding) in paths {
+                        out.push((module.to_string(), binding, segs));
+                    }
+                }
+            }
+            syn::Item::Mod(m) => {
+                if let Some((_, inner)) = &m.content {
+                    collect_pub_uses(inner, &format!("{module}.{}", m.ident), out);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Build the re-export table by fixpoint, so a name re-exported through a
+/// chain of façades resolves to the module that actually defines it.
+///
+/// Each round resolves the `pub use` paths that the table can already answer;
+/// a round that adds nothing ends it. Additions are monotone over `BTreeMap`s,
+/// so the result is deterministic and a re-export cycle simply never resolves
+/// (dropped, not guessed — spec).
+fn build_exports(parsed: &[(String, String, syn::File)], corpus: &mut RustCorpus) {
+    let mut pending: Vec<(String, String, Vec<String>)> = Vec::new();
+    for (mid, _rel, ast) in parsed {
+        collect_pub_uses(&ast.items, mid, &mut pending);
+    }
+    let mut done = vec![false; pending.len()];
+    loop {
+        let mut round: Vec<(usize, String)> = Vec::new();
+        for (i, (module, _binding, segs)) in pending.iter().enumerate() {
+            if done[i] {
+                continue;
+            }
+            if let Some(Resolved::Type(tid)) = resolve_path(segs, module, corpus) {
+                round.push((i, tid));
+            }
+        }
+        if round.is_empty() {
+            break;
+        }
+        for (i, tid) in round {
+            done[i] = true;
+            let (module, binding, _) = &pending[i];
+            corpus.exports.entry(module.clone()).or_default().insert(binding.clone(), tid);
+        }
+    }
+}
+
 fn collect_edges(items: &[syn::Item], module: &str, corpus: &RustCorpus, edges: &mut BTreeSet<(String, String, String)>) {
     // File-level use map: unqualified name -> corpus type id.
     let mut use_map: BTreeMap<String, String> = BTreeMap::new();
@@ -523,14 +599,14 @@ fn collect_edges(items: &[syn::Item], module: &str, corpus: &RustCorpus, edges: 
         if let syn::Item::Use(u) = item {
             let mut out = Vec::new();
             use_paths(&u.tree, &mut Vec::new(), &mut out);
-            for path in out {
+            for (path, binding) in out {
                 match resolve_path(&path, module, corpus) {
                     Some(Resolved::Type(tid)) => {
                         let target_module = corpus.types[&tid].module.clone();
                         if target_module != module {
                             edges.insert((module.to_string(), target_module, "imports".into()));
                         }
-                        use_map.insert(path.last().expect("nonempty").clone(), tid);
+                        use_map.insert(binding, tid);
                     }
                     Some(Resolved::Module(mid)) => {
                         if mid != module {

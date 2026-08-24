@@ -296,8 +296,24 @@ set, deployment views included.
    transitive `pub use` following for Rust.
    *Exit (draft):* the C# fixture corpus gains a multi-project solution
    that syntax mode gets wrong and `--semantic` gets right; external
-   deps render as rollup nodes on an opted-in dogfood component; `pub
-   use` re-exports resolve on this repo's own crates.
+   deps render as rollup nodes on an opted-in dogfood component;
+   transitive `pub use` re-exports resolve to the defining module.
+   *Exit amended 2026-08-24* for the `pub use` leg: the original wording
+   said "on this repo's own crates", but the audit found the repo's only
+   re-exports (`crates/blastradius-core/src/lib.rs`) have **no consumer**
+   — every module imports directly by convention — so no dogfood edge
+   can move no matter how the include globs are widened. Proven on a
+   fixture chain instead (two façade hops plus an `as` rename), which is
+   the honest test; widening the globs was considered and rejected as
+   buying nothing observable.
+   **`pub use` shipped 2026-08-24.** There was no re-export logic at all
+   — the spec's "followed one level" was accidental behavior, and a
+   consumer importing through a façade got an edge to the façade (or
+   nothing). Now a fixpoint-built per-module export table resolves
+   re-exports transitively, honors renames, and points edges at the
+   defining module; glob/module re-exports and re-export cycles are
+   dropped, not guessed. Dogfood facts changed by exactly the extractor
+   version line, as predicted.
 2. **Deployment views** — the C4 deployment diagram: environments,
    deployment nodes, containerinstances, mapped onto the existing
    model format and canvas (spec work first — format, then rendering).

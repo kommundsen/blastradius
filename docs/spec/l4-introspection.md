@@ -215,9 +215,19 @@ same honesty rules as C#.
   are in the corpus produces `implements`; path references in
   signatures and bodies matched against the corpus produce
   `references`. Ambiguous or external names are dropped, not guessed.
+- **Re-exports**: `pub use` (and restricted forms like `pub(crate) use`,
+  visible to the rest of the corpus) build a per-module export table —
+  the name a façade re-exports mapped to the type that defines it. The
+  table is built by fixpoint, so a name forwarded through a chain of
+  façades resolves **transitively**, and `as` renames are honored. Edges
+  then point at the *defining* module, never the façade that forwarded
+  the name: `use crate::facade::Engine` in module `user`, where `facade`
+  re-exports from `engine`, yields `user → engine`. Not followed: glob
+  re-exports (`pub use x::*`) and module re-exports (`pub use crate::a;`)
+  — dropped, in keeping with the ambiguity rule. A re-export cycle
+  resolves nothing and is dropped rather than guessed.
 - **Honest limit**: `syn` sees surface syntax only — macro-generated
-  items (`#[derive]`, proc-macros) are invisible, and re-exports via
-  `pub use` are followed one level, not transitively. Good enough for
+  items (`#[derive]`, proc-macros) are invisible. Good enough for
   module/type structure, which is what L4 draws.
 - Dogfood: a mapping on a Core component using `include` globs (e.g.
   `blastradius.core.git-service` ← `crates/blastradius-core/src` with

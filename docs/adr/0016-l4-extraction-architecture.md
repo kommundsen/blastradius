@@ -97,3 +97,10 @@ underneath is the open part.
   judged — comparing them against declared L3 relations (architecture
   drift detection) is the natural follow-up this design enables.
 - Details, schema, and per-language behavior: `spec/l4-introspection.md`.
+
+## Amendments
+
+- **2026-08-24 (0.4.0)** — transitive `pub use` following landed for the
+  Rust extractor. No boundary moves: it is extractor-internal resolution
+  behavior, owned by the spec. The remaining recorded follow-ups are
+  external-dependency rollup nodes and C# `--semantic` mode.

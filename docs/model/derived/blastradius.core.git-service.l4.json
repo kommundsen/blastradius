@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "language": "rust",
-  "extractor": "blastradius-extract-rust 0.1.0",
+  "extractor": "blastradius-extract-rust 0.2.0",
   "component": "blastradius.core.git-service",
   "root": "crates/blastradius-core/src",
   "sourceDigest": "sha256:324d2003986c7e63bfc3f02a275e8355c5f6274c74ab187219bf88788661845d",
