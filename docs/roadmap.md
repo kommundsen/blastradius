@@ -289,7 +289,8 @@ self-contained), deployment views second (heaviest, needs spec work),
 help last — so the help content documents the release's final feature
 set, deployment views included.
 
-1. **Introspection deepening** — the recorded L4 follow-ups from
+1. **Introspection deepening** — **shipped 2026-08-24, all three exits
+   met** (details per sub-item below). The recorded L4 follow-ups from
    ADR-0016/spec/l4-introspection.md: C# `--semantic` mode
    (MSBuildWorkspace-backed, resolving cross-project references the
    syntax-level pass cannot), external-dependency rollup nodes, and
