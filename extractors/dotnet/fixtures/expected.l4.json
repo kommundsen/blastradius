@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "language": "csharp",
-  "extractor": "blastradius-extract-cs 0.1.0",
+  "extractor": "blastradius-extract-cs 0.2.0",
   "component": "shop.backend.billing",
   "root": "src",
-  "sourceDigest": "sha256:cce4b9f133560a062e51c4fc67bbe1fb12232ec5f2ac1add088e0c3d6c93a569",
+  "sourceDigest": "sha256:0b7d505bc842bddf91e5593338e36c458d0a30277cdc39ec370389d6f25f544b",
   "elements": [
     {
       "id": "Acme",
@@ -48,7 +48,7 @@
       "name": "Carrier",
       "parent": "Acme.Shipping",
       "path": "src/Shipping/Shipment.cs",
-      "line": 10
+      "line": 12
     },
     {
       "id": "Acme.Shipping.ITracked",
@@ -56,7 +56,7 @@
       "name": "ITracked",
       "parent": "Acme.Shipping",
       "path": "src/Shipping/Shipment.cs",
-      "line": 5
+      "line": 7
     },
     {
       "id": "Acme.Shipping.Shipment",
@@ -64,7 +64,13 @@
       "name": "Shipment",
       "parent": "Acme.Shipping",
       "path": "src/Shipping/Shipment.cs",
-      "line": 16
+      "line": 18
+    },
+    {
+      "id": "dep.Newtonsoft",
+      "kind": "dependency",
+      "name": "Newtonsoft",
+      "path": ""
     }
   ],
   "edges": [
@@ -72,6 +78,11 @@
       "from": "Acme.Billing.Invoice",
       "to": "Acme.Billing.InvoiceLine",
       "kind": "references"
+    },
+    {
+      "from": "Acme.Shipping",
+      "to": "dep.Newtonsoft",
+      "kind": "imports"
     },
     {
       "from": "Acme.Shipping.Shipment",

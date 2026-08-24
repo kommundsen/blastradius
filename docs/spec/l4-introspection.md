@@ -71,11 +71,36 @@ Schema v1:
 ```
 
 - `elements[].kind`: `module`, `namespace`, `class`, `interface`,
-  `record`, `enum`. Type elements carry `parent` (the containing module
-  or namespace id). `path` is repo-root-relative with forward slashes;
-  type elements add `line` (1-based declaration line) for click-through.
-- `edges[].kind`: `imports` (module→module), `references`
-  (type→type, name-based), `extends`, `implements`.
+  `record`, `enum`, `dependency`. Type elements carry `parent` (the
+  containing module or namespace id). `path` is repo-root-relative with
+  forward slashes; type elements add `line` (1-based declaration line)
+  for click-through.
+- `edges[].kind`: `imports` (module→module, and module/namespace→
+  dependency), `references` (type→type, name-based), `extends`,
+  `implements`.
+
+### External dependency rollups
+
+Imports that leave the mapped tree used to vanish, which made a module
+that leans on `serde` or `react` look self-contained. They now roll up
+to **one node per package**:
+
+- Id `dep.<package>` with the package name verbatim — `dep.serde`,
+  `dep.left-pad`, `dep.@scope/widgets`, `dep.Newtonsoft`. Kind
+  `dependency`, no `parent` (they sit beside the modules at the top of
+  the derived scene), and `path` empty: there is no file to open,
+  because the package is not part of the mapped tree.
+- Nothing derives hierarchy from dots in fact ids — nesting comes from
+  the explicit `parent` field — so dotted and scoped package names are
+  inert. The TypeScript and C# extractors delimit their internal edge
+  encoding with NUL, not spaces, so no package name can break it.
+- **Collision rule**: if a corpus element already owns the id (a module
+  literally named `dep.foo`), the rollup is skipped rather than
+  colliding — under-reporting over a silent clash, as everywhere else.
+- Per-language detection and exclusions are in each extractor's section
+  below. Each excludes the language's own standard library: it ships
+  with the toolchain, appears in nearly every file, and carries no
+  architectural signal.
 - `sourceDigest`: sha256 over the sorted list of (relative path,
   content sha256) of every file the extractor consumed. Cheap to
   recompute without running the extractor — this is the staleness probe.
@@ -124,8 +149,12 @@ blastradius introspect [dir] [component-id] [--check]
   file; nonzero exit on drift. This is the CI staleness gate, same
   pattern as the snapshot gate. CI's validate job runs `--check` for
   both dogfood mappings (Rust is built in; TypeScript uses the runner's
-  Node plus the `typescript` dev dependency); the C# extractor is gated
-  by its fixture test (`extractors/dotnet/test.sh`), not by dogfood.
+  Node plus the `typescript` dev dependency). Both out-of-process
+  extractors additionally carry a byte-exact fixture gate —
+  `extractors/dotnet/test.sh` and `extractors/typescript/test.sh` — run
+  in the same job. The C# extractor has no dogfood mapping, so its
+  fixture gate is its only coverage; the TypeScript one covers cases the
+  dogfood corpus lacks (external packages, scoped names, builtins).
 
 Extractor commands (overridable per mapping with `extractor:`, for
 monorepos with pinned toolchains):
@@ -158,10 +187,19 @@ npm package (the compiler API; MIT; the same engine as tsserver).
   re-exports, and dynamic `import()` with string literals — resolved
   through the compiler's own module resolution (tsconfig `paths`,
   index files, extension probing). Imports that resolve outside `root`
-  or into `node_modules` are dropped in v1 (recorded follow-up:
-  external-dependency rollup nodes). Type-only imports collapse into
+  but still inside the repo are dropped. Type-only imports collapse into
   the same `imports` edge. `extends`/`implements` edges between
   extracted types via the checker's declared heritage.
+- **Dependencies**: a specifier that resolves into `node_modules` rolls
+  up under the resolver's own `packageId.name`; one that does not
+  resolve at all still rolls up, using the specifier read lexically
+  (`pkg/sub` → `pkg`, `@scope/pkg/sub` → `@scope/pkg`). Facts therefore
+  do not depend on whether `node_modules` happens to be installed on the
+  machine running the extractor. Excluded: `node:`-prefixed builtins.
+  Deliberately *not* consulted: `module.builtinModules` — that list
+  grows with the Node version, so an unprefixed `import fs from 'fs'`
+  rolls up like any other package rather than making facts depend on
+  which Node ran.
 - Dogfood: `blastradius.ui.canvas` maps `root: ui/js` — diving below
   the Canvas component shows the real `app/layout/svg/…` module graph.
   Determinism proven by double-run byte-compare in the node test suite.
@@ -186,6 +224,15 @@ whether the solution builds.
   type bodies matched against the corpus (respecting that file's
   `using` set) produce `references`. Ambiguous or extern names are
   dropped, not guessed — under-reporting beats false edges.
+- **Dependencies**: at syntax level the honest proxy for a package is
+  the **namespace root** of a plain `using` that no corpus namespace
+  claims (`using Newtonsoft.Json` → `dep.Newtonsoft`); `System` is
+  excluded as the BCL. The edge is owned by the namespace the file
+  declares types into, not by each type: a using directive is
+  file-scoped, so attributing it per type would invent precision the
+  syntax does not carry. A file that declares no namespaced type emits
+  no dependency edge. Semantic mode can do better — assembly identity
+  rather than a namespace-root proxy — which is a recorded follow-up.
 - Tested against a fixture corpus (`extractors/dotnet/fixtures/`)
   covering file-scoped namespaces, partials, records, and a
   cross-namespace reference — asserting exact facts bytes.
@@ -226,6 +273,17 @@ same honesty rules as C#.
   re-exports (`pub use x::*`) and module re-exports (`pub use crate::a;`)
   — dropped, in keeping with the ambiguity rule. A re-export cycle
   resolves nothing and is dropped rather than guessed.
+- **Dependencies**: a `use` path that resolves to nothing and is not
+  anchored with `crate::`/`self::`/`super::` names an external crate in
+  its first segment (`use serde::Serialize` → `dep.serde`). Excluded:
+  the sysroot crates `std`, `core`, `alloc`, `proc_macro`, `test`.
+  Detection is from `use` declarations only — an inline `git2::Repository`
+  path in an expression stays dropped. Two honest limits: a crate renamed
+  in `Cargo.toml` (`foo = { package = "bar" }`) shows as `dep.foo`,
+  because the extractor reads syntax and the name in the code is what it
+  sees; and a bare path to a sibling module excluded by the mapping's
+  include globs would be misattributed as a dependency — the `crate::`
+  convention avoids this in practice.
 - **Honest limit**: `syn` sees surface syntax only — macro-generated
   items (`#[derive]`, proc-macros) are invisible. Good enough for
   module/type structure, which is what L4 draws.
@@ -254,9 +312,14 @@ import path (ADR-0016 option 3).
   pipeline with no pinning (derived layouts are pure auto-layout);
   derived nodes carry a kind kicker with a derived marker ("Module ·
   derived") and monospace, case-preserving titles; a stale graph badges
-  the breadcrumb and dashes the nodes. The inspector shows `path:line`
-  and opens the file via the `open_source` command (repo-root-relative,
-  unlike `open_in_editor`'s workspace-relative paths).
+  the breadcrumb and dashes the nodes. Dependency rollups read as
+  external rather than derived — outline-only nodes, kicker
+  "Dependency · external" — and are leaves, so a dive does nothing. The
+  inspector shows `path:line` and opens the file via the `open_source`
+  command (repo-root-relative, unlike `open_in_editor`'s
+  workspace-relative paths); for an element with no path — a dependency
+  rollup, or a C# namespace, which owns no single file — it says so
+  instead of offering a button that cannot work.
 - **MCP**: derived elements appear in `find_elements`, `element`, and
   `blast_radius` (marked `derived: true`) — an agent asking for the
   blast radius of a module sees real code-level fan-in. Write tools
@@ -264,6 +327,12 @@ import path (ADR-0016 option 3).
   command so agents can refresh facts.
 - **Exports**: derived elements ride along in snapshots and HTML/PNG/SVG
   export automatically (they're ordinary elements by render time).
+  **Recorded gap**: the standalone exported viewer (`ui/js/viewer.js`)
+  has no derived handling of its own — its kind labels and node classes
+  know only authored kinds, so an exported page cannot browse L4 the way
+  the app does. Not a regression from dependency rollups (nothing L4
+  rendered there before); worth closing when the viewer next gets
+  attention.
 
 ## Exit criteria (0.3.0 theme 1)
 

@@ -106,7 +106,14 @@ body { margin: 0; overflow: hidden; }
    case-preserving titles; geometry marker in the kind grammar's spirit. */
 .node.is-derived { border-bottom-width: 3px; }
 .node.is-derived .node-title { font-family: var(--font-mono); text-transform: none; font-size: var(--text-sm); }
+/* Same contract in the inspector: identifiers keep their own case. */
+.insp-title.is-code { font-family: var(--font-mono); text-transform: none; font-size: var(--text-base); }
 .node.is-derived.is-stale { border-style: dashed; }
+/* External dependency rollups: outside the mapped tree, so they read as
+   outline-only — present, but not part of this component's own code. */
+.node.is-derived.is-dependency { border-style: dashed; border-bottom-width: 1px;
+  background: transparent; color: var(--color-text-muted); }
+.node.is-derived.is-dependency .node-title { color: var(--color-text-muted); }
 #app.can-edit .node.is-derived { cursor: default; } /* no pins at L4 */
 .tree-row.is-derived { font-family: var(--font-mono); font-size: var(--text-2xs);
   color: var(--color-text-muted); }

@@ -306,6 +306,23 @@ set, deployment views included.
    fixture chain instead (two façade hops plus an `as` rename), which is
    the honest test; widening the globs was considered and rejected as
    buying nothing observable.
+   **External-dependency rollups shipped 2026-08-24**, all three
+   languages, one node per package (`dep.<package>`, kind `dependency`,
+   parentless and pathless). Rust reads the first segment of an
+   unresolved `use` (sysroot excluded); TypeScript uses the resolver's
+   `packageId` and falls back to a lexical read so facts don't depend on
+   whether `node_modules` is installed (`node:` excluded); C# proxies
+   packages by the namespace root of a non-corpus `using` (`System`
+   excluded), attributed to the declaring namespace. Dogfood proof:
+   git-service now shows `dep.git2` and `dep.serde`. Two gaps closed
+   along the way — the **TypeScript extractor had no tests at all**
+   (it now has a byte-exact fixture gate like the C# one, both wired
+   into CI), and the L4 inspector rendered a dead "open source" button
+   for any pathless element (dependency rollups, and C# namespaces,
+   which shipped that way in 0.3.0). Also fixed: the inspector
+   uppercased code identifiers, so a struct `CommitInfo` read
+   `COMMITINFO` — the canvas honored the case-preserving contract, the
+   inspector didn't.
    **`pub use` shipped 2026-08-24.** There was no re-export logic at all
    — the spec's "followed one level" was accidental behavior, and a
    consumer importing through a façade got an edge to the façade (or

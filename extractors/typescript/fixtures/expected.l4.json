@@ -1,0 +1,88 @@
+{
+  "schema": 1,
+  "language": "typescript",
+  "extractor": "blastradius-extract-ts 0.2.0",
+  "component": "shop.web.ui",
+  "root": "src",
+  "sourceDigest": "sha256:95b8977db875a70a22f040adac3d50ca046776b289c46d3ecd155d49e66fadf6",
+  "elements": [
+    {
+      "id": "dep.@scope/widgets",
+      "kind": "dependency",
+      "name": "@scope/widgets",
+      "path": ""
+    },
+    {
+      "id": "dep.left-pad",
+      "kind": "dependency",
+      "name": "left-pad",
+      "path": ""
+    },
+    {
+      "id": "model",
+      "kind": "module",
+      "name": "model.ts",
+      "path": "src/model.ts"
+    },
+    {
+      "id": "model.Entity",
+      "kind": "interface",
+      "name": "Entity",
+      "parent": "model",
+      "path": "src/model.ts",
+      "line": 2
+    },
+    {
+      "id": "model.Order",
+      "kind": "class",
+      "name": "Order",
+      "parent": "model",
+      "path": "src/model.ts",
+      "line": 6
+    },
+    {
+      "id": "model.Status",
+      "kind": "enum",
+      "name": "Status",
+      "parent": "model",
+      "path": "src/model.ts",
+      "line": 10
+    },
+    {
+      "id": "store",
+      "kind": "module",
+      "name": "store.ts",
+      "path": "src/store.ts"
+    },
+    {
+      "id": "store.Store",
+      "kind": "class",
+      "name": "Store",
+      "parent": "store",
+      "path": "src/store.ts",
+      "line": 9
+    }
+  ],
+  "edges": [
+    {
+      "from": "model.Order",
+      "to": "model.Entity",
+      "kind": "implements"
+    },
+    {
+      "from": "store",
+      "to": "dep.@scope/widgets",
+      "kind": "imports"
+    },
+    {
+      "from": "store",
+      "to": "dep.left-pad",
+      "kind": "imports"
+    },
+    {
+      "from": "store",
+      "to": "model",
+      "kind": "imports"
+    }
+  ]
+}

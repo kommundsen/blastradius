@@ -1,11 +1,23 @@
 {
   "schema": 1,
   "language": "rust",
-  "extractor": "blastradius-extract-rust 0.2.0",
+  "extractor": "blastradius-extract-rust 0.3.0",
   "component": "blastradius.core.git-service",
   "root": "crates/blastradius-core/src",
   "sourceDigest": "sha256:324d2003986c7e63bfc3f02a275e8355c5f6274c74ab187219bf88788661845d",
   "elements": [
+    {
+      "id": "dep.git2",
+      "kind": "dependency",
+      "name": "git2",
+      "path": ""
+    },
+    {
+      "id": "dep.serde",
+      "kind": "dependency",
+      "name": "serde",
+      "path": ""
+    },
     {
       "id": "git",
       "kind": "module",
@@ -93,6 +105,16 @@
   ],
   "edges": [
     {
+      "from": "git",
+      "to": "dep.git2",
+      "kind": "imports"
+    },
+    {
+      "from": "git",
+      "to": "dep.serde",
+      "kind": "imports"
+    },
+    {
       "from": "git.ConflictElement",
       "to": "git.ConflictSide",
       "kind": "references"
@@ -131,6 +153,11 @@
       "from": "git.GitContext",
       "to": "git.GitTreeVfs",
       "kind": "references"
+    },
+    {
+      "from": "resolve",
+      "to": "dep.serde",
+      "kind": "imports"
     },
     {
       "from": "resolve",

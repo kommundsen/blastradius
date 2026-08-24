@@ -1,4 +1,6 @@
 using Acme.Billing;
+using Newtonsoft.Json;   // external: rolls up to dep.Newtonsoft
+using System.Text;       // the BCL: never rolled up
 
 namespace Acme.Shipping
 {

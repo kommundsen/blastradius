@@ -19,10 +19,10 @@ test('L1 context renders the dogfood model', async ({ page }) => {
   await expect(page.locator('.node.is-external')).toHaveCount(4);
   await expect(page.locator('#breadcrumb')).toContainText('Context');
   // the tree lists the whole model regardless of altitude: 25 authored
-  // elements + 16 derived L4 rows (5 canvas modules; git-service's 2
-  // modules and 9 types), the latter styled as code
-  await expect(page.locator('.tree-row')).toHaveCount(41);
-  await expect(page.locator('.tree-row.is-derived')).toHaveCount(16);
+  // elements + 18 derived L4 rows (5 canvas modules; git-service's 2
+  // modules, 9 types and 2 dependency rollups), the latter styled as code
+  await expect(page.locator('.tree-row')).toHaveCount(43);
+  await expect(page.locator('.tree-row.is-derived')).toHaveCount(18);
   expect(page.errors).toEqual([]);
   await page.screenshot({ path: 'test-results/webkit-L1.png', fullPage: true });
 });
@@ -65,8 +65,11 @@ test('L4: dive into introspected code, inspect a derived type', async ({ page })
   await expect(page.locator('#breadcrumb')).toContainText('Code');
   await expect(node('git.rs')).toBeVisible();
   await expect(node('resolve.rs')).toBeVisible();
-  await expect(page.locator('.node.is-derived')).toHaveCount(2);
+  // Two modules plus the external crates they pull in, rolled up per package.
+  await expect(page.locator('.node.is-derived')).toHaveCount(4);
+  await expect(page.locator('.node.is-dependency')).toHaveCount(2);
   await expect(node('git.rs').locator('.node-kicker')).toContainText('derived');
+  await expect(node('serde').locator('.node-kicker')).toContainText('external');
   // resolve.rs imports git.rs — a real edge from the committed facts
   await expect(page.locator('#edges path.edge')).not.toHaveCount(0);
 

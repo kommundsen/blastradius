@@ -33,6 +33,8 @@ jobs:
           cargo run -p blastradius-cli -- introspect docs --check
       - name: C# extractor fixture gate
         run: bash extractors/dotnet/test.sh
+      - name: TypeScript extractor fixture gate
+        run: bash extractors/typescript/test.sh
 
   frontend:
     runs-on: ubuntu-latest

@@ -408,6 +408,7 @@ async function renderCanvas({ animate = true } = {}) {
 function nodeClass(el) {
   if (el.derived) {
     let cls = 'node is-component is-derived';
+    if (el.kind === 'dependency') cls += ' is-dependency';
     if (el.stale) cls += ' is-stale';
     return cls;
   }
@@ -1077,12 +1078,20 @@ function renderDerivedSide(el) {
   const loc = el.line ? `${el.path}:${el.line}` : el.path;
   let html = `<div class="insp">`;
   html += `<span class="insp-kicker">${esc(kicker(el))}</span>`;
-  html += `<span class="insp-title">${esc(el.name)}</span>`;
+  // Code identity is case-sensitive: `CommitInfo` must not read COMMITINFO.
+  html += `<span class="insp-title is-code">${esc(el.name)}</span>`;
   html += `<span class="mono text-muted" style="font-family:var(--font-mono);font-size:var(--text-2xs)">${esc(el.id)}</span>`;
-  html += `<div class="insp-section">Source</div>`;
-  html += `<button class="doc-link" data-opensrc="${esc(el.path)}">` +
-    `<span class="tag tag-outline">${esc(graph?.language ?? 'code')}</span> ${esc(loc)}</button>`;
-  html += `<p class="text-muted" style="font-size:var(--text-sm)">Derived from source — edit the file and re-run <code>blastradius introspect</code>.</p>`;
+  if (el.path) {
+    html += `<div class="insp-section">Source</div>`;
+    html += `<button class="doc-link" data-opensrc="${esc(el.path)}">` +
+      `<span class="tag tag-outline">${esc(graph?.language ?? 'code')}</span> ${esc(loc)}</button>`;
+    html += `<p class="text-muted" style="font-size:var(--text-sm)">Derived from source — edit the file and re-run <code>blastradius introspect</code>.</p>`;
+  } else {
+    // Dependency rollups (and namespaces, which own no single file) have no
+    // path — there is nothing to open (spec/l4-introspection.md).
+    html += `<div class="insp-section">External</div>`;
+    html += `<p class="text-muted" style="font-size:var(--text-sm)">Resolved from imports — not part of the mapped source tree.</p>`;
+  }
   if (el.stale) {
     html += `<p class="text-muted" style="font-size:var(--text-sm)">⚠ The committed facts lag the source tree.</p>`;
   }

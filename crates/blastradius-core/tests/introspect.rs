@@ -42,7 +42,9 @@ fn rust_fixture(repo: &Path) {
     write(
         repo,
         "src/engine.rs",
-        "pub trait Runner {\n    fn run(&self);\n}\n\npub struct Engine;\n\nimpl Runner for Engine {\n    fn run(&self) {}\n}\n\npub enum Mode {\n    Fast,\n    Careful,\n}\n",
+        // `serde` is an external crate (rolls up); `std` ships with the
+        // toolchain and never does.
+        "use serde::Serialize;\nuse std::fmt::Debug;\n\npub trait Runner {\n    fn run(&self);\n}\n\npub struct Engine;\n\nimpl Runner for Engine {\n    fn run(&self) {}\n}\n\npub enum Mode {\n    Fast,\n    Careful,\n}\n",
     );
     // A two-hop re-export chain: `deep` re-exports what `facade` re-exports
     // from `engine`, and `facade` also renames one of them.
@@ -126,6 +128,16 @@ fn rust_extractor_finds_modules_types_and_edges() {
         "renamed re-export `Speed` should resolve to engine.Mode; edges: {:?}",
         facts.edges
     );
+
+    // External crates roll up to one parentless, pathless node each; the
+    // sysroot is excluded because it carries no architectural signal.
+    let dep = facts.elements.iter().find(|e| e.id == "dep.serde").expect("dep.serde rollup");
+    assert_eq!(dep.kind, "dependency");
+    assert_eq!(dep.name, "serde");
+    assert_eq!(dep.path, "");
+    assert_eq!(dep.parent, None);
+    assert!(edge("engine", "dep.serde", "imports"), "edges: {:?}", facts.edges);
+    assert!(!ids.contains(&"dep.std"), "sysroot crates are not dependencies: {ids:?}");
 }
 
 #[test]

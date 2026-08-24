@@ -24,9 +24,10 @@ test('derivedGraphFor finds the graph for the component and its src ids', () => 
 
 test('L4 at the component shows top-level modules with lifted edges', () => {
   const view = computeView(snapshot, 'L4', COMP);
+  // Dependency rollups are parentless too, so they sit beside the modules.
   assert.deepEqual(
     view.nodes.map((n) => n.name),
-    ['git.rs', 'resolve.rs']
+    ['git2', 'serde', 'git.rs', 'resolve.rs']
   );
   assert.ok(view.nodes.every((n) => n.derived === true));
   // resolve.rs imports git.rs; type-level references lift onto the modules.
@@ -34,6 +35,23 @@ test('L4 at the component shows top-level modules with lifted edges', () => {
   assert.ok(imp, JSON.stringify(view.edges));
   // Intra-module edges lift to self-loops and are dropped.
   assert.ok(view.edges.every((e) => e.from !== e.to));
+});
+
+test('external dependencies roll up to pathless nodes both modules can reach', () => {
+  const view = computeView(snapshot, 'L4', COMP);
+  const serde = view.nodes.find((n) => n.name === 'serde');
+  assert.equal(serde.kind, 'dependency');
+  assert.equal(serde.path, '');
+  // Both mapped modules use serde; only git.rs uses git2.
+  for (const from of ['git', 'resolve']) {
+    assert.ok(
+      view.edges.some((e) => e.from.endsWith(`.src.${from}`) && e.to.endsWith('.src.dep.serde')),
+      `${from} → serde missing in ${JSON.stringify(view.edges)}`
+    );
+  }
+  // A rollup is a leaf: nothing nests under it.
+  const graph = derivedGraphFor(snapshot, COMP);
+  assert.ok(!graph.elements.some((e) => e.parent === `${COMP}.src.dep.serde`));
 });
 
 test('L4 at a module shows its types via the parent field', () => {

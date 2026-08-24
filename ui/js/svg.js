@@ -11,9 +11,12 @@ export function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-const DERIVED_KINDS = { module: 'Module', namespace: 'Namespace', class: 'Class', interface: 'Interface', record: 'Record', enum: 'Enum' };
+const DERIVED_KINDS = { module: 'Module', namespace: 'Namespace', class: 'Class', interface: 'Interface', record: 'Record', enum: 'Enum', dependency: 'Dependency' };
 
 export function kicker(el) {
+  // Dependency rollups are derived, but "external" reads truer than "derived"
+  // for something that lives outside the mapped source tree entirely.
+  if (el.kind === 'dependency') return `${DERIVED_KINDS.dependency} · external`;
   if (el.derived) return `${DERIVED_KINDS[el.kind] ?? el.kind} · derived`;
   const kind = { person: 'Person', system: 'Software system', container: 'Container', component: 'Component', external: 'External system' }[el.kind];
   const label = el.external && el.kind === 'system' ? 'External system' : kind;

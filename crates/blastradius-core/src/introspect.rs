@@ -302,7 +302,13 @@ pub fn default_include(language: &str) -> Vec<String> {
 
 // ---- the built-in Rust extractor -------------------------------------------
 
-const RUST_EXTRACTOR_VERSION: &str = "blastradius-extract-rust 0.2.0";
+const RUST_EXTRACTOR_VERSION: &str = "blastradius-extract-rust 0.3.0";
+
+/// Id prefix for external-dependency rollups — one node per package, shared
+/// by every extractor (spec).
+pub const DEP_PREFIX: &str = "dep.";
+/// Element kind for those rollups.
+pub const DEP_KIND: &str = "dependency";
 
 struct RustCorpus {
     /// module id -> (path, name)
@@ -366,10 +372,11 @@ pub fn extract_rust(repo_root: &Path, component: &str, mapping: &SourceMapping) 
     // Pass 2: the re-export table, so pass 3 can see through façade modules.
     build_exports(&parsed, &mut corpus);
 
-    // Pass 3: edges.
+    // Pass 3: edges, plus the external crates they reach for.
     let mut edges: BTreeSet<(String, String, String)> = BTreeSet::new();
+    let mut deps: BTreeSet<String> = BTreeSet::new();
     for (mid, _rel, ast) in &parsed {
-        collect_edges(&ast.items, mid, &corpus, &mut edges);
+        collect_edges(&ast.items, mid, &corpus, &mut edges, &mut deps);
     }
 
     let mut elements: Vec<FactElement> = corpus
@@ -391,6 +398,17 @@ pub fn extract_rust(repo_root: &Path, component: &str, mapping: &SourceMapping) 
         parent: Some(t.module.clone()),
         path: t.path.clone(),
         line: Some(t.line),
+    }));
+    // External dependencies roll up to one parentless node each: they sit
+    // beside the modules at the top of the derived scene, and have no path
+    // because they are not part of the mapped source tree (spec).
+    elements.extend(deps.iter().map(|name| FactElement {
+        id: format!("{DEP_PREFIX}{name}"),
+        kind: DEP_KIND.into(),
+        name: name.clone(),
+        parent: None,
+        path: String::new(),
+        line: None,
     }));
 
     let mut facts = Facts {
@@ -592,7 +610,25 @@ fn build_exports(parsed: &[(String, String, syn::File)], corpus: &mut RustCorpus
     }
 }
 
-fn collect_edges(items: &[syn::Item], module: &str, corpus: &RustCorpus, edges: &mut BTreeSet<(String, String, String)>) {
+/// Crates that ship with the toolchain: present in every program, so they
+/// carry no architectural signal and are not rolled up (spec).
+const RUST_SYSROOT_CRATES: [&str; 5] = ["std", "core", "alloc", "proc_macro", "test"];
+
+/// The external crate a `use` path names, if it names one: an unresolved
+/// path whose first segment is neither a crate anchor nor the sysroot.
+fn external_crate(path: &[String]) -> Option<&str> {
+    let first = path.first()?.as_str();
+    let anchored = matches!(first, "crate" | "self" | "super");
+    (!anchored && !RUST_SYSROOT_CRATES.contains(&first)).then_some(first)
+}
+
+fn collect_edges(
+    items: &[syn::Item],
+    module: &str,
+    corpus: &RustCorpus,
+    edges: &mut BTreeSet<(String, String, String)>,
+    deps: &mut BTreeSet<String>,
+) {
     // File-level use map: unqualified name -> corpus type id.
     let mut use_map: BTreeMap<String, String> = BTreeMap::new();
     for item in items {
@@ -613,7 +649,19 @@ fn collect_edges(items: &[syn::Item], module: &str, corpus: &RustCorpus, edges: 
                             edges.insert((module.to_string(), mid, "imports".into()));
                         }
                     }
-                    None => {}
+                    None => {
+                        // Unresolved and not anchored in this crate: an
+                        // external dependency, named by its first segment.
+                        // A corpus id of the same name wins — the rollup is
+                        // skipped rather than colliding (spec).
+                        if let Some(name) = external_crate(&path) {
+                            let id = format!("{DEP_PREFIX}{name}");
+                            if !corpus.modules.contains_key(&id) && !corpus.types.contains_key(&id) {
+                                deps.insert(name.to_string());
+                                edges.insert((module.to_string(), id, "imports".into()));
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -639,7 +687,7 @@ fn collect_edges(items: &[syn::Item], module: &str, corpus: &RustCorpus, edges: 
                     .unwrap_or_else(|| module.to_string());
                 if let syn::Item::Mod(m) = item {
                     if let Some((_, inner)) = &m.content {
-                        collect_edges(inner, &format!("{module}.{}", m.ident), corpus, edges);
+                        collect_edges(inner, &format!("{module}.{}", m.ident), corpus, edges, deps);
                         continue;
                     }
                 }
