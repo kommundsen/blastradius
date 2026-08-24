@@ -283,10 +283,16 @@ deliberately deferred again (same cost/hardware decision as 0.2.0).
 **Cut 2026-08-24**: all three themes shipped; version bumped across the
 three surfaces (`Cargo.toml`, `tauri.conf.json`,
 `packaging/msix/Package.appxmanifest`) and tagged `v0.4.0`, which drives
-the CI submission pipeline proven in 0.3.0. If 0.3.0's submission is
-still pending in Partner Center the submit step refuses rather than
-clobbering it (`tools/submit-store.ps1`), and the MSIX artifacts upload
-first either way.
+the CI submission pipeline proven in 0.3.0.
+
+**Store submission is blocked, and needs one owner action.** The tag
+built both architectures and uploaded the `.msixupload` cleanly, but the
+submission step failed: an in-progress submission created in the Partner
+Center *web dashboard* cannot be deleted or committed through the
+submission API. Delete it in Partner Center, then re-run the release
+workflow — nothing needs rebuilding (spec/msix-store-packaging.md
+Troubleshooting). The lesson is recorded there: once CI owns
+submissions, do not open one in the dashboard.
 
 Three user-selected themes. macOS/Linux distribution was considered and
 deliberately deferred a third time (same cost/hardware decision; revisit

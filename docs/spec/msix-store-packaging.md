@@ -243,6 +243,25 @@ the first real tag.
 
 ## Troubleshooting
 
+**"Ingestion API can only update, delete, and commit submissions that are
+created through the API"** (hit on the v0.4.0 tag, 2026-08-24). A
+submission created in the Partner Center *web dashboard* is invisible to
+the submission API: it cannot be committed, and `-ReplacePending` cannot
+delete it either — the API refuses to touch what it did not create. The
+whole CI submission step fails on it.
+
+Fix, and it is an owner action in the browser: open the app in Partner
+Center, **delete the in-progress submission**, then re-run the release
+workflow (`gh run rerun <id>`, or re-push the tag). Nothing needs
+rebuilding — the packages upload before the Store step, so the failed
+run already carries the `.msixupload`.
+
+The rule this implies: **once CI owns submissions, do not start one in
+the dashboard.** Editing listing metadata is fine between releases; an
+in-progress submission is not. If a dashboard submission is genuinely
+needed, finish or delete it before tagging.
+
+
 **msstore-cli cannot submit a prebuilt package** (found 2026-08-23 while
 building the release workflow): `msstore publish` runs project-type
 detection and its UWP/WinUI configurator *executes MSBuild* even just to
