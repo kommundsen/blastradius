@@ -5,7 +5,7 @@ members = ["crates/blastradius-core", "crates/blastradius-cli", "crates/blastrad
 [workspace.package]
 version = "0.3.0"
 edition = "2021"
-license = "UNLICENSED"
+license = "MIT"
 
 [profile.release]
 lto = true
