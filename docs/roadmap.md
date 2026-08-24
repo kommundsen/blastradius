@@ -339,9 +339,11 @@ moved to 0.4.0. Still parked:
 - **Hosted share links** (ADR-0009's payload) — demoted from primary
   commercial thesis by ADR-0017 and hosting is currently unwanted;
   parked, not scheduled.
-- **Going-public execution** — the ADR-0017 repo flip (public-audience
-  README, CONTRIBUTING, issue templates, sponsor/donation setup, the
-  flip itself). Considered for 0.4.0 and left unscheduled 2026-08-24.
+- **Going-public execution** — the repo itself went public 2026-08-24
+  (which also made Actions minutes free, ending the macOS-minutes
+  rationing pressure); what remains unscheduled is the launch dressing:
+  public-audience README, CONTRIBUTING, issue templates,
+  sponsor/donation setup. Considered for 0.4.0 and left unscheduled.
 - **Render-a-view MCP tool** — deferred from 0.3.0; revisit when an
   agent task actually needs pixels.
 - **macOS/Linux distribution** — deferred at 0.2.0, 0.3.0, and 0.4.0;
