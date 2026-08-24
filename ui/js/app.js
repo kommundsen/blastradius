@@ -4,6 +4,7 @@
 import { computeView, findViewDef, docsFor, treeModel, rootOf, depthOf, liftTo, resolvePins, derivedGraphFor, environments } from './data.js';
 import { layoutView, GRID } from './layout.js';
 import { viewSvg, kicker, childCount } from './svg.js';
+import { HELP_PAGES, helpBody, helpLinkTarget } from './help.js';
 
 // ---- shell bridge -----------------------------------------------------------
 // Real IPC under Tauri; mock (fetch of a committed snapshot) in a plain
@@ -142,6 +143,7 @@ const state = {
   pan: { x: 0, y: 0 },
   layout: null,       // last layout result
   doc: null,          // open doc id in the side panel, else null
+  help: null,         // bundled help: null = closed, '' = index, else a page id
   // ── git (phase 2) ──
   git: null,          // git_status payload | null (no repo)
   conflicts: null,    // git_conflicts payload | null
@@ -168,6 +170,7 @@ const els = {
   nodes: $('nodes'), edges: $('edges'), edgeLayer: $('edge-layer'),
   canvas: $('canvas'), sideTitle: $('side-title'), sideBody: $('side-body'),
   sideBack: $('side-back'), levelSeg: $('level-seg'), diagChips: $('diag-chips'),
+  helpBtn: $('help-btn'),
   hint: $('hint'), themeBtn: $('theme-btn'),
   gitChips: $('git-chips'), diffBtn: $('diff-btn'), historyBtn: $('history-btn'),
   undoBtn: $('undo-btn'), redoBtn: $('redo-btn'), addBtn: $('add-btn'),
@@ -681,7 +684,22 @@ function wireChrome() {
   $('zoom-in').addEventListener('click', () => { state.zoom *= 1.2; applyCamera(); });
   $('zoom-out').addEventListener('click', () => { state.zoom /= 1.2; applyCamera(); });
   $('zoom-reset').addEventListener('click', () => { state.zoom = 1; state.pan = { x: 0, y: 0 }; applyCamera(); });
-  els.sideBack.addEventListener('click', () => { state.doc = null; state.history = null; renderSide(); });
+  els.helpBtn.addEventListener('click', () => openHelp(state.help === null ? '' : null));
+  // '?' opens help. Guarded like the editing handler — the Ctrl+O handler
+  // below is not, and typing "?" into a field must not hijack the panel.
+  window.addEventListener('keydown', (ev) => {
+    const t = ev.target;
+    if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.tagName === 'SELECT')) return;
+    if (ev.key === '?' || ev.key === 'F1') {
+      ev.preventDefault();
+      openHelp(state.help === null ? '' : null);
+    }
+  });
+  els.sideBack.addEventListener('click', () => {
+    // Inside help, back steps to the index rather than leaving it.
+    if (state.help) { state.help = ''; renderSide(); return; }
+    state.doc = null; state.history = null; state.help = null; renderSide();
+  });
   els.diffBtn.addEventListener('click', toggleDiff);
   els.historyBtn.addEventListener('click', openHistory);
   document.getElementById('share-btn').addEventListener('click', openShareDialog);
@@ -824,11 +842,13 @@ function renderWelcome() {
     <p class="text-muted welcome-foot">A workspace is any folder with a
       <span style="font-family:var(--font-mono)">blastradius.yaml</span> — open it
       directly or pick the repo root and it is found for you.
-      <span style="font-family:var(--font-mono)">blastradius init</span> scaffolds one from the CLI.</p>
+      <span style="font-family:var(--font-mono)">blastradius init</span> scaffolds one from the CLI.
+      <button class="btn btn-ghost" id="welcome-help">Read the help</button></p>
   </div>`;
   els.canvas.appendChild(w);
   document.getElementById('welcome-open').addEventListener('click', () => openWorkspaceFlow('open'));
   document.getElementById('welcome-new').addEventListener('click', () => openWorkspaceFlow('new'));
+  document.getElementById('welcome-help').addEventListener('click', () => openHelp(''));
   document.getElementById('welcome-demo').addEventListener('click', async () => {
     try {
       await invoke('workspace_demo');
@@ -1034,6 +1054,7 @@ async function focusElement(id) {
 function renderSide() {
   if (state.sideMode === 'source') { renderSource(); return; }
   els.srcStatus.hidden = true;
+  if (state.help !== null) return renderHelp(state.help);
   if (state.history) return renderHistory();
   if (state.doc) return renderDoc(state.doc);
   if (state.selectedRel) return renderRelationSide();
@@ -1141,6 +1162,67 @@ function renderDerivedSide(el) {
   for (const btn of els.sideBody.querySelectorAll('[data-opensrc]')) {
     btn.addEventListener('click', () => invoke('open_source', { rel: btn.dataset.opensrc }).catch(() => {}));
   }
+}
+
+/** Bundled help: '' shows the index, an id shows that page. */
+function renderHelp(pageId) {
+  els.sideBack.hidden = !pageId; // the index is the top of this stack
+  if (!pageId) {
+    els.sideTitle.textContent = 'Help';
+    let html = `<p class="side-empty text-muted">How to use Blastradius. Everything here ships with the app — no network needed.</p>`;
+    html += `<div class="doc-elements">`;
+    for (const p of HELP_PAGES) {
+      html += `<button class="doc-link" data-help="${esc(p.id)}">` +
+        `<span>${esc(p.title)}</span> <span class="text-muted">${esc(p.blurb)}</span></button>`;
+    }
+    html += `</div>`;
+    els.sideBody.innerHTML = html;
+    wireHelpLinks();
+    return;
+  }
+  const page = HELP_PAGES.find((p) => p.id === pageId);
+  els.sideTitle.textContent = page?.title ?? 'Help';
+  els.sideBody.innerHTML = `<p class="side-empty text-muted">Loading…</p>`;
+  helpBody(pageId).then((md) => {
+    // A slower load must not overwrite a page the reader has since moved on from.
+    if (state.help !== pageId) return;
+    if (md === null) {
+      els.sideBody.innerHTML = `<p class="side-empty text-muted">That help page is missing from this build.</p>`;
+      return;
+    }
+    els.sideBody.innerHTML = `<div class="doc-body">${renderHelpMarkdown(md)}</div>`;
+    wireHelpLinks();
+  });
+}
+
+/**
+ * Help markdown with cross-page links turned into in-panel buttons. The docs
+ * panel has no router, so a bare `canvas.md` href would navigate the WebView
+ * off the app entirely.
+ */
+function renderHelpMarkdown(md) {
+  const html = marked.parse(md);
+  return html.replace(/<a href="([^"]+)"/g, (whole, href) => {
+    const target = helpLinkTarget(href);
+    return target ? `<a href="#" data-help="${esc(target)}"` : `${whole} target="_blank" rel="noreferrer"`;
+  });
+}
+
+function wireHelpLinks() {
+  for (const el of els.sideBody.querySelectorAll('[data-help]')) {
+    el.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      openHelp(el.dataset.help);
+    });
+  }
+}
+
+function openHelp(pageId = '') {
+  state.help = pageId;
+  state.doc = null;
+  state.history = null;
+  if (state.sideMode === 'source') state.sideMode = 'inspect';
+  renderSide();
 }
 
 function renderDoc(docId) {

@@ -4,7 +4,7 @@
   "extractor": "blastradius-extract-ts 0.2.0",
   "component": "blastradius.ui.canvas",
   "root": "ui/js",
-  "sourceDigest": "sha256:368448136e5803f765728ba621c7c41078ccc0054128d7ded6807e3681ef0c61",
+  "sourceDigest": "sha256:6fbdd225d465585665574f5bf44bba7b34d6626bddf79be76f955d761aee827b",
   "elements": [
     {
       "id": "app",
@@ -17,6 +17,12 @@
       "kind": "module",
       "name": "data.js",
       "path": "ui/js/data.js"
+    },
+    {
+      "id": "help",
+      "kind": "module",
+      "name": "help.js",
+      "path": "ui/js/help.js"
     },
     {
       "id": "layout",
@@ -41,6 +47,11 @@
     {
       "from": "app",
       "to": "data",
+      "kind": "imports"
+    },
+    {
+      "from": "app",
+      "to": "help",
       "kind": "imports"
     },
     {

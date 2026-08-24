@@ -380,7 +380,30 @@ set, deployment views included.
    As scoped: the C4 deployment diagram — environments, deployment
    nodes, container instances — mapped onto the existing model format
    and canvas, spec first (`spec/model-format.md` §3b), then rendering.
-3. **Bundled in-app help** — the sharpened v2 theme (2026-08-24):
+3. **Bundled in-app help** — **content shipped 2026-08-24; the stranger
+   run is still owed.** Eleven feature-usage pages live in `ui/help/` as
+   real markdown, reached from a **Help** button, `?`/`F1`, or the
+   welcome screen — which is where a first-run user actually is. They
+   render in the existing docs panel, and because Tauri compiles the
+   whole `ui/` tree into the binary they ship offline and versioned with
+   the app; an e2e test asserts no request leaves the machine while
+   reading them. Delivered as fetched markdown rather than an IPC
+   command on purpose: a new command would need a mock branch in every
+   Playwright run (ADR-0011), and markdown files stay reviewable and
+   diffable.
+   Pages: getting started, canvas navigation, editing and pinning,
+   deployment views, code-level detail, git diff/history/conflicts,
+   export and sharing, coding agents (MCP), model-format reference,
+   keyboard shortcuts, privacy. The privacy page is generated from
+   `docs/privacy.md` and a test fails if the two drift — it has no live
+   URL since Pages publishing was dropped, so in-app is the only place
+   it is readable. The panel had no router, so cross-page links are
+   rewritten to navigate in place rather than unloading the app.
+   *Exit, first half met:* every shipped feature is reachable from an
+   in-app Help entry point with no network, asserted in e2e.
+   **Still owed: the PRD 5-minute-stranger run** against the published
+   0.4.0 Store build — result to be recorded here.
+   Original scope (2026-08-24):
    author the feature-usage doc set — getting started, canvas
    navigation/diving, editing and pinning, git diff and conflict
    resolution, L4 introspection setup, export/share, MCP/agent setup,

@@ -1,0 +1,87 @@
+# Getting started
+
+Blastradius reads a **workspace**: a folder of plain YAML and markdown that
+lives in your repo. There is no account, no server, and nothing to sync. If you
+delete the app, the folder is still legible text.
+
+## Open something in the next minute
+
+You have three ways in, from the welcome screen or the **Open** button
+(`Ctrl+O`):
+
+- **Open a workspace folder…** — pick a folder containing `blastradius.yaml`,
+  *or* pick your repository root and the workspace inside is found for you. If
+  a repo holds several, you get to choose.
+- **New workspace in a folder…** — scaffolds a small, commented starter model
+  you can edit immediately.
+- **Try a demo workspace** — a throwaway model, useful for a look around
+  before you commit to anything.
+
+From the CLI, `blastradius init` scaffolds the same starter workspace, and
+`blastradius validate .` checks one without opening the app.
+
+## What you are looking at
+
+The canvas shows **one altitude at a time**, and you fly between them:
+
+| Level | Shows |
+| --- | --- |
+| **L1** | Systems, and the people and external systems around them |
+| **L2** | The containers inside one system |
+| **L3** | The components inside one container |
+| **L4** | Real modules and types, derived from source |
+| **D** | Deployment — where the containers actually run |
+
+Double-click a node to dive into it, press `Esc` to come back up. That is the
+whole navigation model. See [Navigating the canvas](canvas.md).
+
+The left panel lists the model as a tree; the right panel inspects whatever is
+selected, including the documents attached to it.
+
+## Your own repo
+
+A minimal workspace is two files. `blastradius.yaml` says where things are:
+
+```yaml
+workspace:
+  name: Acme
+  version: 1
+model:
+  include: [model/*.yaml]
+views:
+  include: [views/*.yaml]
+docs:
+  include: ["*.md", "adr/*.md"]
+```
+
+And one model file describes a system:
+
+```yaml
+system: shop
+name: Shop
+containers:
+  web:
+    name: Web
+    tech: React
+  api:
+    name: API
+    tech: Go
+relations:
+  - from: web
+    to: api
+    label: calls
+    protocol: JSON/HTTPS
+```
+
+Open the folder and it renders. Everything else — components, deployment,
+code-level detail, documents — is additive from here; see the
+[model format reference](model-format.md).
+
+## Where things go from here
+
+- Change the model by editing YAML or by dragging on the canvas — both write
+  the same files. See [Editing the model](editing.md).
+- Commit it. The diff is the point: see
+  [Git: diff, history, conflicts](git.md).
+- Hand a self-contained HTML file to someone who does not have the app:
+  [Sharing and export](export.md).

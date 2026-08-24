@@ -68,3 +68,19 @@ test('source panel (CodeMirror) is AA clean', async ({ page }) => {
   await expect(page.locator('#src-editor .CodeMirror')).toBeVisible();
   await scan(page, 'source panel');
 });
+
+test('bundled help is AA clean (index and a page)', async ({ page }) => {
+  await page.goto('/index.html?nogit');
+  await expect(page.locator('#nodes .node').first()).toBeVisible();
+  await page.locator('#help-btn').click();
+  await expect(page.locator('#side-title')).toHaveText('Help');
+  await scan(page, 'help index');
+  // Shortcuts is the table-heaviest page; model format is the code-heaviest.
+  await page.locator('#side-body [data-help="shortcuts"]').click();
+  await expect(page.locator('.doc-body table').first()).toBeVisible();
+  await scan(page, 'help page (tables)');
+  await page.locator('#side-back').click();
+  await page.locator('#side-body [data-help="model-format"]').click();
+  await expect(page.locator('.doc-body pre').first()).toBeVisible();
+  await scan(page, 'help page (code)');
+});

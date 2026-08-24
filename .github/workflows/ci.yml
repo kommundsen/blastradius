@@ -50,7 +50,7 @@ jobs:
         with:
           node-version: "22"
       - name: Layout determinism + routing + headless render + L4 derivation suites
-        run: node --test ui/tests/determinism.test.mjs ui/tests/routing.test.mjs ui/tests/render.test.mjs ui/tests/derived.test.mjs
+        run: node --test ui/tests/determinism.test.mjs ui/tests/routing.test.mjs ui/tests/render.test.mjs ui/tests/derived.test.mjs ui/tests/help.test.mjs
       - name: Install Playwright WebKit
         run: |
           npm ci
