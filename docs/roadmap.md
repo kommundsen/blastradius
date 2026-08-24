@@ -262,17 +262,18 @@ deliberately deferred again (same cost/hardware decision as 0.2.0).
    the owed 5-minute-stranger exit run against the Store build.
    *Exit:* 0.3.0 itself is submitted to the Store by CI, x64 + arm64,
    with the stranger run's result recorded here.
-   **Pipeline proven 2026-08-23**: credentials created (tenant
-   association wrinkles recorded in spec/msix-store-packaging.md);
-   `.github/workflows/release.yml` landed — tag push `v*` builds
-   x64+arm64 (`pack-msix.ps1 -Arch arm64` cross-build), bundles one
-   `.msixupload`, and submits through `tools/submit-store.ps1` (the
-   submission REST API — msstore-cli cannot take prebuilt packages,
-   see the spec's Troubleshooting). The workflow_dispatch **dry run
-   succeeded end to end** on a hosted runner: both packages registered,
-   17.7MB uploaded, draft submission left uncommitted for inspection.
-   Remaining for the exit: the real `v0.3.0` tag push (identical path
-   plus `-Commit`), and the owed stranger run against the Store build.
+   **Shipped 2026-08-24, primary exit met**: the `v0.3.0` tag push
+   built x64+arm64 (`pack-msix.ps1 -Arch arm64` cross-build), bundled
+   one `.msixupload`, and `tools/submit-store.ps1` (submission REST
+   API — msstore-cli cannot take prebuilt packages, see the spec's
+   Troubleshooting) committed submission 1152921505701723784, accepted
+   into PreProcessing. Both architectures in one submission, entirely
+   from CI; a workflow_dispatch dry run (draft submission, no commit)
+   validated the pipeline first. First-ever arm64 build — untested on
+   real arm64 hardware; certification is its first gauntlet, and an
+   x64-only resubmission is the fallback if it fails there.
+   Still owed: the 5-minute-stranger run against the published Store
+   build, result to be recorded here.
 
 ## v2 themes (not scheduled)
 
