@@ -113,6 +113,12 @@ export function computeView(snapshot, level, scope, includeContext = true) {
     for (const el of snapshot.elements) {
       if (el.kind === 'system' || isContext(el)) visible.set(el.id, el);
     }
+  } else if (level === 'LD' && !scope) {
+    // The deployment overview: every environment, the physical counterpart
+    // of L1 (ADR-0018). Diving into one shows its nodes.
+    for (const el of snapshot.elements) {
+      if (el.kind === 'environment') visible.set(el.id, el);
+    }
   } else {
     const scopeDepth = depthOf(scope);
     const childDepth = scopeDepth + 1;
@@ -181,7 +187,7 @@ export function computeView(snapshot, level, scope, includeContext = true) {
   // Deterministic order (ADR-0006): id order for nodes, from|to for edges.
   const nodes = [...visible.values()].sort((a, b) => a.id.localeCompare(b.id));
   edges.sort((a, b) => (a.from + '|' + a.to).localeCompare(b.from + '|' + b.to));
-  return { level, scope: level === 'L1' ? null : scope, nodes, edges };
+  return { level, scope: level === 'L1' ? null : scope ?? null, nodes, edges };
 }
 
 /** The view definition (pins) matching a level+scope, if any. */
@@ -191,6 +197,11 @@ export function findViewDef(snapshot, level, scope) {
       (v) => v.level === level && (level === 'L1' || v.scope === scope)
     ) ?? null
   );
+}
+
+/** Every environment, in id order — the entry points to the deployment side. */
+export function environments(snapshot) {
+  return snapshot.elements.filter((e) => e.kind === 'environment');
 }
 
 /** Docs linked to an element id. */
@@ -213,7 +224,13 @@ export function treeModel(snapshot) {
           components: els.filter((e) => e.parent === c.id),
         })),
     }));
-  return { context, systems };
+  // Deployment (ADR-0018) is a separate root: nodes nest arbitrarily, so the
+  // tree recurses rather than assuming the model's fixed three tiers.
+  const childrenOf = (id) => els.filter((e) => e.parent === id && e.kind !== 'component');
+  const deployment = els.filter((e) => e.kind === 'environment').map(function walk(el) {
+    return { el, children: childrenOf(el.id).map(walk) };
+  });
+  return { context, systems, deployment };
 }
 
 /**

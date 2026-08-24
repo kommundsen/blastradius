@@ -303,6 +303,13 @@ textarea.input { min-height: 90px; resize: vertical; }
 .node.is-external .node-kicker { color: var(--color-text-muted); }
 .node.is-external .node-title  { color: var(--color-text-muted); }
 
+/* Deployment (ADR-0018) — the physical world, rounded rather than square, so
+   an infrastructure box never reads as a logical one at a glance. Instances
+   keep the container spine: they *are* containers, just running somewhere. */
+.node.is-environment      { border-width: 2px; border-radius: calc(var(--radius) * 3); }
+.node.is-deployment-node  { border-radius: calc(var(--radius) * 3); }
+.node.is-container-instance { border-left-width: 3px; background: var(--color-neutral-200); }
+
 /* Git diff + validation. Every state pairs a colour with a glyph badge, so the
    model stays readable in greyscale, in print, and for colour-blind users. */
 .node-badge { position: absolute; top: -8px; right: -8px; z-index: 1;

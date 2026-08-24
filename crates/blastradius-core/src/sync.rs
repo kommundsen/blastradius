@@ -458,6 +458,8 @@ impl SyncEngine {
                 "components".into(),
                 segs[2].into(),
             ],
+            k if k.is_deployment() => crate::model::deployment_chain(id, k),
+            _ => unreachable!("every kind is addressed above"),
         };
         Ok((el.file.clone(), chain))
     }
@@ -582,6 +584,53 @@ impl SyncEngine {
                 }
                 let text = format!("system: {id}\nname: {}\n", splice::yaml_scalar(name));
                 Ok(vec![FileChange { rel, before: None, after: Some(text) }])
+            }
+            // Deployment (ADR-0018). An environment is a top-level entry in
+            // deployment.yaml; nodes and instances nest under whatever they run
+            // on, at any depth.
+            ("environment", None) => {
+                let rel = self
+                    .model
+                    .elements
+                    .values()
+                    .find(|e| e.kind == ElementKind::Environment)
+                    .map(|e| e.file.clone())
+                    .unwrap_or_else(|| "model/deployment.yaml".to_string());
+                let text = self.files.get(&rel).cloned().unwrap_or_default();
+                let after =
+                    splice::insert_entry(&text, &["environments"], Some((&[], 0)), id, &[("name", name)])?;
+                let before = self.files.get(&rel).cloned();
+                Ok(vec![FileChange { rel, before, after: Some(after) }])
+            }
+            ("deployment-node" | "container-instance", Some(owner)) => {
+                let parent_el = self
+                    .model
+                    .elements
+                    .get(owner)
+                    .ok_or_else(|| format!("unknown element {owner}"))?;
+                if !parent_el.kind.is_deployment() || parent_el.kind == ElementKind::ContainerInstance {
+                    return Err(format!(
+                        "{kind:?} belongs under an environment or a deployment node, not a {}",
+                        parent_el.kind.as_str()
+                    ));
+                }
+                let (rel, chain) = self.element_chain(owner)?;
+                let text = self.files.get(&rel).ok_or("file not cached")?;
+                let section = if kind == "container-instance" { "instances" } else { "nodes" };
+                let mut chain_refs: Vec<&str> = chain.iter().map(String::as_str).collect();
+                chain_refs.push(section);
+                let owner_chain: Vec<&str> = chain.iter().map(String::as_str).collect();
+                // environments(0) -> env(2) -> nodes(4) -> node(6) … two spaces
+                // per level, and the chain already counts them.
+                let owner_indent = chain.len();
+                let after = splice::insert_entry(
+                    text,
+                    &chain_refs,
+                    Some((&owner_chain, owner_indent)),
+                    id,
+                    &[("name", name)],
+                )?;
+                Ok(vec![self.change(&rel, after)])
             }
             _ => Err(format!("cannot create kind {kind:?} under {parent:?}")),
         }

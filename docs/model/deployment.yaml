@@ -1,0 +1,78 @@
+# Deployment (spec §3b, ADR-0018): where Blastradius actually runs. Three
+# environments — the machine it is built on, the CI that packages it, and the
+# machine a user installs it on. Instances name the containers they run, so
+# renaming a container breaks this file rather than letting it drift.
+environments:
+  dev-machine:
+    name: Developer Machine
+    description: >-
+      Where the app is built and dogfooded. The workspace under test is this
+      repository's own docs/ directory.
+    nodes:
+      workstation:
+        name: Windows 11 Workstation
+        tech: x64
+        nodes:
+          dev-build:
+            name: Blastradius (dev build)
+            tech: cargo tauri dev
+            instances:
+              shell: { container: blastradius.shell }
+              ui: { container: blastradius.ui }
+              core: { container: blastradius.core }
+          terminal:
+            name: Terminal
+            tech: PowerShell
+            instances:
+              cli:
+                container: blastradius.cli
+                description: validate, introspect, export, and the MCP server over stdio.
+    relations:
+      - from: workstation.terminal
+        to: workstation.dev-build
+        label: shares the workspace on disk
+        direction: both
+
+  ci:
+    name: GitHub Actions
+    description: >-
+      Builds, gates, and packages every push; tag pushes additionally submit
+      to the Microsoft Store.
+    nodes:
+      ubuntu-runner:
+        name: ubuntu-latest Runner
+        tech: GitHub-hosted
+        instances:
+          cli:
+            container: blastradius.cli
+            name: Validate & Introspect
+            description: validate docs/, the L4 staleness gate, extractor fixture gates.
+      windows-runner:
+        name: windows-latest Runner
+        tech: GitHub-hosted
+        nodes:
+          msix-packaging:
+            name: MSIX Packaging
+            tech: winapp CLI · pack-msix.ps1
+            description: x64 + arm64 bundled into one .msixupload (ADR-0013).
+    relations:
+      - from: ubuntu-runner
+        to: windows-runner
+        label: gates before packaging
+
+  user-machine:
+    name: End-User Machine
+    description: Windows 10/11, where the Store delivers and updates the app.
+    nodes:
+      windows:
+        name: Windows 10/11
+        tech: x64 · arm64
+        nodes:
+          msix-package:
+            name: Blastradius (MSIX)
+            tech: Store-signed, Store-updated
+            instances:
+              shell: { container: blastradius.shell }
+              ui: { container: blastradius.ui }
+              core: { container: blastradius.core }
+              cli: { container: blastradius.cli }

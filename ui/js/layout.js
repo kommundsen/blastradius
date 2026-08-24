@@ -11,6 +11,11 @@ const SIZES = {
   external: { width: 160, height: 62 },
   container: { width: 170, height: 70 },
   component: { width: 150, height: 62 },
+  // Deployment (ADR-0018): infrastructure boxes run wider than components
+  // because their names are machine names, not one-word identifiers.
+  environment: { width: 180, height: 68 },
+  'deployment-node': { width: 176, height: 66 },
+  'container-instance': { width: 164, height: 62 },
 };
 
 export function nodeSize(el) {

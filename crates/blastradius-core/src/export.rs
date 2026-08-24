@@ -117,6 +117,11 @@ pub fn export_html(
     let modules = format!("{}\n{}", strip_exports(DATA_JS), strip_exports(LAYOUT_JS));
 
     let name = html_escape(&ws.name);
+    // The deployment segment is live only when the model has environments
+    // (ADR-0018) — same rule the app applies.
+    let has_deployment = ws.elements.values().any(|e| e.kind == crate::model::ElementKind::Environment);
+    let (deployment_disabled, deployment_attr) =
+        if has_deployment { ("", "") } else { (" is-disabled", " disabled") };
     Ok(format!(
         r##"<!DOCTYPE html>
 <html lang="en">
@@ -136,6 +141,7 @@ pub fn export_html(
       <label class="seg-opt"><input type="radio" name="lvl" value="L2">L2</label>
       <label class="seg-opt"><input type="radio" name="lvl" value="L3">L3</label>
       <label class="seg-opt is-disabled"><input type="radio" name="lvl" value="L4" disabled>L4</label>
+      <label class="seg-opt{deployment_disabled}"><input type="radio" name="lvl" value="LD"{deployment_attr}>D</label>
     </span>
     <span class="app-bar-spacer"></span>
     <button class="btn btn-secondary" id="theme-btn">Theme: auto</button>
@@ -195,6 +201,8 @@ const INCLUDE_DOC_BODIES = {bodies};
         marked = MARKED_JS,
         bodies = options.include_doc_bodies,
         viewer = VIEWER_JS,
+        deployment_disabled = deployment_disabled,
+        deployment_attr = deployment_attr,
     ))
 }
 

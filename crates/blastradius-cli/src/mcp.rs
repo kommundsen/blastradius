@@ -255,8 +255,11 @@ impl McpServer {
             .elements
             .values()
             .filter(|e| {
+                // Exact, not prefix: "container" must not also drag in every
+                // "container instance" (ADR-0018). "external" still matches
+                // the "external system" label.
                 let kind_ok = kind.as_deref().is_none_or(|k| {
-                    e.kind.as_str().starts_with(k) || (k == "external" && e.kind.as_str().contains("external"))
+                    e.kind.as_str() == k || (k == "external" && e.kind.as_str().contains("external"))
                 });
                 let text_ok = q.is_empty()
                     || e.id.to_lowercase().contains(&q)
@@ -673,7 +676,7 @@ fn tool_definitions() -> Vec<Value> {
             "description": "Search elements by substring (id, name, description) and/or kind. Returns up to 50 briefs with file:line locations.",
             "inputSchema": obj(json!({
                 "query": {"type": "string", "description": "case-insensitive substring"},
-                "kind": {"type": "string", "enum": ["person", "external", "system", "container", "component"]},
+                "kind": {"type": "string", "enum": ["person", "external", "system", "container", "component", "environment", "deployment node", "container instance"]},
             }), vec![]),
         }),
         json!({

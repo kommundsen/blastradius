@@ -18,15 +18,33 @@ export function kicker(el) {
   // for something that lives outside the mapped source tree entirely.
   if (el.kind === 'dependency') return `${DERIVED_KINDS.dependency} · external`;
   if (el.derived) return `${DERIVED_KINDS[el.kind] ?? el.kind} · derived`;
-  const kind = { person: 'Person', system: 'Software system', container: 'Container', component: 'Component', external: 'External system' }[el.kind];
+  const kind = {
+    person: 'Person',
+    system: 'Software system',
+    container: 'Container',
+    component: 'Component',
+    external: 'External system',
+    environment: 'Environment',
+    'deployment-node': 'Deployment node',
+    'container-instance': 'Container instance',
+  }[el.kind] ?? el.kind;
   const label = el.external && el.kind === 'system' ? 'External system' : kind;
   return el.tech ? `${label} · ${el.tech}` : label;
 }
 
 export function childCount(el, elements) {
-  const kids = elements.filter((e) => e.parent === el.id).length;
+  const children = elements.filter((e) => e.parent === el.id);
+  const kids = children.length;
   if (!kids) return null;
-  const noun = el.derived ? 'member' : el.kind === 'system' ? 'container' : 'component';
+  // Deployment nodes hold nodes, instances, or both — say which, rather than
+  // calling instances "nodes".
+  const deployment =
+    el.kind === 'environment' || el.kind === 'deployment-node'
+      ? children.every((c) => c.kind === 'container-instance')
+        ? 'instance'
+        : 'node'
+      : null;
+  const noun = el.derived ? 'member' : deployment ?? (el.kind === 'system' ? 'container' : 'component');
   return `${kids} ${noun}${kids > 1 ? 's' : ''}`;
 }
 

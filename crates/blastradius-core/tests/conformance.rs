@@ -14,9 +14,15 @@ fn repo_docs_workspace_is_valid() {
         eprintln!("{d}");
     }
     assert!(!has_errors(&diags));
-    assert_eq!(ws.elements.len(), 25, "element count changed — update this test with the model");
-    assert_eq!(ws.docs.len(), 27, "registered doc count changed");
-    assert_eq!(ws.views.len(), 2);
+    // 25 logical + 20 deployment (ADR-0018): 3 environments, 8 nodes, 9 instances.
+    assert_eq!(ws.elements.len(), 45, "element count changed — update this test with the model");
+    assert_eq!(ws.docs.len(), 28, "registered doc count changed");
+    assert_eq!(ws.views.len(), 3);
+    assert_eq!(
+        ws.elements.values().filter(|e| e.kind.is_deployment()).count(),
+        20,
+        "deployment element count changed"
+    );
     // The dogfood workspace introspects itself (spec/l4-introspection.md):
     // two committed facts graphs, TypeScript and Rust.
     assert_eq!(ws.derived.len(), 2, "dogfood derived graph count changed");

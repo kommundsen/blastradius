@@ -350,12 +350,36 @@ set, deployment views included.
    defining module; glob/module re-exports and re-export cycles are
    dropped, not guessed. Dogfood facts changed by exactly the extractor
    version line, as predicted.
-2. **Deployment views** — the C4 deployment diagram: environments,
-   deployment nodes, containerinstances, mapped onto the existing
-   model format and canvas (spec work first — format, then rendering).
-   *Exit (draft):* this repo's own delivery is modelled and rendered —
-   dev machine, CI runners, Store distribution — validating, diveable,
-   and exported like any other view.
+2. **Deployment views** — **shipped 2026-08-24, exit met** (ADR-0018).
+   The design question was how to draw a nested tree: C4 draws nested
+   boxes, but every Blastradius view shows one altitude and dives, and
+   the layout engine is flat with fixed node sizes. Nesting would have
+   meant hierarchy support in ELK plus ancestor-exclusion in obstacle
+   routing, label placement against containment boxes, and SVG
+   z-ordering — the largest and riskiest piece of the theme, for the
+   only view in the product that reads by containment. **Deployment
+   dives instead**, which is cheaper *and* more consistent, and because
+   deployment elements carry dotted ids the existing depth arithmetic
+   computes their views with no new algorithm.
+   They are ordinary elements, not a parallel namespace like L4 code, so
+   relations, pins, blast radius, diff, MCP, and canvas editing all work
+   without special cases; the cost was four exhaustive `ElementKind`
+   matches and a variable-depth key chain, since deployment nodes nest
+   arbitrarily while containers sit at fixed depths. Instances name the
+   container they run, validated, so a deployment cannot drift into
+   naming containers that no longer exist — and they borrow that
+   container's display name unless given their own.
+   *Exit met:* this repo's own delivery is modelled in
+   `docs/model/deployment.yaml` — dev machine, CI runners, Store
+   distribution, 20 elements across 3 environments — validating,
+   diveable to the container instances, rendered headlessly to SVG, and
+   navigable in the exported HTML like any other view. Recorded
+   follow-ups in ADR-0018: nested-box rendering as an optional mode,
+   instance multiplicity, and importing Structurizr's deployment blocks
+   (until now parsed and discarded).
+   As scoped: the C4 deployment diagram — environments, deployment
+   nodes, container instances — mapped onto the existing model format
+   and canvas, spec first (`spec/model-format.md` §3b), then rendering.
 3. **Bundled in-app help** — the sharpened v2 theme (2026-08-24):
    author the feature-usage doc set — getting started, canvas
    navigation/diving, editing and pinning, git diff and conflict

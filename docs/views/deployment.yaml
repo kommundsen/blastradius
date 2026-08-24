@@ -1,0 +1,8 @@
+# LD — the deployment overview: the three environments Blastradius lives in
+# (ADR-0018). Diving into one shows its nodes; pins here keep the flow
+# left-to-right in the order things actually happen.
+view: deployment
+name: Deployment
+scope: dev-machine
+level: LD
+include-context: false

@@ -3,7 +3,7 @@
 //! integrity, status vocabularies.
 
 use crate::diagnostics::Diagnostic;
-use crate::model::Workspace;
+use crate::model::{ElementKind, Workspace};
 use std::collections::{BTreeSet, HashMap};
 
 /// Status vocabularies per doc type (spec §5).
@@ -37,6 +37,28 @@ pub fn cross_validate(ws: &Workspace, diags: &mut Vec<Diagnostic>) {
                 r.line,
                 format!("relation {} -> {} duplicated verbatim", r.from, r.to),
             ));
+        }
+    }
+
+    // --- container instances point at a real container (ADR-0018) -----------
+    for el in ws.elements.values() {
+        let Some(reference) = &el.instance_of else { continue };
+        match ws.resolve(reference, None) {
+            Some(target) if ws.elements[&target].kind == ElementKind::Container => {}
+            Some(target) => diags.push(Diagnostic::error(
+                &el.file as &str,
+                el.line,
+                format!(
+                    "instance {:?}: `container: {reference}` resolves to a {}, not a container",
+                    el.id,
+                    ws.elements[&target].kind.as_str()
+                ),
+            )),
+            None => diags.push(Diagnostic::error(
+                &el.file as &str,
+                el.line,
+                format!("instance {:?}: dangling `container: {reference}`", el.id),
+            )),
         }
     }
 

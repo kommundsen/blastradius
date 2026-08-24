@@ -29,20 +29,45 @@
     String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   function kicker(el) {
-    const kind = { person: 'Person', system: 'Software system', container: 'Container', component: 'Component', external: 'External system' }[el.kind];
+    const kind = {
+      person: 'Person',
+      system: 'Software system',
+      container: 'Container',
+      component: 'Component',
+      external: 'External system',
+      environment: 'Environment',
+      'deployment-node': 'Deployment node',
+      'container-instance': 'Container instance',
+    }[el.kind] ?? el.kind;
     const label = el.external && el.kind === 'system' ? 'External system' : kind;
     return el.tech ? `${label} · ${el.tech}` : label;
   }
 
   function childCount(el) {
-    const kids = snap.elements.filter((e) => e.parent === el.id).length;
+    const children = snap.elements.filter((e) => e.parent === el.id);
+    const kids = children.length;
     if (!kids) return null;
-    const noun = el.kind === 'system' ? 'container' : 'component';
+    const deployment =
+      el.kind === 'environment' || el.kind === 'deployment-node'
+        ? children.every((c) => c.kind === 'container-instance')
+          ? 'instance'
+          : 'node'
+        : null;
+    const noun = deployment ?? (el.kind === 'system' ? 'container' : 'component');
     return `${kids} ${noun}${kids > 1 ? 's' : ''}`;
   }
 
   function nodeClass(el) {
-    const map = { person: 'is-person', system: 'is-system', container: 'is-container', component: 'is-component', external: 'is-system' };
+    const map = {
+      person: 'is-person',
+      system: 'is-system',
+      container: 'is-container',
+      component: 'is-component',
+      external: 'is-system',
+      environment: 'is-environment',
+      'deployment-node': 'is-deployment-node',
+      'container-instance': 'is-container-instance',
+    };
     let cls = 'node ' + (map[el.kind] ?? 'is-system');
     if (el.external) cls += ' is-external';
     return cls;
@@ -144,7 +169,7 @@
         if (el) parts.push(`<b>${esc(el.name)}</b>`);
       }
     }
-    parts.push({ L1: 'Context', L2: 'Containers', L3: 'Components' }[state.level]);
+    parts.push({ L1: 'Context', L2: 'Containers', L3: 'Components', LD: 'Deployment' }[state.level]);
     $('breadcrumb').innerHTML = parts.join(' / ');
   }
 
@@ -174,6 +199,10 @@
     } else if (el.kind === 'container' && state.level === 'L2') {
       if (!snap.elements.some((e) => e.parent === id)) return;
       state.level = 'L3'; state.scope = id;
+    } else if (el.kind === 'environment' || el.kind === 'deployment-node') {
+      // The deployment tree dives like the logical one (ADR-0018).
+      if (!snap.elements.some((e) => e.parent === id)) return;
+      state.level = 'LD'; state.scope = id;
     } else return;
     state.zoom = 1; state.pan = { x: 0, y: 0 }; state.selected = id;
     await renderCanvas();
@@ -189,6 +218,9 @@
       state.selected = state.scope;
       state.scope = null;
       state.level = 'L1';
+    } else if (state.level === 'LD' && state.scope) {
+      state.selected = state.scope;
+      state.scope = depthOf(state.scope) > 1 ? liftTo(state.scope, depthOf(state.scope) - 1) : null;
     } else return;
     state.zoom = 1; state.pan = { x: 0, y: 0 };
     await renderCanvas();
@@ -302,6 +334,10 @@
         const c = snap.elements.find((e) => e.kind === 'container');
         if (!c) return;
         state.scope = c.id; state.level = 'L3';
+      } else if (level === 'LD') {
+        // The overview lists every environment; no scope needed (ADR-0018).
+        if (!snap.elements.some((e) => e.kind === 'environment')) return;
+        state.scope = null; state.level = 'LD';
       }
       state.zoom = 1; state.pan = { x: 0, y: 0 };
       await renderCanvas();

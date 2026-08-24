@@ -60,6 +60,9 @@ pub fn load_workspace_vfs(source: &dyn vfs::Vfs) -> (Workspace, Vec<Diagnostic>)
     for file in &manifest.model_files {
         parse::parse_model_file(source, file, &mut ws, &mut diags);
     }
+    // Instances borrow their name from the container they run, which is only
+    // knowable once every model file is in (ADR-0018).
+    parse::name_instances(&mut ws);
     for file in &manifest.view_files {
         views::parse_view_file(source, file, &mut ws, &mut diags);
     }

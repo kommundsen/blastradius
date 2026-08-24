@@ -111,6 +111,55 @@ Rules:
   one-line form (`model-service: { name: Model Service }`) is valid YAML flow
   style and encouraged for terse L3 listings.
 
+## 3b. Deployment (ADR-0018)
+
+The physical counterpart to the logical model: where the containers
+actually run. One file, `model/deployment.yaml`, holding every
+environment:
+
+```yaml
+environments:
+  dev-machine:
+    name: Developer Machine
+    description: Where the app is built and dogfooded.
+    nodes:
+      workstation:
+        name: Windows 11 Workstation
+        tech: x64
+        nodes:                          # deployment nodes nest arbitrarily
+          dev-build:
+            name: Blastradius (dev build)
+            tech: cargo tauri dev
+            instances:
+              shell: { container: blastradius.shell }
+              ui:    { container: blastradius.ui }
+    relations:
+      - from: workstation
+        to: ci.runner
+        label: push
+```
+
+- **Three kinds**: `environment` (top of a tree), `deployment-node`
+  (anything a thing runs *on* — machine, runner, service, image), and
+  `container-instance` (a modelled container actually running there).
+- **Ids are dotted, like everything else** (ADR-0003): the key is the id,
+  unique among siblings, and the full address is the path —
+  `dev-machine.workstation.dev-build.shell`. Environments are top-level
+  ids and must not collide with system or context ids.
+- `instances:` entries carry `container:`, a reference to a `container`
+  element resolved exactly like a relation endpoint. A dangling
+  reference is an error — the point of modelling deployment here rather
+  than in prose is that it cannot quietly drift.
+- `nodes:` and `instances:` may both appear on a node. `name`, `tech`,
+  `description` behave as everywhere else; an instance's `name` defaults
+  to the referenced container's name.
+- `relations:` may appear on an environment (endpoints relative to it)
+  and works like system relations. Deployment and logical elements are
+  in one id space, so a relation may cross between them.
+- **Rendering is by altitude, not containment** (ADR-0018): a
+  deployment view shows one level and dives, exactly like
+  containers → components. Nested boxes are a recorded follow-up.
+
 ## 4. Views
 
 `views/<view-id>.yaml`:
@@ -119,7 +168,9 @@ Rules:
 view: containers            # view id
 name: Containers            # optional display name
 scope: blastradius          # element whose children this view shows
-level: L2                   # L1 | L2 | L3 — which altitude this view captures
+level: L2                   # L1 | L2 | L3 | LD — which altitude this view captures
+                            # LD is a deployment view (ADR-0018); its scope is an
+                            # environment or a deployment node
 layout:                     # pinned positions — grid units (26px cells @ 1×)
   ui: [4, 2]
   core: [10, 4]

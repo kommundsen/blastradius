@@ -1,7 +1,7 @@
 // Blastradius Phase 1 frontend: read-only rendering of one workspace.
 // The Core owns truth; this file owns pixels. No write path exists here.
 
-import { computeView, findViewDef, docsFor, treeModel, rootOf, depthOf, liftTo, resolvePins, derivedGraphFor } from './data.js';
+import { computeView, findViewDef, docsFor, treeModel, rootOf, depthOf, liftTo, resolvePins, derivedGraphFor, environments } from './data.js';
 import { layoutView, GRID } from './layout.js';
 import { viewSvg, kicker, childCount } from './svg.js';
 
@@ -412,7 +412,16 @@ function nodeClass(el) {
     if (el.stale) cls += ' is-stale';
     return cls;
   }
-  const map = { person: 'is-person', system: 'is-system', container: 'is-container', component: 'is-component', external: 'is-system' };
+  const map = {
+    person: 'is-person',
+    system: 'is-system',
+    container: 'is-container',
+    component: 'is-component',
+    external: 'is-system',
+    environment: 'is-environment',
+    'deployment-node': 'is-deployment-node',
+    'container-instance': 'is-container-instance',
+  };
   let cls = 'node ' + (map[el.kind] ?? 'is-system');
   if (el.external) cls += ' is-external';
   return cls;
@@ -483,6 +492,13 @@ async function dive(id) {
     // canvas at L4 and from a tree row at any altitude.
     await glideInto(id);
     state.level = 'L4'; state.scope = id;
+  } else if (el.kind === 'environment' || el.kind === 'deployment-node') {
+    // The deployment tree dives like the logical one (ADR-0018): an
+    // environment opens its nodes, a node opens whatever runs on it.
+    // Container instances are leaves.
+    if (!state.snapshot.elements.some((e) => e.parent === id)) return;
+    await glideInto(id);
+    state.level = 'LD'; state.scope = id;
   } else {
     return;
   }
@@ -520,6 +536,11 @@ async function rise() {
     state.selected = state.scope;
     state.scope = null;
     state.level = 'L1';
+  } else if (state.level === 'LD' && state.scope) {
+    // Up the deployment tree; from an environment, out to the overview.
+    await glideOut();
+    state.selected = state.scope;
+    state.scope = depthOf(state.scope) > 1 ? liftTo(state.scope, depthOf(state.scope) - 1) : null;
   } else {
     return;
   }
@@ -640,6 +661,12 @@ async function setLevel(level) {
     if (!target) return;
     state.scope = target;
     state.selected = target;
+  }
+  if (level === 'LD') {
+    // The deployment overview needs no scope — it lists every environment
+    // (ADR-0018). Diving from there walks the tree.
+    if (!environments(effectiveSnapshot()).length) return;
+    state.scope = null;
   }
   state.level = level;
   state.zoom = 1; state.pan = { x: 0, y: 0 };
@@ -886,7 +913,7 @@ function renderBreadcrumb() {
       parts.push(...chain);
     }
   }
-  parts.push({ L1: 'Context', L2: 'Containers', L3: 'Components', L4: 'Code' }[state.level]);
+  parts.push({ L1: 'Context', L2: 'Containers', L3: 'Components', L4: 'Code', LD: 'Deployment' }[state.level]);
   if (state.level === 'L4' && derivedGraphFor(snap, state.scope)?.stale) {
     parts.push(`<span class="crumb-stale" title="The committed facts lag the source tree — run blastradius introspect">stale</span>`);
   }
@@ -900,6 +927,12 @@ function syncLevelSeg() {
     if (input.value === 'L4') {
       // Live only when the model has introspected components to jump to.
       const usable = (effectiveSnapshot().derived ?? []).length > 0;
+      input.disabled = !usable;
+      input.closest('.seg-opt').classList.toggle('is-disabled', !usable);
+    }
+    if (input.value === 'LD') {
+      // Live only when the model declares environments (ADR-0018).
+      const usable = environments(effectiveSnapshot()).length > 0;
       input.disabled = !usable;
       input.closest('.seg-opt').classList.toggle('is-disabled', !usable);
     }
@@ -930,6 +963,14 @@ function renderTree() {
         }
       }
     }
+  }
+  if (t.deployment.length) {
+    rows.push(`<span class="tree-label">Deployment</span>`);
+    const walk = (n, depth) => {
+      rows.push(treeRow(n.el, depth, depth === 0 ? '▸' : ''));
+      for (const child of n.children) walk(child, depth + 1);
+    };
+    for (const env of t.deployment) walk(env, 0);
   }
   els.tree.innerHTML = rows.join('');
   for (const btn of els.tree.querySelectorAll('.tree-row[data-id]')) {
@@ -1572,8 +1613,12 @@ function slugify(name) {
 function openCreateDialog() {
   const level = state.level;
   const kinds = level === 'L1' ? ['system', 'person', 'external']
-    : level === 'L2' ? ['container'] : ['component'];
-  const parent = level === 'L1' ? null : state.scope;
+    : level === 'L2' ? ['container']
+    // Deployment (ADR-0018): environments at the overview, and below one
+    // either more infrastructure or a container running on it.
+    : level === 'LD' ? (state.scope ? ['deployment-node', 'container-instance'] : ['environment'])
+    : ['component'];
+  const parent = level === 'L1' || (level === 'LD' && !state.scope) ? null : state.scope;
   const kindOptions = kinds.map((k) => `<option value="${k}">${k}</option>`).join('');
   openDialog({
     title: 'New element',

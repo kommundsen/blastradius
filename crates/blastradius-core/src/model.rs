@@ -21,6 +21,12 @@ pub enum ElementKind {
     System,
     Container,
     Component,
+    /// Deployment (ADR-0018): the physical side of the model. Ordinary
+    /// elements — dotted ids, relations, pins, editing — not a parallel
+    /// namespace like derived L4 code.
+    Environment,
+    DeploymentNode,
+    ContainerInstance,
 }
 
 impl ElementKind {
@@ -31,8 +37,34 @@ impl ElementKind {
             ElementKind::System => "system",
             ElementKind::Container => "container",
             ElementKind::Component => "component",
+            ElementKind::Environment => "environment",
+            ElementKind::DeploymentNode => "deployment node",
+            ElementKind::ContainerInstance => "container instance",
         }
     }
+
+    /// True for the deployment kinds — they live in `deployment.yaml` and
+    /// render in LD views rather than the L1–L3 altitudes.
+    pub fn is_deployment(self) -> bool {
+        matches!(self, ElementKind::Environment | ElementKind::DeploymentNode | ElementKind::ContainerInstance)
+    }
+}
+
+/// Key chain addressing a deployment element in `deployment.yaml`
+/// (ADR-0018). Unlike containers and components, deployment nodes nest
+/// arbitrarily, so the chain is built from the id rather than fixed per
+/// kind — but only the last segment can be an instance, so the element's
+/// own kind is enough and no tree walk is needed.
+pub fn deployment_chain(id: &str, kind: ElementKind) -> Vec<String> {
+    let segs: Vec<&str> = id.split('.').collect();
+    let mut chain = vec!["environments".to_string(), segs[0].to_string()];
+    for (i, seg) in segs.iter().enumerate().skip(1) {
+        let last = i == segs.len() - 1;
+        let section = if last && kind == ElementKind::ContainerInstance { "instances" } else { "nodes" };
+        chain.push(section.to_string());
+        chain.push((*seg).to_string());
+    }
+    chain
 }
 
 #[derive(Debug, Clone)]
@@ -46,6 +78,9 @@ pub struct Element {
     pub external: bool,
     /// `source:` mapping — components only (spec/l4-introspection.md).
     pub source: Option<SourceMapping>,
+    /// The container a `container-instance` instantiates, as written
+    /// (ADR-0018). Resolved and checked in cross-validation.
+    pub instance_of: Option<String>,
     /// Workspace-relative file that declares this element.
     pub file: String,
     pub line: u64,

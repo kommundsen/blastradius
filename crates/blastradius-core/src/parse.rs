@@ -37,6 +37,20 @@ pub fn parse_model_file(
         return;
     };
 
+    // A deployment file (ADR-0018) is its own third shape, and stands alone.
+    if let Some(envs) = map.get_node("environments") {
+        if map.get_node("people").is_some() || map.get_node("external").is_some() || map.get_node("system").is_some() {
+            diags.push(Diagnostic::error(
+                rel,
+                1,
+                "a model file declares context, one system, or deployment environments — not a mix (spec §3b)",
+            ));
+            return;
+        }
+        parse_environments(envs, rel, ws, diags);
+        return;
+    }
+
     let has_context = map.get_node("people").is_some() || map.get_node("external").is_some();
     let has_system = map.get_node("system").is_some();
     match (has_context, has_system) {
@@ -107,7 +121,7 @@ fn parse_context_section(
         let (name, tech, description) = fields(body, &id);
         register(
             ws,
-            Element { id, kind, name, tech, description, external: kind == ElementKind::External, source: None, file: rel.to_string(), line },
+            Element { id, kind, name, tech, description, external: kind == ElementKind::External, source: None, instance_of: None, file: rel.to_string(), line },
             diags,
         );
     }
@@ -134,6 +148,7 @@ fn parse_system(map: &MarkedMappingNode, rel: &str, ws: &mut Workspace, diags: &
             description: yaml::get_str(map, "description").map(str::to_string),
             external,
             source: None,
+            instance_of: None,
             file: rel.to_string(),
             line: sys_line,
         },
@@ -154,7 +169,7 @@ fn parse_system(map: &MarkedMappingNode, rel: &str, ws: &mut Workspace, diags: &
             let (name, tech, description) = fields(cbody, &cid);
             register(
                 ws,
-                Element { id: full.clone(), kind: ElementKind::Container, name, tech, description, external: false, source: None, file: rel.to_string(), line: cline },
+                Element { id: full.clone(), kind: ElementKind::Container, name, tech, description, external: false, source: None, instance_of: None, file: rel.to_string(), line: cline },
                 diags,
             );
 
@@ -172,7 +187,7 @@ fn parse_system(map: &MarkedMappingNode, rel: &str, ws: &mut Workspace, diags: &
                         let source = parse_source(kbody, rel, diags);
                         register(
                             ws,
-                            Element { id: format!("{full}.{kid}"), kind: ElementKind::Component, name, tech, description, external: false, source, file: rel.to_string(), line: kline },
+                            Element { id: format!("{full}.{kid}"), kind: ElementKind::Component, name, tech, description, external: false, source, instance_of: None, file: rel.to_string(), line: kline },
                             diags,
                         );
                     }
@@ -190,6 +205,160 @@ fn parse_system(map: &MarkedMappingNode, rel: &str, ws: &mut Workspace, diags: &
 
     if let Some(rels) = map.get_node("relations") {
         parse_relations(rels, rel, Some(&sid), None, ws, diags);
+    }
+}
+
+/// `environments:` — the deployment tree (spec §3b, ADR-0018). Environments
+/// are top-level ids; `nodes:` nests arbitrarily; `instances:` are leaves
+/// pointing at a modelled container.
+fn parse_environments(node: &Node, rel: &str, ws: &mut Workspace, diags: &mut Vec<Diagnostic>) {
+    let Node::Mapping(envs) = node else {
+        diags.push(Diagnostic::error(rel, yaml::line_of(node), "`environments:` must be a mapping of environment ids"));
+        return;
+    };
+    for (key, body) in envs.iter() {
+        let id = key.as_str().to_string();
+        let line = yaml::scalar_line(key);
+        if !is_valid_slug(&id) {
+            diags.push(Diagnostic::error(rel, line, format!("bad id {id:?} — ids are lowercase slugs (ADR-0003)")));
+            continue;
+        }
+        let (name, tech, description) = fields(body, &id);
+        register(
+            ws,
+            Element {
+                id: id.clone(),
+                kind: ElementKind::Environment,
+                name,
+                tech,
+                description,
+                external: false,
+                source: None,
+                instance_of: None,
+                file: rel.to_string(),
+                line,
+            },
+            diags,
+        );
+        if let Node::Mapping(emap) = body {
+            parse_deployment_children(emap, &id, rel, ws, diags);
+            // Environment-scoped relations, endpoints relative to it.
+            if let Some(rels) = emap.get_node("relations") {
+                parse_relations(rels, rel, Some(&id), None, ws, diags);
+            }
+        }
+    }
+}
+
+/// `nodes:` and `instances:` under an environment or a deployment node.
+fn parse_deployment_children(
+    map: &MarkedMappingNode,
+    parent: &str,
+    rel: &str,
+    ws: &mut Workspace,
+    diags: &mut Vec<Diagnostic>,
+) {
+    if let Some(Node::Mapping(nodes)) = map.get_node("nodes") {
+        for (key, body) in nodes.iter() {
+            let id = key.as_str().to_string();
+            let line = yaml::scalar_line(key);
+            if !is_valid_slug(&id) {
+                diags.push(Diagnostic::error(rel, line, format!("bad id {id:?}")));
+                continue;
+            }
+            let full = format!("{parent}.{id}");
+            let (name, tech, description) = fields(body, &id);
+            register(
+                ws,
+                Element {
+                    id: full.clone(),
+                    kind: ElementKind::DeploymentNode,
+                    name,
+                    tech,
+                    description,
+                    external: false,
+                    source: None,
+                    instance_of: None,
+                    file: rel.to_string(),
+                    line,
+                },
+                diags,
+            );
+            if let Node::Mapping(nmap) = body {
+                parse_deployment_children(nmap, &full, rel, ws, diags); // nodes nest arbitrarily
+            }
+        }
+    }
+
+    if let Some(Node::Mapping(instances)) = map.get_node("instances") {
+        for (key, body) in instances.iter() {
+            let id = key.as_str().to_string();
+            let line = yaml::scalar_line(key);
+            if !is_valid_slug(&id) {
+                diags.push(Diagnostic::error(rel, line, format!("bad id {id:?}")));
+                continue;
+            }
+            let container = match body {
+                Node::Mapping(imap) => yaml::get_str(imap, "container").map(str::to_string),
+                _ => None,
+            };
+            if container.is_none() {
+                diags.push(Diagnostic::error(
+                    rel,
+                    line,
+                    format!("instance {id:?} needs `container:` — the modelled container it runs (spec §3b)"),
+                ));
+                continue;
+            }
+            // An unnamed instance takes the container's name (spec §3b), which
+            // cannot be resolved until every file is parsed — left empty here
+            // and filled by `name_instances` before validation.
+            let named = matches!(body, Node::Mapping(m) if yaml::get_str(m, "name").is_some());
+            let (name, tech, description) = fields(body, &id);
+            let name = if named { name } else { String::new() };
+            register(
+                ws,
+                Element {
+                    id: format!("{parent}.{id}"),
+                    kind: ElementKind::ContainerInstance,
+                    name,
+                    tech,
+                    description,
+                    external: false,
+                    source: None,
+                    instance_of: container,
+                    file: rel.to_string(),
+                    line,
+                },
+                diags,
+            );
+        }
+    }
+}
+
+/// Fill in the display name of every instance that did not choose one: the
+/// container it runs (spec §3b). Runs once the whole model is parsed, since
+/// the container usually lives in another file. Falls back to the titleized
+/// id when the reference is unresolvable — validation reports that separately.
+pub fn name_instances(ws: &mut Workspace) {
+    let resolved: Vec<(String, String)> = ws
+        .elements
+        .values()
+        .filter(|el| el.name.is_empty())
+        .map(|el| {
+            let name = el
+                .instance_of
+                .as_ref()
+                .and_then(|r| ws.resolve(r, None))
+                .and_then(|target| ws.elements.get(&target).map(|c| c.name.clone()))
+                .unwrap_or_else(|| titleize(el.id.rsplit('.').next().unwrap_or(&el.id)));
+            (el.id.clone(), name)
+        })
+        .collect();
+    for (id, name) in resolved {
+        if let Some(el) = ws.elements.get_mut(&id) {
+            el.name = name;
+        }
     }
 }
 

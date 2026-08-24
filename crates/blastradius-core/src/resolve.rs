@@ -214,5 +214,7 @@ fn element_chain(el: &crate::model::Element) -> Vec<String> {
             "components".into(),
             segs[2].into(),
         ],
+        k if k.is_deployment() => crate::model::deployment_chain(&el.id, k),
+        _ => unreachable!("every kind is addressed above"),
     }
 }

@@ -4,7 +4,7 @@
   "extractor": "blastradius-extract-rust 0.3.0",
   "component": "blastradius.core.git-service",
   "root": "crates/blastradius-core/src",
-  "sourceDigest": "sha256:324d2003986c7e63bfc3f02a275e8355c5f6274c74ab187219bf88788661845d",
+  "sourceDigest": "sha256:62e7971d6296a6ece4b69d21d0b0c8ee74318ef0263fedaf2598b873c138e170",
   "elements": [
     {
       "id": "dep.git2",

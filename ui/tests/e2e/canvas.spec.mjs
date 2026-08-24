@@ -20,8 +20,9 @@ test('L1 context renders the dogfood model', async ({ page }) => {
   await expect(page.locator('#breadcrumb')).toContainText('Context');
   // the tree lists the whole model regardless of altitude: 25 authored
   // elements + 18 derived L4 rows (5 canvas modules; git-service's 2
-  // modules, 9 types and 2 dependency rollups), the latter styled as code
-  await expect(page.locator('.tree-row')).toHaveCount(43);
+  // modules, 9 types and 2 dependency rollups), the latter styled as code,
+  // + 20 deployment rows under their own root (ADR-0018)
+  await expect(page.locator('.tree-row')).toHaveCount(63);
   await expect(page.locator('.tree-row.is-derived')).toHaveCount(18);
   expect(page.errors).toEqual([]);
   await page.screenshot({ path: 'test-results/webkit-L1.png', fullPage: true });
@@ -109,6 +110,38 @@ test('L4 segment is live and jumps to an introspected component', async ({ page 
   await expect(page.locator('#breadcrumb')).toContainText('Code');
   await expect(page.locator('.node.is-derived')).not.toHaveCount(0);
   expect(page.errors).toEqual([]);
+});
+
+test('LD: dive the deployment tree down to a container instance', async ({ page }) => {
+  const node = (title) =>
+    page.locator('#nodes .node', { has: page.locator('.node-title', { hasText: title }) });
+  const ld = page.locator('#level-seg input[value="LD"]');
+  await expect(ld).toBeEnabled(); // the mock model declares environments
+  await page.locator('#level-seg .seg-opt', { hasText: 'D' }).click();
+  await expect(page.locator('#breadcrumb')).toContainText('Deployment');
+
+  // The overview lists every environment, not a containment diagram
+  // (ADR-0018): deployment dives like the logical model.
+  await expect(page.locator('.node.is-environment')).toHaveCount(3);
+  await node('Developer Machine').dblclick();
+  await expect(node('Windows 11 Workstation')).toBeVisible();
+  await node('Windows 11 Workstation').dblclick();
+  await expect(node('Terminal')).toBeVisible();
+
+  // One more step reaches the containers actually running there, named
+  // after the containers they instantiate.
+  await node('Blastradius (dev build)').dblclick();
+  await expect(page.locator('.node.is-container-instance')).toHaveCount(3);
+  await expect(node('Canvas UI')).toBeVisible();
+  await expect(node('Canvas UI').locator('.node-kicker')).toContainText('Container instance');
+  await expect(page.locator('#breadcrumb')).toContainText('Blastradius (dev build)');
+
+  // Escape climbs back out of the tree.
+  await page.locator('#canvas').click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press('Escape');
+  await expect(node('Terminal')).toBeVisible();
+  expect(page.errors).toEqual([]);
+  await page.screenshot({ path: 'test-results/webkit-LD.png', fullPage: true });
 });
 
 test('keyboard: arrows select, Escape rises', async ({ page }) => {

@@ -28,10 +28,17 @@ function render(extra = []) {
 test('renders L1 plus every defined view, with real content', () => {
   const files = render();
   const names = Object.keys(files);
-  assert.deepEqual(names, ['blastradius-L2.svg', 'blastradius-core-L3.svg', 'context-L1.svg']);
+  assert.deepEqual(names, [
+    'blastradius-L2.svg',
+    'blastradius-core-L3.svg',
+    'context-L1.svg',
+    'dev-machine-LD.svg',
+  ]);
   assert.match(files['context-L1.svg'], /BLASTRADIUS/);
   assert.match(files['blastradius-L2.svg'], /APP SHELL/);
   assert.match(files['blastradius-core-L3.svg'], /SYNC ENGINE/);
+  // Deployment renders headlessly like any other view (ADR-0018).
+  assert.match(files['dev-machine-LD.svg'], /WINDOWS 11 WORKSTATION/);
   for (const [name, svg] of Object.entries(files)) {
     assert.ok(!/NaN|undefined/.test(svg), `${name} has broken interpolation`);
     assert.match(svg, /@font-face/, `${name} missing embedded fonts`);

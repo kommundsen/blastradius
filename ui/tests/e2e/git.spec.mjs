@@ -89,10 +89,12 @@ test('history: set base recomputes, view travels and returns', async ({ page }) 
   await page.locator('.hist-row', { hasText: 'Add CLI container' }).locator('[data-view]').click();
   await expect(page.locator('.travel-banner')).toContainText('abc12345');
   await expect(page.locator('.tree-row', { hasText: 'Web UI (pre-rename)' })).toBeVisible();
-  await expect(page.locator('.tree-row', { hasText: /^CLI$/ })).toHaveCount(0);
+  // Scoped to the logical model: deployment instances borrow their
+  // container's name, so a bare name matches several rows (ADR-0018).
+  await expect(page.locator('.tree-row[data-id="blastradius.cli"]')).toHaveCount(0);
 
   await page.locator('#travel-return').click();
   await expect(page.locator('.travel-banner')).toHaveCount(0);
-  await expect(page.locator('.tree-row', { hasText: 'Canvas UI' })).toBeVisible();
+  await expect(page.locator('.tree-row[data-id="blastradius.ui"]')).toHaveText('Canvas UI');
   expect(page.errors).toEqual([]);
 });

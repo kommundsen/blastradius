@@ -128,6 +128,9 @@ fn kind_str(k: ElementKind) -> &'static str {
         ElementKind::System => "system",
         ElementKind::Container => "container",
         ElementKind::Component => "component",
+        ElementKind::Environment => "environment",
+        ElementKind::DeploymentNode => "deployment-node",
+        ElementKind::ContainerInstance => "container-instance",
     }
 }
 

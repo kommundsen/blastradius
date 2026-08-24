@@ -27,12 +27,16 @@ pub fn parse_view_file(vfs: &dyn Vfs, rel: &str, ws: &mut Workspace, diags: &mut
     };
 
     let level = yaml::get_str(map, "level").unwrap_or("").to_string();
-    if !matches!(level.as_str(), "L1" | "L2" | "L3") {
+    if !matches!(level.as_str(), "L1" | "L2" | "L3" | "LD") {
         diags.push(Diagnostic::error(
             rel,
             yaml::field_line(map, "level"),
-            format!("bad level {level:?} — expected L1, L2, or L3 (spec §4)"),
+            format!("bad level {level:?} — expected L1, L2, L3, or LD (spec §4)"),
         ));
+        // Don't hand the renderer a view it cannot compute: the workspace is
+        // already invalid, and pushing it anyway meant an unknown level
+        // reached the canvas as a silently empty scene.
+        return;
     }
 
     let mut layout = BTreeMap::new();
