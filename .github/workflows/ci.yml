@@ -56,13 +56,13 @@ jobs:
           node tools/render-views.mjs ui/mock/snapshot.json -o renders --png
           node tools/render-views.mjs ui/mock/snapshot.json -o renders/dark --theme dark --png
       - name: Upload rendered views
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: architecture-renders
           path: renders/
       - name: Upload WebKit screenshots
         if: always()
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: webkit-screenshots
           path: test-results/*.png
@@ -79,7 +79,7 @@ jobs:
       - name: Build architecture.html (Phase 4 exit criterion)
         run: cargo run -p blastradius-cli -- export docs -o architecture.html
       - name: Upload model artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: architecture-html
           path: architecture.html

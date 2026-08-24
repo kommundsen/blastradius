@@ -63,7 +63,7 @@ jobs:
           Rename-Item "upload\Blastradius_$v.zip" "Blastradius_$v.msixupload"
 
       - name: Upload packages
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: msix-packages
           path: |
