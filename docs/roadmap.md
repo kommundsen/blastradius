@@ -126,7 +126,10 @@ Dependabot flags `glib` 0.18 (RUSTSEC unsoundness in `VariantStrIter`,
 medium, Linux-only GTK path pulled in transitively by Tauri 2 / rfd). The
 fixed 0.20 line is unreachable until Tauri bumps its gtk-rs dependency —
 `cargo update` confirms no compatible newer version. Not exploitable in our
-usage; re-check when bumping Tauri for packaging.
+usage; re-check when bumping Tauri for packaging. Re-checked
+2026-08-24: still unreachable — latest Tauri (2.11.5) itself requires
+`gtk ^0.18` → `glib ^0.18`; needs a Tauri release on the gtk-rs 0.20
+line, none published.
 
 **Exit:** a platform engineer who has never seen the product reaches a
 rendered model of their own repo in under 5 minutes (PRD metric), unassisted.
