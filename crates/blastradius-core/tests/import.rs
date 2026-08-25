@@ -149,3 +149,51 @@ workspace {
     assert!(imported.files.contains_key("model/software-system.yaml"));
     import_and_validate(dsl).unwrap();
 }
+
+/// Structurizr `group` used to be flattened and discarded with a "groups are
+/// not modelled" note. Now that grouping exists (spec §3c) the label survives
+/// the round trip — while staying presentation only, so the flattening of the
+/// *structure* is unchanged.
+#[test]
+fn groups_survive_import_as_labels() {
+    let dsl = r#"
+workspace "Shop" {
+    model {
+        shop = softwareSystem "Shop" {
+            group "Storefront" {
+                web = container "Web App" "" "React"
+                bff = container "BFF" "" "Node"
+            }
+            group "Finance" {
+                ledger = container "Ledger" "" "Go"
+            }
+            ops = container "Ops" "" "Go"
+        }
+    }
+}
+"#;
+    let imported = import_dsl(dsl).unwrap();
+    let shop = &imported.files["model/shop.yaml"];
+    assert!(shop.contains("group: Storefront"), "group label must be emitted: {shop}");
+    assert!(shop.contains("group: Finance"), "{shop}");
+
+    // Presentation only: grouped containers stay siblings of the ungrouped
+    // one, at the same depth, with no group segment in any id.
+    for id in ["web-app:", "bff:", "ledger:", "ops:"] {
+        assert!(shop.contains(id), "{id} missing — grouping must not restructure: {shop}");
+    }
+    assert!(!shop.contains("storefront:"), "a group must not become an element: {shop}");
+
+    // The group closes: `ops` sits outside both blocks.
+    let ops_at = shop.find("  ops:").expect("ops container");
+    let after_ops = &shop[ops_at..];
+    assert!(!after_ops.contains("group:"), "group leaked past its block: {after_ops}");
+
+    // And it no longer reports the loss it used to.
+    assert!(
+        !imported.report.contains("groups are not modelled"),
+        "stale fidelity note: {}",
+        imported.report
+    );
+    import_and_validate(dsl).unwrap();
+}

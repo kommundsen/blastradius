@@ -173,6 +173,8 @@ struct Element {
     description: Option<String>,
     technology: Option<String>,
     external: bool,
+    /// Enclosing Structurizr `group` — presentation only (spec §3c).
+    group: Option<String>,
 }
 
 #[derive(Debug)]
@@ -208,6 +210,8 @@ struct Parser {
     used_ids: std::collections::BTreeSet<String>,
     ident_map: BTreeMap<String, String>,
     workspace_name: String,
+    /// The `group` block currently being parsed, if any (spec §3c).
+    current_group: Option<String>,
 }
 
 const SKIP_BLOCKS: &[&str] = &[
@@ -330,11 +334,19 @@ impl Parser {
         Ok(())
     }
 
-    fn note_group(&mut self, line: u64) {
+    /// Enter a Structurizr `group`. Groups are presentation, so the block is
+    /// still flattened structurally (spec §3c) — but the label now rides along
+    /// on every element inside it instead of being discarded. Returns the
+    /// previous group so the caller can restore it: groups nest.
+    fn enter_group(&mut self, _line: u64) -> Option<String> {
         let gname = self.take_strings(1).pop().unwrap_or_default();
-        self.fidelity.notes.push(format!(
-            "group {gname:?} (line {line}) flattened — groups are not modelled"
-        ));
+        let previous = self.current_group.clone();
+        let gname = gname.trim();
+        if !gname.is_empty() {
+            self.current_group = Some(gname.to_string());
+            *self.fidelity.mapped.entry("group").or_default() += 1;
+        }
+        previous
     }
 
     fn parse_element(
@@ -374,6 +386,7 @@ impl Parser {
             description,
             technology,
             external,
+            group: self.current_group.clone(),
         });
         *self.fidelity.mapped.entry(kind_name(kind)).or_default() += 1;
 
@@ -417,11 +430,12 @@ impl Parser {
                                 self.parse_element(Kind::Component, Some(w), Some(owner.to_string()), t.line)?;
                             }
                             ("group", _) => {
-                                self.note_group(t.line);
+                                let previous = self.enter_group(t.line);
                                 if matches!(self.peek().map(|x| &x.tok), Some(Tok::Open)) {
                                     self.pos += 1;
                                     self.parse_element_body(owner, owner_kind)?;
                                 }
+                                self.current_group = previous;
                             }
                             _ => {
                                 self.take_strings(8);
@@ -470,11 +484,12 @@ impl Parser {
                             self.parse_element(Kind::Component, None, Some(owner.to_string()), t.line)?;
                         }
                         "group" => {
-                            self.note_group(t.line);
+                            let previous = self.enter_group(t.line);
                             if matches!(self.peek().map(|x| &x.tok), Some(Tok::Open)) {
                                 self.pos += 1;
                                 self.parse_element_body(owner, owner_kind)?;
                             }
+                            self.current_group = previous;
                         }
                         _ => {
                             self.take_strings(8);
@@ -522,11 +537,12 @@ impl Parser {
                                 self.parse_element(Kind::System, Some(w), None, t.line)?;
                             }
                             "group" => {
-                                self.note_group(t.line);
+                                let previous = self.enter_group(t.line);
                                 if matches!(self.peek().map(|x| &x.tok), Some(Tok::Open)) {
                                     self.pos += 1;
                                     self.parse_model_body()?;
                                 }
+                                self.current_group = previous;
                             }
                             other => {
                                 self.take_strings(8);
@@ -553,11 +569,12 @@ impl Parser {
                             self.parse_element(Kind::System, None, None, t.line)?;
                         }
                         "group" => {
-                            self.note_group(t.line);
+                            let previous = self.enter_group(t.line);
                             if matches!(self.peek().map(|x| &x.tok), Some(Tok::Open)) {
                                 self.pos += 1;
                                 self.parse_model_body()?;
                             }
+                            self.current_group = previous;
                         }
                         kw if SKIP_BLOCKS.contains(&kw) => {
                             self.take_strings(8);
@@ -619,6 +636,7 @@ pub fn import_dsl(src: &str) -> Result<Import, String> {
         used_ids: Default::default(),
         ident_map: Default::default(),
         workspace_name: "Imported Workspace".to_string(),
+        current_group: None,
     };
 
     match p.next() {
@@ -805,6 +823,9 @@ fn build_output(p: Parser) -> Result<Import, String> {
                 let local = c.id.rsplit('.').next().unwrap();
                 let _ = writeln!(s, "  {local}:");
                 let _ = writeln!(s, "    name: {}", yaml(&c.name));
+                if let Some(g) = &c.group {
+                    let _ = writeln!(s, "    group: {}", yaml(g));
+                }
                 if let Some(t) = &c.technology {
                     let _ = writeln!(s, "    tech: {}", yaml(t));
                 }
@@ -823,6 +844,9 @@ fn build_output(p: Parser) -> Result<Import, String> {
                         let klocal = k.id.rsplit('.').next().unwrap();
                         let _ = writeln!(s, "      {klocal}:");
                         let _ = writeln!(s, "        name: {}", yaml(&k.name));
+                        if let Some(g) = &k.group {
+                            let _ = writeln!(s, "        group: {}", yaml(g));
+                        }
                         if let Some(t) = &k.technology {
                             let _ = writeln!(s, "        tech: {}", yaml(t));
                         }
