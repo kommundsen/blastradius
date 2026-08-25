@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "docs-site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "4173", "-d", "site"],
+      "port": 4173
+    },
+    {
+      "name": "ui-mock",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["ui/tests/serve.mjs", "4174"],
+      "port": 4174
+    }
+  ]
+}
