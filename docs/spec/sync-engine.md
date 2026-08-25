@@ -85,6 +85,15 @@ surface produced it. External edits enter history as transactions too, so
 undo-past-an-external-edit is well-defined (it reverts the file, with a
 distinct "external change" label in the history UI). Depth: 200 transactions.
 
+`apply_batch` applies several operations as one undoable unit — the MCP
+`apply_operations` tool, and the only sane way to model a repository from
+scratch. Each operation still goes through `apply` in full, so every
+intermediate state is a valid workspace and ordering matters; a refusal undoes
+what already landed and truncates the redo tail, leaving the workspace exactly
+as it was. On success the transactions coalesce into one history entry (per
+file: the first `before`, the last `after`), so a single undo takes the batch
+back.
+
 History is journaled per workspace (JSONL under the OS cache dir) and
 **replayed on open** (Phase 5): undo/redo depth survives restarts and crashes.
 Every write batch is bracketed write-ahead (`intent` … `commit`); recovery

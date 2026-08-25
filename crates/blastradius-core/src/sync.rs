@@ -374,6 +374,62 @@ impl SyncEngine {
         Ok(tx)
     }
 
+    /// Apply several operations as one undoable unit.
+    ///
+    /// Modelling a repository from scratch is dozens of creates and relations,
+    /// and one-at-a-time was slow enough that an agent reasonably chose to
+    /// write the YAML itself instead — losing validation, format preservation
+    /// and undo along with it (docs/roadmap.md, first-user findings).
+    ///
+    /// Each operation still goes through `apply` in full, so every
+    /// intermediate state is a valid workspace and ordering matters (a parent
+    /// before its children, elements before the relations between them). If
+    /// one is refused, the ones already applied are undone and the workspace
+    /// is left exactly as it was. On success the transactions coalesce into a
+    /// single history entry: one undo takes the whole batch back.
+    pub fn apply_batch(&mut self, ops: Vec<Operation>) -> Result<Transaction, String> {
+        if ops.is_empty() {
+            return Err("no operations".into());
+        }
+        // Counted rather than remembering an index: push_transaction drains
+        // the front of the history at HISTORY_DEPTH, which would move one.
+        let mut applied = 0usize;
+        let mut labels = Vec::new();
+        for (i, op) in ops.into_iter().enumerate() {
+            let label = op_label(&op);
+            if let Err(e) = self.apply(op) {
+                for _ in 0..applied {
+                    self.undo()?;
+                }
+                // Drop the rolled-back entries so they cannot be redone into
+                // a half-built model.
+                self.history.truncate(self.cursor);
+                return Err(format!("operation {} ({label}) failed: {e} — {applied} rolled back", i + 1));
+            }
+            applied += 1;
+            labels.push(label);
+        }
+        // Coalesce: per file, the first `before` and the last `after`.
+        let start = self.cursor - applied;
+        let mut merged: Vec<FileChange> = Vec::new();
+        for tx in self.history.drain(start..) {
+            for c in tx.changes {
+                match merged.iter_mut().find(|m| m.rel == c.rel) {
+                    Some(m) => m.after = c.after,
+                    None => merged.push(c),
+                }
+            }
+        }
+        let label = match labels.len() {
+            1 => labels.remove(0),
+            n => format!("{n} operations ({})", labels.first().cloned().unwrap_or_default()),
+        };
+        let tx = Transaction { label, source: "canvas".to_string(), changes: merged };
+        self.history.push(tx.clone());
+        self.cursor = self.history.len();
+        Ok(tx)
+    }
+
     /// Parse the workspace as it would look after `changes` — without writing.
     fn validate_candidate(&self, changes: &[FileChange]) -> Option<String> {
         let disk = DiskVfs::new(&self.root);

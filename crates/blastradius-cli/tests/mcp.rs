@@ -332,3 +332,124 @@ fn mcp_client_resolves_a_merge_conflict_end_to_end() {
 
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ---- the agent-facing surface (docs/roadmap.md, first-user findings) -------
+//
+// The first agent to model a repository with these tools read the model
+// through them, then wrote YAML by hand and looped on validation errors. It
+// had nothing to write against: no tool returned the format, apply_operation's
+// schema was `{"op": {"type": "object"}}`, and building a model from scratch
+// meant dozens of single calls. These three tests cover the three gaps.
+
+#[test]
+fn model_format_is_reachable_and_says_what_matters() {
+    let dir = scaffolded("format");
+    let mut s = McpServer::new(&dir);
+
+    let names: Vec<String> = call(&mut s, 1, "tools/list", json!({}))["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap().to_string())
+        .collect();
+    for expected in ["model_format", "apply_operations"] {
+        assert!(names.iter().any(|n| n == expected), "missing tool {expected}: {names:?}");
+    }
+
+    let text = tool(&mut s, "model_format", json!({})).unwrap();
+    let text = text["format"].as_str().expect("format is a string");
+    for expected in [
+        "blastradius.yaml", // the manifest
+        "immutable",        // ids never change
+        "dependency, not a data flow",
+        "container-instance",
+        "show-groups",
+        "doc: adr-0001", // the worked example is in there
+    ] {
+        assert!(text.contains(expected), "model_format never mentions {expected:?}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn apply_operation_publishes_the_shapes_it_accepts() {
+    let dir = scaffolded("schema");
+    let mut s = McpServer::new(&dir);
+    let tools = call(&mut s, 1, "tools/list", json!({}))["result"]["tools"].clone();
+    let apply = tools
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["name"] == "apply_operation")
+        .expect("apply_operation");
+
+    // Every variant of sync::Operation must be a branch a caller can see.
+    let branches = apply["inputSchema"]["properties"]["op"]["oneOf"].as_array().expect("oneOf");
+    let ops: Vec<&str> = branches.iter().map(|b| b["properties"]["op"]["const"].as_str().unwrap()).collect();
+    for expected in [
+        "create", "rename", "set-field", "delete",
+        "add-relation", "delete-relation", "set-relation-field", "pin",
+    ] {
+        assert!(ops.contains(&expected), "operation {expected} is not in the schema: {ops:?}");
+    }
+    assert_eq!(ops.len(), 8, "a variant was added to Operation without a schema branch: {ops:?}");
+
+    // And a malformed call comes back naming the shape, not just serde's
+    // "missing field".
+    let err = tool(&mut s, "apply_operation", json!({"op": {"op": "create", "id": "x"}})).unwrap_err();
+    assert!(err.contains("create"), "{err}");
+}
+
+#[test]
+fn apply_operations_builds_a_model_in_one_transaction() {
+    let dir = scaffolded("batch");
+    let mut s = McpServer::new(&dir);
+
+    let before = tool(&mut s, "workspace_summary", json!({})).unwrap();
+    let ops = json!([
+        {"op": "create", "parent": "acme-payments", "id": "ledger", "name": "Ledger", "kind": "container"},
+        {"op": "create", "parent": "acme-payments.ledger", "id": "posting", "name": "Posting", "kind": "component"},
+        {"op": "set-field", "id": "acme-payments.ledger", "field": "tech", "value": "Rust"},
+        {"op": "add-relation", "from": "acme-payments.app", "to": "acme-payments.ledger",
+         "label": "posts to", "protocol": "gRPC"},
+    ]);
+    let res = tool(&mut s, "apply_operations", json!({"ops": ops})).unwrap();
+    assert_eq!(res["operations"], json!(4));
+
+    let el = tool(&mut s, "element", json!({"id": "acme-payments.ledger"})).unwrap();
+    assert_eq!(el["tech"], "Rust");
+    assert!(tool(&mut s, "element", json!({"id": "acme-payments.ledger.posting"})).is_ok());
+
+    // One undo takes the whole batch back — not four.
+    tool(&mut s, "undo", json!({})).unwrap();
+    assert!(tool(&mut s, "element", json!({"id": "acme-payments.ledger"})).is_err());
+    let after = tool(&mut s, "workspace_summary", json!({})).unwrap();
+    assert_eq!(after["counts"], before["counts"]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_refused_operation_rolls_the_whole_batch_back() {
+    let dir = scaffolded("rollback");
+    let mut s = McpServer::new(&dir);
+    let before = tool(&mut s, "workspace_summary", json!({})).unwrap();
+
+    let err = tool(
+        &mut s,
+        "apply_operations",
+        json!({"ops": [
+            {"op": "create", "parent": "acme-payments", "id": "ledger", "name": "Ledger", "kind": "container"},
+            // Dangling target: the workspace would not validate.
+            {"op": "add-relation", "from": "acme-payments.ledger", "to": "acme-payments.nowhere"},
+        ]}),
+    )
+    .unwrap_err();
+    assert!(err.contains("operation 2"), "{err}");
+    assert!(err.contains("rolled back"), "{err}");
+
+    assert!(tool(&mut s, "element", json!({"id": "acme-payments.ledger"})).is_err());
+    let after = tool(&mut s, "workspace_summary", json!({})).unwrap();
+    assert_eq!(after["counts"], before["counts"]);
+    assert_eq!(after["errors"], json!(0));
+    let _ = std::fs::remove_dir_all(&dir);
+}

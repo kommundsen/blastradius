@@ -145,3 +145,31 @@ fn init_flags_drive_the_extras() {
     assert!(String::from_utf8_lossy(&out.stderr).contains("unknown agent"));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The primer is the only thing an agent reads before it starts editing.
+/// After the first outside use it has to do three jobs the old one did not:
+/// state the edit rule instead of preferring it, point at the schema instead
+/// of leaving it to be inferred, and teach enough C4 to model well
+/// (docs/roadmap.md, first-user findings).
+#[test]
+fn the_primer_tells_an_agent_where_the_schema_is() {
+    let dir = temp("primer");
+    setup(&dir, &SetupOptions { skills: all(), ..Default::default() });
+    let skill = std::fs::read_to_string(dir.join(".claude/skills/blastradius/SKILL.md")).unwrap();
+
+    // Where the schema lives, and that guessing is not an option.
+    assert!(skill.contains("model_format"), "{skill}");
+    assert!(skill.contains("Never guess the schema"), "{skill}");
+    // Bootstrapping without dozens of round trips.
+    assert!(skill.contains("apply_operations"), "{skill}");
+    // Modelling guidance, not just format.
+    assert!(skill.contains("dependency, not a data flow"), "{skill}");
+    assert!(skill.contains("Stop at components"), "{skill}");
+    // And what to do when the tools are missing, rather than improvising.
+    assert!(skill.contains("not available"), "{skill}");
+
+    // Every agent gets the same primer, so one check covers the others.
+    let agents_md = std::fs::read_to_string(dir.join("AGENTS.md")).unwrap();
+    assert!(agents_md.contains("model_format"), "{agents_md}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -155,13 +155,32 @@ impl McpServer {
             "validate" => Ok(self.validate()),
             "model_diff" => self.model_diff(str_arg("base")),
             "doc" => self.doc(&str_arg("id").ok_or("id is required")?),
+            "model_format" => Ok(json!({ "format": crate::format_ref::full_reference() })),
             "apply_operation" => {
                 let op = args.get("op").cloned().ok_or("op is required")?;
-                let op: Operation =
-                    serde_json::from_value(op).map_err(|e| format!("bad operation: {e}"))?;
+                let op: Operation = parse_operation(op)?;
                 let tx = self.engine.apply(op)?;
                 Ok(json!({
                     "applied": tx.label,
+                    "files": tx.changes.iter().map(|c| c.rel.clone()).collect::<Vec<_>>(),
+                    "diagnostics": self.diagnostics_json(),
+                }))
+            }
+            "apply_operations" => {
+                let list = args
+                    .get("ops")
+                    .and_then(Value::as_array)
+                    .ok_or("ops is required and must be an array")?;
+                let ops = list
+                    .iter()
+                    .enumerate()
+                    .map(|(i, v)| parse_operation(v.clone()).map_err(|e| format!("ops[{i}]: {e}")))
+                    .collect::<Result<Vec<Operation>, String>>()?;
+                let count = ops.len();
+                let tx = self.engine.apply_batch(ops)?;
+                Ok(json!({
+                    "applied": tx.label,
+                    "operations": count,
                     "files": tx.changes.iter().map(|c| c.rel.clone()).collect::<Vec<_>>(),
                     "diagnostics": self.diagnostics_json(),
                 }))
@@ -646,6 +665,16 @@ impl McpServer {
     }
 }
 
+/// serde's own message ("missing field `kind`") never says which shape was
+/// expected, which is most of what makes a malformed call hard to fix.
+fn parse_operation(v: Value) -> Result<Operation, String> {
+    let op = v.get("op").and_then(Value::as_str).unwrap_or_default().to_string();
+    serde_json::from_value(v).map_err(|e| match op.is_empty() {
+        true => format!("bad operation: {e}. Every operation needs an `op` field naming its shape — see this tool's input schema, or call model_format."),
+        false => format!("bad {op:?} operation: {e}. Check the {op:?} shape in this tool's input schema."),
+    })
+}
+
 fn unknown_element(ws: &Workspace, id: &str) -> String {
     let near: Vec<&str> = ws
         .elements
@@ -659,6 +688,74 @@ fn unknown_element(ws: &Workspace, id: &str) -> String {
     } else {
         format!("unknown element {id:?} — did you mean: {}", near.join(", "))
     }
+}
+
+/// The `Operation` enum (sync.rs) as JSON Schema, one branch per variant.
+///
+/// It used to be `{"type": "object"}` with the shapes described in prose, so
+/// every mistake surfaced as a serde error after the call. A model that can
+/// see the shapes mostly cannot make them (docs/roadmap.md, first-user
+/// findings). Kept beside the enum by the round-trip test in tests/mcp.rs.
+fn operation_schema() -> Value {
+    let variant = |op: &str, doc: &str, props: Value, required: Vec<&str>| {
+        let mut all = props.as_object().cloned().unwrap_or_default();
+        all.insert("op".into(), json!({"const": op}));
+        let mut req = vec!["op".to_string()];
+        req.extend(required.into_iter().map(str::to_string));
+        json!({"type": "object", "title": op, "description": doc,
+               "properties": all, "required": req, "additionalProperties": false})
+    };
+    let id = |doc: &str| json!({"type": "string", "description": doc});
+    json!({
+        "description": "one model operation",
+        "oneOf": [
+            variant("create", "Add an element. Omit `parent` for a top-level person, external system, or system.",
+                json!({
+                    "parent": {"type": ["string", "null"], "description": "id of the containing element; omit for top level"},
+                    "id": id("dotted id, unique and immutable — renaming later changes `name`, never this"),
+                    "name": id("human-readable label"),
+                    // Hyphenated, unlike the space-separated display names
+                    // find_elements filters on — these are the strings
+                    // compute_create matches.
+                    "kind": {"type": "string", "enum": ["person", "external", "system", "container", "component", "environment", "deployment-node", "container-instance"],
+                             "description": "must be legal inside the parent: containers in systems, components in containers, deployment-node under an environment or another node"},
+                }), vec!["id", "name", "kind"]),
+            variant("rename", "Change an element's display name. Ids never change.",
+                json!({"id": id("element id"), "name": id("new display name")}), vec!["id", "name"]),
+            variant("set-field", "Set one scalar field on an element.",
+                json!({
+                    "id": id("element id"),
+                    "field": {"type": "string", "enum": ["name", "description", "tech"]},
+                    "value": id("new value; empty string removes the field"),
+                }), vec!["id", "field", "value"]),
+            variant("delete", "Remove an element. Its relations and layout pins go in the same transaction — call blast_radius first.",
+                json!({"id": id("element id")}), vec!["id"]),
+            variant("add-relation", "Connect two elements. Direction is the dependency: from the element that depends on, to the one depended upon.",
+                json!({
+                    "from": id("source element id"), "to": id("target element id"),
+                    "label": id("what the dependency is, e.g. \"reads\", \"calls\""),
+                    "protocol": id("technology or protocol, e.g. \"JSON/HTTPS\" — rendered in brackets"),
+                }), vec!["from", "to"]),
+            variant("delete-relation", "Remove a relation. Pass `label` only when several relations share the same pair.",
+                json!({"from": id("source element id"), "to": id("target element id"), "label": id("disambiguates parallel relations")}),
+                vec!["from", "to"]),
+            variant("set-relation-field", "Set one field on an existing relation.",
+                json!({
+                    "from": id("source element id"), "to": id("target element id"),
+                    "label": id("identifies which relation, when the pair has several"),
+                    "field": {"type": "string", "enum": ["label", "protocol"]},
+                    "value": id("new value"),
+                }), vec!["from", "to", "field", "value"]),
+            variant("pin", "Place an element at fixed coordinates in one view; without a pin the layout engine decides.",
+                json!({
+                    "view": id("view id; omit for the default view at this level and scope"),
+                    "level": {"type": "string", "enum": ["L1", "L2", "L3", "LD"]},
+                    "scope": id("id of the element being looked inside; omit at L1"),
+                    "id": id("element to place"),
+                    "x": {"type": "integer"}, "y": {"type": "integer"},
+                }), vec!["level", "id", "x", "y"]),
+        ],
+    })
 }
 
 fn tool_definitions() -> Vec<Value> {
@@ -731,8 +828,22 @@ fn tool_definitions() -> Vec<Value> {
         }),
         json!({
             "name": "apply_operation",
-            "description": "Edit the model through the sync engine: a format-preserving targeted splice (comments, key order, formatting survive — never re-serialize YAML yourself). Validated before writing; refused if it would invalidate the workspace. Ops: {op: 'create', parent?, id, name, kind} | {op: 'rename', id, name} | {op: 'set-field', id, field: name|description|tech, value} | {op: 'delete', id} | {op: 'add-relation', from, to, label?, protocol?} | {op: 'delete-relation', from, to, label?} | {op: 'set-relation-field', from, to, label?, field: label|protocol, value} | {op: 'pin', view?, level, scope?, id, x, y}.",
-            "inputSchema": obj(json!({"op": {"type": "object", "description": "the operation object (see tool description)"}}), vec!["op"]),
+            "description": "Edit the model. Prefer this over writing YAML yourself: it is a targeted, format-preserving splice (comments, key order and formatting survive), it validates before writing and refuses anything that would invalidate the workspace, and it is undoable. Hand-written YAML has none of those properties. `op` is one of the shapes in the schema; `apply_operations` applies several in one transaction.",
+            "inputSchema": obj(json!({"op": operation_schema()}), vec!["op"]),
+        }),
+        json!({
+            "name": "apply_operations",
+            "description": "Apply a list of operations as one transaction — the way to build a model from scratch without dozens of round trips. Same shapes and same guarantees as apply_operation; order matters (create a parent before its children, elements before the relations between them). If any operation is refused the whole list is rolled back, so the workspace is never left half-built, and one undo reverts the lot.",
+            "inputSchema": obj(
+                json!({"ops": {"type": "array", "minItems": 1, "items": operation_schema(),
+                    "description": "operations in application order"}}),
+                vec!["ops"],
+            ),
+        }),
+        json!({
+            "name": "model_format",
+            "description": "The workspace file format, authoritative for this build: directory layout, every element kind and where it may nest, relations, views, docs frontmatter, deployment and groups, plus a complete minimal example. Read this before writing or repairing any YAML by hand — do not infer the schema from an existing file.",
+            "inputSchema": obj(json!({}), vec![]),
         }),
         json!({
             "name": "undo",

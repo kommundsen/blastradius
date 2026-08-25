@@ -162,6 +162,13 @@ fn write_mcp(agent: &str, root: &Path, rel: &str) -> Result<String, String> {
 }
 
 /// The shared primer every agent gets, in its ecosystem's native format.
+///
+/// Rewritten after the first outside use (docs/roadmap.md): the old text said
+/// to "prefer" `apply_operation` and never said what valid YAML looks like, so
+/// an agent read the model through the tools, then hand-wrote files inferred
+/// from a sample and looped on validation errors. Hand-editing is allowed —
+/// the files are the source of truth — but nothing had told it where the
+/// schema lives, and there was no way to make many edits at once.
 fn primer(rel: &str) -> String {
     let loc = if rel == "." { "this folder".to_string() } else { format!("`{rel}/`") };
     format!(
@@ -169,23 +176,49 @@ fn primer(rel: &str) -> String {
          architecture model as plain YAML (blastradius.yaml + model/ + views/),\n\
          versioned like source code.\n\
          \n\
-         When architecture is relevant:\n\
+         ## Reading the model\n\
          \n\
-         - Query the model through the `blastradius` MCP tools. Start with\n\
-         \x20 `workspace_summary`; call `blast_radius` with an element id before\n\
-         \x20 changing or deleting anything it models; `doc` returns the ADRs and\n\
-         \x20 specs governing an element.\n\
-         - Prefer the `apply_operation` tool for model edits — it splices the\n\
-         \x20 YAML in place (comments and formatting survive), validates before\n\
-         \x20 writing, and is undoable. If you edit the YAML by hand instead:\n\
-         \x20 never re-serialize or re-order keys, and run `blastradius validate\n\
-         \x20 {rel}` (or the `validate` tool) afterwards.\n\
+         Use the `blastradius` MCP tools. Start with `workspace_summary`; call\n\
+         `blast_radius` with an element id before changing or deleting anything\n\
+         it models; `doc` returns the ADRs and specs governing an element.\n\
+         \n\
+         ## Editing the model\n\
+         \n\
+         **Edit through `apply_operation`, or `apply_operations` for several\n\
+         changes at once.** Not a style preference: those tools splice the YAML\n\
+         in place so comments, key order and formatting survive, they validate\n\
+         before writing and refuse anything that would break the workspace, and\n\
+         they are undoable. Hand-written YAML has none of that, and the\n\
+         operation shapes are published in each tool's input schema.\n\
+         \n\
+         Modelling a repository from scratch is a single `apply_operations`\n\
+         call with the whole list — create parents before children, elements\n\
+         before the relations between them. It applies as one transaction: if\n\
+         any operation is refused the rest roll back, and one `undo` reverts\n\
+         the lot.\n\
+         \n\
+         **Never guess the schema from an existing file.** Call `model_format`\n\
+         (or run `blastradius format`) for the authoritative reference: every\n\
+         element kind, what may nest in what, relations, views, docs\n\
+         frontmatter, deployment, and a complete example. If you do edit YAML\n\
+         by hand, read that first, never re-serialize or re-order a file, and\n\
+         run `validate` immediately — before moving on to anything else.\n\
+         \n\
+         {practice}\n\
+         ## Keeping it honest\n\
+         \n\
          - Element ids (the YAML keys) are immutable — renaming means changing\n\
          \x20 the `name:` field only.\n\
          - Markdown docs with a `doc:` frontmatter block are part of the model;\n\
          \x20 their `elements:` links must point at real element ids.\n\
-         - Keep the model in sync with reality: when you add, remove, or rewire\n\
-         \x20 a real component, mirror it in the model in the same change.\n\
+         - When you add, remove, or rewire a real component, mirror it in the\n\
+         \x20 model in the same change.\n\
+         - Components with a `source:` mapping have derived L4 code elements\n\
+         \x20 (modules/types extracted from source). They answer in\n\
+         \x20 `find_elements`, `element`, and `blast_radius` (code-level\n\
+         \x20 fan-in), marked `derived: true` — read-only; edit the source\n\
+         \x20 instead, then run the `introspect` tool to refresh the committed\n\
+         \x20 facts. `blast_radius` on a derived id shows real code dependents.\n\
          - `git_status` and `git_conflicts` read repository state. A merge\n\
          \x20 conflict in the model resolves per element: read `git_conflicts`\n\
          \x20 (each conflicted element carries ours/theirs field values), then\n\
@@ -193,12 +226,11 @@ fn primer(rel: &str) -> String {
          \x20 — choices splice onto the chosen side (comments survive), files\n\
          \x20 are validated and staged via the user's own git, and the commit\n\
          \x20 stays the user's. Anything undecided keeps ours.\n\
-         - Components with a `source:` mapping have derived L4 code elements\n\
-         \x20 (modules/types extracted from source). They answer in\n\
-         \x20 `find_elements`, `element`, and `blast_radius` (code-level\n\
-         \x20 fan-in), marked `derived: true` — read-only; edit the source\n\
-         \x20 instead, then run the `introspect` tool to refresh the committed\n\
-         \x20 facts. `blast_radius` on a derived id shows real code dependents.\n"
+         \n\
+         If the `blastradius` MCP tools are not available, say so rather than\n\
+         working around it: `blastradius validate {rel}` and `blastradius\n\
+         format` still work from the command line.\n",
+        practice = crate::format_ref::PRACTICE.replace("# Modelling rules", "## Modelling rules"),
     )
 }
 

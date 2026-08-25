@@ -30,6 +30,13 @@ fn main() -> ExitCode {
             },
             None => usage(),
         },
+        // The schema, from the binary that enforces it. Without this the only
+        // authoritative copy lives in the Blastradius repository, which is
+        // nowhere near the user editing their own workspace.
+        Some("format") => {
+            println!("{}", blastradius_cli::format_ref::full_reference());
+            ExitCode::SUCCESS
+        }
         Some("export") => export(&args[1..]),
         Some("introspect") => introspect(&args[1..]),
         Some("init") => init(&args[1..]),
@@ -69,7 +76,7 @@ fn resolving(dir: Option<&String>, run: impl FnOnce(&str) -> ExitCode) -> ExitCo
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage:\n  blastradius init [dir] [--name <name>]\n  blastradius validate [workspace-dir] [--strict-drift]\n  blastradius diff <base-dir> <current-dir>\n  blastradius gitdiff <dir> [base-ref] [cur-ref]\n  blastradius snapshot [workspace-dir]\n  blastradius export <dir> -o <file.html> [--with-doc-bodies]\n  blastradius introspect [dir] [component-id] [--check]\n  blastradius import <workspace.dsl> <out-dir>\n  blastradius mcp [workspace-dir]"
+        "usage:\n  blastradius init [dir] [--name <name>]\n  blastradius format\n  blastradius validate [workspace-dir] [--strict-drift]\n  blastradius diff <base-dir> <current-dir>\n  blastradius gitdiff <dir> [base-ref] [cur-ref]\n  blastradius snapshot [workspace-dir]\n  blastradius export <dir> -o <file.html> [--with-doc-bodies]\n  blastradius introspect [dir] [component-id] [--check]\n  blastradius import <workspace.dsl> <out-dir>\n  blastradius mcp [workspace-dir]"
     );
     ExitCode::from(2)
 }

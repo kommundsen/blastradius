@@ -24,13 +24,38 @@ back). Capabilities: tools only.
 | `validate` | read | fresh parse from disk; PASS/FAIL + every diagnostic with file+line |
 | `model_diff` | read | semantic diff vs git ref (default: merge-base), elements/relations/layout separated |
 | `doc` | read | doc metadata + markdown body (frontmatter stripped) by doc id |
+| `model_format` | read | the workspace format, authoritative for this build: kinds and nesting, relations, views, docs frontmatter, deployment, groups, modelling rules, and a worked example |
 | `apply_operation` | write | sync-engine transaction: create / rename / set-field (name·description·tech) / delete / add-relation / delete-relation / set-relation-field / pin — validated before writing, refused if it would invalidate the workspace |
+| `apply_operations` | write | a list of the same operations as one transaction: each is applied in full, so ordering matters; any refusal rolls the batch back, and one `undo` reverts all of it |
 | `undo` / `redo` | write | the shared transaction history |
 
 Every call starts with `external_scan()` so direct file edits by the agent
 (or anyone) are picked up first — the same inbound path as the app watcher,
 echo suppression included. Unknown element ids answer with did-you-mean
 suggestions instead of bare errors.
+
+`apply_operation`'s input schema carries one `oneOf` branch per `Operation`
+variant, with the field names, enums and required keys — not a bare
+`{"op": {"type": "object"}}` with the shapes in prose, which is what it was
+through 0.5.0.
+
+### Writing for an agent that has never seen a Blastradius workspace
+
+The last three rows exist because of what the first outside user's agent
+did (docs/roadmap.md, first-user findings). It queried the model through
+these tools correctly, then hand-wrote YAML and looped on validation
+errors — not misbehaviour: files are the source of truth (ADR-0008) and
+external edits are first-class. It had nothing to write *against*.
+`spec/model-format.md` is in this repository, not the user's; no tool
+returned the format; the write tool's schema did not describe its own
+input; and building a model from scratch meant dozens of single calls, so
+writing one file was the rational choice.
+
+The same reference is served by `model_format`, printed by `blastradius
+format`, and embedded in the generated skill, from one constant in
+`format_ref.rs`. Its worked example is written to disk and validated by a
+test — an example that does not load is worse than none, being exactly
+what an agent with no other reference will imitate.
 
 ## Registration
 
