@@ -510,7 +510,26 @@ theme 1 and a 0.6.0 item both sit on it.
    cross-component import) fails a CI gate with the offending code edge
    named, and clearing it passes.
 
-3. **Reach: a non-Store install path** — publish a **portable zip** of the
+3. **Reach: a non-Store install path** — **shipped 2026-08-25**. Every
+   tag now builds portable archives for Windows (zip) and Linux
+   (tar.gz) and attaches them to a **GitHub Release**, so there is a
+   plain download URL rather than an artifact buried in a workflow run.
+   Each bundle carries both binaries, the out-of-process extractors, the
+   licence, and a README; it needs no installer and no admin rights.
+   The portable job is deliberately independent of the Store job — a
+   submission problem must not take down the only download that works on
+   a machine without the Store — and the pipeline smoke-tests the staged
+   bundle by validating this repo's own workspace with it before
+   archiving.
+   One real bug surfaced while testing it from outside the repo:
+   TypeScript introspection resolved the compiler relative to the
+   *extractor*, so a portable install — which ships no `node_modules` —
+   could never do L4 on a TypeScript project. It now falls back to the
+   repository being analysed, which is where a TypeScript codebase keeps
+   its compiler anyway.
+   *Exit met:* a staged bundle run from a directory outside the checkout
+   validates and introspects a workspace, TypeScript included.
+   The original scope: publish a **portable zip** of the
    built binaries on every tag, and a **Linux** AppImage/deb from CI. No
    signing fees, no new hardware. Prompted by a real case on 2026-08-24:
    an Intune-enrolled machine with the Store app removed had no install

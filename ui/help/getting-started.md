@@ -4,6 +4,17 @@ Blastradius reads a **workspace**: a folder of plain YAML and markdown that
 lives in your repo. There is no account, no server, and nothing to sync. If you
 delete the app, the folder is still legible text.
 
+## Getting the app
+
+On Windows the **Microsoft Store** edition installs and updates itself, and is
+the one to use where the Store is available.
+
+Where it is not — a locked-down or managed desktop with the Store removed, an
+air-gapped build box, or Linux — every release also publishes a **portable
+archive**. Unzip it and run; no installer, no admin rights, and nothing written
+outside the folder you put it in. It does not self-update, so download a newer
+archive when you want one.
+
 ## Open something in the next minute
 
 You have three ways in, from the welcome screen or the **Open** button
