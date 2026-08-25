@@ -158,7 +158,12 @@ jobs:
           # The staged C# extractor must actually run from the bundle, with
           # no SDK build and no checkout in reach. Every Store build through
           # 0.5.0 shipped without it and nothing noticed.
-          echo '{"component":"shop.backend.billing","repoRoot":"'"$GITHUB_WORKSPACE/extractors/dotnet/fixtures"'","root":"src","include":[],"exclude":[]}' \
+          #
+          # Forward slashes: GITHUB_WORKSPACE is a backslash path on Windows,
+          # and a backslash inside a JSON string is an escape sequence, so the
+          # extractor's parser rejected it (the Linux leg passed).
+          fixtures="${GITHUB_WORKSPACE//\\//}/extractors/dotnet/fixtures"
+          echo '{"component":"shop.backend.billing","repoRoot":"'"$fixtures"'","root":"src","include":[],"exclude":[]}' \
             | dotnet extractors/dotnet/BlastradiusExtract.dll \
             | grep -q '"schema"'
 

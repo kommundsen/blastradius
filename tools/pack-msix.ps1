@@ -52,7 +52,14 @@ Copy-Item $bin\blastradius-app.exe, $bin\blastradius.exe packaging\msix\dist\
 # portable archive uses, so the two packages cannot drift apart.
 node tools\stage-extractors.mjs --out packaging\msix\dist
 if ($LASTEXITCODE -ne 0) { throw 'staging extractors failed (is node on PATH?)' }
-if (-not (Test-Path packaging\msix\dist\extractors\dotnet\Program.cs)) { throw 'extractors did not stage' }
+# Check for exactly what core resolves at run time (introspect.rs
+# default_command) — the C# extractor ships published, so Program.cs is
+# deliberately not in the package.
+foreach ($entry in 'dotnet\BlastradiusExtract.dll', 'typescript\extract.mjs') {
+  if (-not (Test-Path "packaging\msix\dist\extractors\$entry")) {
+    throw "extractors did not stage: $entry is missing"
+  }
+}
 
 # the built exe must self-report the manifest's version
 $fv = (Get-Item packaging\msix\dist\blastradius-app.exe).VersionInfo.ProductVersion
