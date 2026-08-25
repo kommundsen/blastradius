@@ -434,7 +434,12 @@ set, deployment views included.
    and reaches a rendered model of their own repo in under 5 minutes,
    unassisted — result recorded in this file.
 
-## 0.5.0 — planned (2026-08-25)
+## 0.5.0 — released (2026-08-25)
+
+**Cut 2026-08-25**: all three themes shipped; version bumped across the
+three surfaces and tagged `v0.5.0`, which drives both the Store
+submission and — new in this release — the portable archives attached to
+a GitHub Release.
 
 Three themes, user-selected from a pool of five; search and the remaining
 deployment follow-ups were deliberately held for 0.6.0 to keep the Store
