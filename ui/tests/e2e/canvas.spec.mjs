@@ -151,6 +151,53 @@ test('LD: dive the deployment tree down to a container instance', async ({ page 
   expect(page.errors).toEqual([]);
 });
 
+test('groups draw boundaries behind their members, and only where asked', async ({ page }) => {
+  const node = (title) =>
+    page.locator('#nodes .node', { has: page.locator('.node-title', { hasText: title }) });
+
+  // L1 has no grouped elements and no show-groups — nothing is drawn.
+  await expect(page.locator('.group-box')).toHaveCount(0);
+
+  await node('Blastradius').dblclick();
+  // L2 has grouped elements below it but the view does not opt in (spec §3c):
+  // labelling an element must never reshape a diagram on its own.
+  await expect(page.locator('.group-box')).toHaveCount(0);
+
+  await node('Core').dblclick();
+  await expect(page.locator('#breadcrumb')).toContainText('Components');
+  const boxes = page.locator('.group-box');
+  await expect(boxes).toHaveCount(2);
+  await expect(page.locator('.group-label', { hasText: 'Model' })).toBeVisible();
+  await expect(page.locator('.group-label', { hasText: 'Interop' })).toBeVisible();
+
+  // A boundary is not a node: every count the rest of the suite pins would
+  // break if it were, and it must not swallow clicks meant for its members.
+  await expect(page.locator('#nodes .node.group-box')).toHaveCount(0);
+  await expect(boxes.first()).toHaveCSS('pointer-events', 'none');
+
+  // It encloses its members and nothing else.
+  const geom = await page.evaluate(() => {
+    const r = (el) => { const b = el.getBoundingClientRect(); return { l: b.left, t: b.top, r: b.right, b: b.bottom }; };
+    const boxes = [...document.querySelectorAll('.group-box')].map((b) => ({
+      label: b.querySelector('.group-label').textContent, ...r(b),
+    }));
+    const nodes = [...document.querySelectorAll('#nodes .node')].map((n) => ({
+      title: n.querySelector('.node-title').textContent, ...r(n),
+    }));
+    return { boxes, nodes };
+  });
+  const members = { Model: ['Model Service', 'Sync Engine'], Interop: ['Exporter', 'Structurizr Importer'] };
+  for (const box of geom.boxes) {
+    for (const n of geom.nodes) {
+      const inside = n.l >= box.l - 1 && n.r <= box.r + 1 && n.t >= box.t - 1 && n.b <= box.b + 1;
+      expect(inside, `${box.label} vs ${n.title}`).toBe(members[box.label].includes(n.title));
+    }
+  }
+
+  expect(page.errors).toEqual([]);
+  await page.screenshot({ path: 'test-results/webkit-groups.png', fullPage: true });
+});
+
 test('keyboard: arrows select, Escape rises', async ({ page }) => {
   await page.locator('#canvas').click({ position: { x: 30, y: 200 } });
   await page.keyboard.press('ArrowRight');

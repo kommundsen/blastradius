@@ -62,9 +62,11 @@ containers:
     description: The domain. Library-first — the CLI and CI attach here without a WebView.
     components:
       model-service:
+        group: Model
         name: Model Service
         description: Workspace loading, schema parse and validation, doc registry, semantic model diff (spec/model-format.md).
       sync-engine:
+        group: Model
         name: Sync Engine
         description: Arbiter between canvas, panel, and external editors; CST-preserving writes, staleness, shared undo (ADR-0008).
       git-service:
@@ -76,9 +78,11 @@ containers:
           root: crates/blastradius-core/src
           include: [git.rs, resolve.rs]
       exporter:
+        group: Interop
         name: Exporter
         description: "Self-contained HTML snapshot and SVG/PNG assembly, all headless-capable for CI (ADR-0009); the PR diff bot renders through the same pipeline."
       importer:
+        group: Interop
         name: Structurizr Importer
         description: One-way DSL import with fidelity report (ADR-0002).
       introspector:

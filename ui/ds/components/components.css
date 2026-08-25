@@ -310,6 +310,17 @@ textarea.input { min-height: 90px; resize: vertical; }
 .node.is-deployment-node  { border-radius: calc(var(--radius) * 3); }
 .node.is-container-instance { border-left-width: 3px; background: var(--color-neutral-200); }
 
+/* Group boundaries (spec §3c). Deliberately not a `.node`: a group is one
+   label over many elements, sized to its members and drawn behind them, so it
+   shares none of the node contract. */
+.group-box { position: absolute; z-index: var(--z-group);
+  border: 1px dashed var(--group-border); border-radius: calc(var(--radius) * 2);
+  background: var(--group-fill); pointer-events: none; }
+.group-label { position: absolute; top: 6px; left: 10px;
+  font-family: var(--font-body); font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-label); text-transform: uppercase;
+  color: var(--color-text-muted); }
+
 /* Git diff + validation. Every state pairs a colour with a glyph badge, so the
    model stays readable in greyscale, in print, and for colour-blind users. */
 .node-badge { position: absolute; top: -8px; right: -8px; z-index: 1;

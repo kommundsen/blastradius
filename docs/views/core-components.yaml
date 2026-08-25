@@ -5,3 +5,5 @@ name: Core Components
 scope: blastradius.core
 level: L3
 include-context: false
+# Groups (spec §3c) are opt-in per view; this one draws them.
+show-groups: true

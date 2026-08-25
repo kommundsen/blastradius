@@ -2,7 +2,7 @@
 // The Core owns truth; this file owns pixels. No write path exists here.
 
 import { computeView, findViewDef, docsFor, treeModel, rootOf, depthOf, liftTo, resolvePins, derivedGraphFor, environments } from './data.js';
-import { layoutView, GRID } from './layout.js';
+import { layoutView, GRID, groupDivs, fitGroupBoxes } from './layout.js';
 import { viewSvg, kicker, childCount } from './svg.js';
 import { HELP_PAGES, helpBody, helpLinkTarget } from './help.js';
 
@@ -300,13 +300,18 @@ async function renderCanvas({ animate = true } = {}) {
   const snap = effectiveSnapshot();
   const viewDef = findViewDef(snap, state.level, state.scope);
   const view = computeView(snap, state.level, state.scope, viewDef?.include_context ?? true);
-  const layout = await layoutView(elk, view, resolvePins(viewDef, view));
+  const layout = await layoutView(elk, view, resolvePins(viewDef, view), {
+    groups: viewDef?.show_groups ?? false,
+  });
   state.layout = layout;
 
   els.camera.classList.toggle('no-anim', !animate);
 
   // nodes
   els.nodes.textContent = '';
+  // Boundaries first: they sit behind their members (--z-group) and must not
+  // intercept clicks meant for the nodes inside them.
+  for (const box of groupDivs(layout, document)) els.nodes.appendChild(box);
   // view.nodes carry the element objects themselves — at L4 those are
   // derived elements that exist nowhere in snap.elements.
   const elById = new Map([...snap.elements, ...view.nodes].map((e) => [e.id, e]));
@@ -403,6 +408,7 @@ async function renderCanvas({ animate = true } = {}) {
     }
   }
 
+  fitGroupBoxes(els.nodes, layout);
   applyCamera();
   renderBreadcrumb();
   syncLevelSeg();

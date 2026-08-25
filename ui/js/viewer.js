@@ -9,7 +9,7 @@
 
 /* global SNAPSHOT, INCLUDE_DOC_BODIES, ELK, marked,
    computeView, findViewDef, resolvePins, docsFor, treeModel, rootOf, depthOf, liftTo,
-   layoutView, GRID */
+   layoutView, groupDivs, fitGroupBoxes, GRID */
 
 (() => {
   const state = {
@@ -76,11 +76,14 @@
   async function renderCanvas() {
     const view = computeView(snap, state.level, state.scope);
     const viewDef = findViewDef(snap, state.level, state.scope);
-    const layout = await layoutView(elk, view, resolvePins(viewDef, view));
+    const layout = await layoutView(elk, view, resolvePins(viewDef, view), {
+      groups: viewDef?.show_groups ?? false,
+    });
     state.layout = layout;
 
     const nodes = $('nodes');
     nodes.textContent = '';
+    for (const box of groupDivs(layout, document)) nodes.appendChild(box);
     const elById = new Map(snap.elements.map((e) => [e.id, e]));
     for (const n of layout.nodes) {
       const el = elById.get(n.id);
@@ -122,6 +125,7 @@
         edges.appendChild(text);
       }
     }
+    fitGroupBoxes(nodes, layout);
     applyCamera();
     renderCrumb();
     syncSeg();

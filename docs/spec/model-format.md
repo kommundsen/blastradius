@@ -137,6 +137,17 @@ containers:
   with a "groups are not modelled" diagnostic — grouped workspaces now import
   with their grouping intact.
 
+**How a boundary is placed.** A group whose members are all auto-laid becomes a
+real ELK compound, so the members are laid out *together* and ELK sizes the
+box. A group holding a pinned member cannot be — pinned nodes never enter the
+ELK graph — so its boundary is a box drawn round the finished geometry
+instead: the user has taken manual control of where those nodes sit, and the
+boundary follows rather than overrides. In the canvas the drawn box is then
+grown to cover its members' real rendered heights, because a `.node` is
+content-sized and a long name wraps taller than layout's per-kind estimate;
+the SVG path needs no such correction, since there nodes and boundaries use
+the same numbers.
+
 ## 3b. Deployment (ADR-0018)
 
 The physical counterpart to the logical model: where the containers

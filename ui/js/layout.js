@@ -50,16 +50,35 @@ const LAYOUT_OPTIONS = {
  * construction. The spec's softer "interactive hints" refinement arrives with
  * editing (Phase 3), when pins become writable.
  *
- * Returns { nodes: [{id, x, y, width, height}], edges: [{from, to, points, label, labelAt, direction, exact}] }.
+ * Returns { nodes: [{id, x, y, width, height}], edges: [{from, to, points, label, labelAt, direction, exact}],
+ * groups: [{id, label, x, y, width, height, members}] }.
  */
-export async function layoutView(elk, view, pins = {}) {
+export async function layoutView(elk, view, pins = {}, options = {}) {
   const pinned = view.nodes.filter((n) => pins[n.id]);
   const unpinned = view.nodes.filter((n) => !pins[n.id]);
 
+  // Groups that ELK can lay out as real compounds: every member unpinned.
+  // A group with a pinned member cannot be one — pinned nodes never enter the
+  // ELK graph — so it falls back to a box drawn round the finished geometry.
+  const compoundGroups = options.groups ? compoundable(unpinned, pins, view) : new Map();
+
+  const inCompound = new Set([...compoundGroups.values()].flat().map((el) => el.id));
   const graph = {
     id: 'root',
-    layoutOptions: LAYOUT_OPTIONS,
-    children: unpinned.map((el) => ({ id: el.id, ...nodeSize(el) })),
+    layoutOptions: {
+      ...LAYOUT_OPTIONS,
+      ...(compoundGroups.size ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' } : {}),
+    },
+    children: [
+      ...unpinned.filter((el) => !inCompound.has(el.id)).map((el) => ({ id: el.id, ...nodeSize(el) })),
+      ...[...compoundGroups.entries()].map(([label, members]) => ({
+        id: groupId(label),
+        layoutOptions: {
+          'elk.padding': `[top=${GROUP_PAD.top},left=${GROUP_PAD.side},bottom=${GROUP_PAD.bottom},right=${GROUP_PAD.side}]`,
+        },
+        children: members.map((el) => ({ id: el.id, ...nodeSize(el) })),
+      })),
+    ],
     edges: view.edges
       .filter((e) => !pins[e.from] && !pins[e.to])
       .map((e, i) => ({ id: 'e' + i, sources: [e.from], targets: [e.to] })),
@@ -85,13 +104,26 @@ export async function layoutView(elk, view, pins = {}) {
     ? Math.ceil((pinnedMaxY + GRID * 2) / GRID) * GRID
     : GRID;
   const offsetX = GRID;
-  const autoPos = new Map();
-  for (const child of laid.children ?? []) {
-    const x = child.x + offsetX;
-    const y = child.y + offsetY;
-    autoPos.set(child.id, { x, y });
-    nodes.push({ id: child.id, x, y, width: child.width, height: child.height });
-  }
+  // ELK reports compound children *relative to their parent*, so the tree is
+  // walked and absolutised. `origins` keeps each container's absolute origin,
+  // which the edge sections below also need — a section is relative to its
+  // own `container`, not to root.
+  const origins = new Map([['root', { x: offsetX, y: offsetY }]]);
+  const laidGroups = [];
+  const absorb = (children, ox, oy) => {
+    for (const child of children ?? []) {
+      const x = child.x + ox;
+      const y = child.y + oy;
+      origins.set(child.id, { x, y });
+      if (child.children?.length) {
+        laidGroups.push({ id: child.id, x, y, width: child.width, height: child.height });
+        absorb(child.children, x, y);
+      } else {
+        nodes.push({ id: child.id, x, y, width: child.width, height: child.height });
+      }
+    }
+  };
+  absorb(laid.children, offsetX, offsetY);
 
   const nodeAt = new Map(nodes.map((n) => [n.id, n]));
 
@@ -118,8 +150,11 @@ export async function layoutView(elk, view, pins = {}) {
   for (const edge of laid.edges ?? []) {
     const sec = edge.sections?.[0];
     if (!sec) continue;
+    // Sections are relative to the edge's container, which is root for
+    // cross-group edges but the group itself for edges wholly inside one.
+    const o = origins.get(edge.container ?? 'root') ?? origins.get('root');
     const pts = [sec.startPoint, ...(sec.bendPoints ?? []), sec.endPoint].map(
-      (p) => ({ x: p.x + offsetX, y: p.y + offsetY })
+      (p) => ({ x: p.x + o.x, y: p.y + o.y })
     );
     elkEdges.set(edge.sources[0] + '|' + edge.targets[0], pts);
   }
@@ -132,13 +167,147 @@ export async function layoutView(elk, view, pins = {}) {
     }
   }
 
-  routeEdges(edges, nodes);
-  placeLabels(edges, nodes);
+  // Groups are computed from the finished geometry, so a group holds pinned
+  // and auto-laid members alike (spec §3c). They are *not* nodes: every
+  // consumer assumes a node is one element, one opaque content-sized box, and
+  // a boundary is none of those.
+  const groups = options.groups ? collectGroups(view, nodes, laidGroups) : [];
 
-  const width = Math.max(pinnedMaxX, ...nodes.map((n) => n.x + n.width), 0) + GRID;
-  const height = Math.max(...nodes.map((n) => n.y + n.height), 0) + GRID;
-  return { nodes, edges, width, height };
+  routeEdges(edges, nodes);
+  placeLabels(edges, nodes, groups);
+
+  const extents = [...nodes, ...groups];
+  const width = Math.max(pinnedMaxX, ...extents.map((n) => n.x + n.width), 0) + GRID;
+  const height = Math.max(...extents.map((n) => n.y + n.height), 0) + GRID;
+  return { nodes, edges, groups, width, height };
 }
+
+/**
+ * DOM for the group boundaries of a layout. Shared by the app and the exported
+ * viewer so the two cannot drift. Deliberately not `.node`: a group is one
+ * label over many elements, sized to its members, drawn behind them, and
+ * inert to pointer events — none of the node contract applies.
+ */
+export function groupDivs(layout, doc) {
+  return (layout.groups ?? []).map((g) => {
+    const div = doc.createElement('div');
+    div.className = 'group-box';
+    div.dataset.group = g.label;
+    div.style.cssText =
+      `left:${g.x}px;top:${g.y}px;width:${g.width}px;height:${g.height}px`;
+    const label = doc.createElement('span');
+    label.className = 'group-label';
+    label.textContent = g.label;
+    div.appendChild(label);
+    return div;
+  });
+}
+
+export const groupId = (label) => `group:${label}`;
+
+/**
+ * Grow each rendered boundary to cover its members' *actual* boxes.
+ *
+ * Layout sizes nodes from per-kind estimates, but a `.node` in the DOM is
+ * content-sized: a long name wraps and the real box is taller. That mismatch
+ * predates groups and is harmless until something has to enclose a node — so
+ * the boundary is measured against the DOM once the members exist. The SVG
+ * path needs none of this: there, nodes and boundaries both use the layout
+ * numbers, so they agree by construction.
+ */
+export function fitGroupBoxes(container, layout) {
+  const byId = new Map(
+    [...container.querySelectorAll('[data-id]')].map((n) => [n.dataset.id, n])
+  );
+  for (const g of layout.groups ?? []) {
+    const box = [...container.querySelectorAll('.group-box')].find(
+      (b) => b.dataset.group === g.label
+    );
+    if (!box) continue;
+    const members = g.members.map((id) => byId.get(id)).filter(Boolean);
+    if (!members.length) continue;
+    const l = Math.max(0, Math.min(g.x, ...members.map((n) => n.offsetLeft - GROUP_PAD.side)));
+    const t = Math.max(0, Math.min(g.y, ...members.map((n) => n.offsetTop - GROUP_PAD.top)));
+    const r = Math.max(g.x + g.width, ...members.map((n) => n.offsetLeft + n.offsetWidth + GROUP_PAD.side));
+    const b = Math.max(g.y + g.height, ...members.map((n) => n.offsetTop + n.offsetHeight + GROUP_PAD.bottom));
+    box.style.cssText = `left:${l}px;top:${t}px;width:${r - l}px;height:${b - t}px`;
+  }
+}
+
+/** Padding between a group's boundary and its members; `top` leaves room for
+ * the label strip. */
+const GROUP_PAD = { top: 28, side: 14, bottom: 14 };
+
+/**
+ * Groups ELK can lay out as real compound nodes: every member present and
+ * unpinned. Returned in label order so the graph is deterministic (ADR-0006).
+ *
+ * A group with any pinned member is excluded on purpose. Pinned nodes never
+ * enter the ELK graph, so a compound could not hold one — and a user who has
+ * pinned a member has taken manual control of where it sits, which a box drawn
+ * round the result should respect rather than override.
+ */
+function compoundable(unpinned, pins, view) {
+  const free = new Map(unpinned.map((el) => [el.id, el]));
+  const byLabel = new Map();
+  for (const el of view.nodes) {
+    if (!el.group) continue;
+    if (!byLabel.has(el.group)) byLabel.set(el.group, []);
+    byLabel.get(el.group).push(el);
+  }
+  const out = new Map();
+  for (const label of [...byLabel.keys()].sort((a, b) => a.localeCompare(b))) {
+    const members = byLabel.get(label);
+    if (members.every((m) => free.has(m.id))) {
+      out.set(label, members.map((m) => free.get(m.id)));
+    }
+  }
+  return out;
+}
+
+/**
+ * The boundaries to draw: ELK's own compound rectangles where it laid one out,
+ * and a bounding box round the members otherwise (a group holding a pinned
+ * node). Either way a group is *not* a node — every consumer assumes a node is
+ * one element, one opaque content-sized box, and a boundary is none of those.
+ */
+function collectGroups(view, nodes, laidGroups) {
+  const nodeAt = new Map(nodes.map((n) => [n.id, n]));
+  const laidAt = new Map(laidGroups.map((g) => [g.id, g]));
+  const byLabel = new Map();
+  for (const el of view.nodes) {
+    if (!el.group || !nodeAt.has(el.id)) continue;
+    if (!byLabel.has(el.group)) byLabel.set(el.group, []);
+    byLabel.get(el.group).push(nodeAt.get(el.id));
+  }
+  return [...byLabel.keys()]
+    .sort((a, b) => a.localeCompare(b))
+    .map((label) => {
+      const members = byLabel.get(label);
+      const laid = laidAt.get(groupId(label));
+      const rect = laid ?? bboxOf(members);
+      return {
+        id: groupId(label),
+        label,
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        members: members.map((m) => m.id).sort(),
+      };
+    });
+}
+
+/** Clamped at the canvas origin: a member pinned at [0,0] would otherwise push
+ * its boundary off-canvas. */
+function bboxOf(members) {
+  const x = Math.max(0, Math.min(...members.map((m) => m.x)) - GROUP_PAD.side);
+  const y = Math.max(0, Math.min(...members.map((m) => m.y)) - GROUP_PAD.top);
+  const right = Math.max(...members.map((m) => m.x + m.width)) + GROUP_PAD.side;
+  const bottom = Math.max(...members.map((m) => m.y + m.height)) + GROUP_PAD.bottom;
+  return { x, y, width: right - x, height: bottom - y };
+}
+
 
 // ---- obstacle-avoiding edge routing (0.2.0, docs/roadmap.md theme 1) --------
 // Edges touching pinned nodes bypass ELK (straight lines), and ELK's own
@@ -241,9 +410,15 @@ function findDetour(from, to, obstacles) {
  * whose text box clears every node and every already-placed label; when no
  * spot is fully clear (very short edges), take the least-bad one. Pure and
  * deterministic — candidate order and edge order are fixed. */
-function placeLabels(edges, nodes) {
+function placeLabels(edges, nodes, groups = []) {
   const placed = [];
-  const boxes = nodes.map((n) => ({ x: n.x, y: n.y, w: n.width, h: n.height }));
+  // Only a group's *label strip* is an obstacle, never its interior: the
+  // interior is where its members and their edges live, and treating the whole
+  // rect as occupied would stampede every intra-group label out of the box.
+  const boxes = [
+    ...nodes.map((n) => ({ x: n.x, y: n.y, w: n.width, h: n.height })),
+    ...groups.map((g) => ({ x: g.x, y: g.y, w: g.width, h: GROUP_PAD.top })),
+  ];
   const overlap = (a, b) => {
     const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
     const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);

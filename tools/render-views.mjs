@@ -110,6 +110,8 @@ function palette(theme) {
     external: pick('--node-external'),
     edge: pick('--edge-stroke'),
     key: pick('--code-key'),
+    groupBorder: pick('--group-border'),
+    groupFill: pick('--group-fill'),
   };
 }
 
@@ -146,7 +148,9 @@ const rendered = [];
 for (const t of targets) {
   const view = computeView(snapshot, t.level, t.scope);
   const def = findViewDef(snapshot, t.level, t.scope);
-  const layout = await layoutView(new ELK(), view, resolvePins(def, view));
+  const layout = await layoutView(new ELK(), view, resolvePins(def, view), {
+    groups: def?.show_groups ?? false,
+  });
   const svg = viewSvg({ layout, elements: snapshot.elements, colors, fontCss: fonts, footer });
   const file = join(outDir, `${t.name}.svg`);
   writeFileSync(file, svg);

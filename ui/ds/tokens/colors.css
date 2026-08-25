@@ -55,6 +55,10 @@
   --node-fill: var(--color-neutral-100);
   --node-fill-active: var(--color-accent-100);
   --node-external: var(--color-neutral-600);
+  /* Group boundaries (spec §3c): context behind the diagram, never competing
+     with a node for attention. */
+  --group-border: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  --group-fill: color-mix(in srgb, var(--color-accent) 6%, transparent);
   --edge-stroke: var(--color-accent-line);
   --edge-stroke-secondary: color-mix(in srgb, var(--color-accent) 80%, transparent);  /* 3.3:1 — the dash carries the distinction, not fading below the graphic threshold */
   --code-bg: var(--color-neutral-100);
@@ -88,6 +92,8 @@
   --color-success: #3f7350; --color-success-tint: #e6f0e9;
   --node-fill: var(--color-neutral-100);
   --node-external: var(--color-neutral-600);
+  --group-border: color-mix(in srgb, var(--color-accent) 40%, transparent);
+  --group-fill: color-mix(in srgb, var(--color-accent) 6%, transparent);
   --code-bg: var(--color-neutral-100);
   --code-comment: var(--color-neutral-700);
   --code-highlight: var(--color-accent-100);
@@ -121,6 +127,8 @@
   --canvas-dot: color-mix(in srgb, var(--color-accent) 22%, transparent);
   --node-fill: #22303f; --node-fill-active: #2c455d;
   --node-external: var(--color-neutral-600);
+  --group-border: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  --group-fill: color-mix(in srgb, var(--color-accent) 9%, transparent);
   --code-bg: #181a1b; --code-comment: var(--color-neutral-700);
   --code-highlight: color-mix(in srgb, var(--color-accent) 14%, transparent);
 
