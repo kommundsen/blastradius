@@ -4,7 +4,7 @@
   "extractor": "blastradius-extract-ts 0.2.0",
   "component": "blastradius.ui.canvas",
   "root": "ui/js",
-  "sourceDigest": "sha256:86bff2a846e6f377a5daf45720a323feabf5ccb5404db42e0d4d9b104617de95",
+  "sourceDigest": "sha256:193fa098f526f26e9d50fd713ba56ad66de9c796d4da819b51cf1e8c9540c45b",
   "elements": [
     {
       "id": "app",
@@ -23,6 +23,12 @@
       "kind": "module",
       "name": "help.js",
       "path": "ui/js/help.js"
+    },
+    {
+      "id": "labels",
+      "kind": "module",
+      "name": "labels.js",
+      "path": "ui/js/labels.js"
     },
     {
       "id": "layout",
@@ -56,12 +62,27 @@
     },
     {
       "from": "app",
+      "to": "labels",
+      "kind": "imports"
+    },
+    {
+      "from": "app",
       "to": "layout",
       "kind": "imports"
     },
     {
       "from": "app",
       "to": "svg",
+      "kind": "imports"
+    },
+    {
+      "from": "layout",
+      "to": "labels",
+      "kind": "imports"
+    },
+    {
+      "from": "svg",
+      "to": "labels",
       "kind": "imports"
     },
     {

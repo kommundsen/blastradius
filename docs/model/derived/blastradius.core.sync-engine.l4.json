@@ -4,7 +4,7 @@
   "extractor": "blastradius-extract-rust 0.3.0",
   "component": "blastradius.core.sync-engine",
   "root": "crates/blastradius-core/src",
-  "sourceDigest": "sha256:9cc048d15bd77d384cd31025f785bed4cc3f15a8c69774d061a92e59723b90cb",
+  "sourceDigest": "sha256:14f76158e73da2600e74bd3a1b3f39fff2462ebb72d533cd661f9addc5411a7c",
   "elements": [
     {
       "id": "dep.marked_yaml",
@@ -52,7 +52,7 @@
       "name": "JournalEvent",
       "parent": "sync",
       "path": "crates/blastradius-core/src/sync.rs",
-      "line": 1117
+      "line": 1173
     },
     {
       "id": "sync.Operation",

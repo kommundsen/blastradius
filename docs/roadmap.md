@@ -569,11 +569,29 @@ theme 1 and a 0.6.0 item both sit on it.
 a published Store build; and arm64's first real-hardware exposure, whose
 first test remains Store certification.
 
-## First-user findings (2026-08-25) — fixes before the next test
+## First-user findings (2026-08-25) — **all five fixed**, 2026-08-25
 
 Five issues from the first person to use Blastradius without the owner
-driving. Ordered by what most damages a first run. Four have confirmed root
-causes; one needs a decision.
+driving. Every one is now fixed, with the root cause and the guard recorded
+below; two of them turned out to be worse than reported.
+
+| # | Reported as | Actually | Fixed by |
+| --- | --- | --- | --- |
+| 1 | "unable to run C# introspection" | no Store build has ever shipped `extractors/`, so C# *and* TypeScript were impossible on every installed copy | `b4753eb` |
+| 2 | "the skill guessed the schema" | the schema was unreachable, the write tool under-specified, and no bulk path existed | `e32e07f` |
+| 3 | "help stays on help" | `select()` cleared everything but `state.help` | `2ee1909` |
+| 4 | "the first dialog should just open a folder" | and a folder with no workspace was an error, not an offer | `f555a6a` |
+| 5 | "show protocol as a tag" | C4 brackets — and the SVG export was silently dropping protocols | `bd6720c` |
+
+Two decisions taken along the way. The C# extractor now ships **published**
+rather than as a project: an install directory is read-only, so `dotnet run`
+could not have worked there even once the source was staged, and publishing
+drops the requirement from an SDK plus a first-run NuGet restore to the
+runtime alone. And the bracket convention applies to **elements as well as
+relations** (`[Container: Rust]`, owner decision) — it restyles every node in
+the product, and looks better for it.
+
+What follows is the plan as it was written, kept for the reasoning.
 
 ### 1. The Store build cannot introspect TypeScript or C# at all
 
@@ -712,10 +730,10 @@ rather than today's `calls · JSON/HTTPS`.
 - Apply the bracket form in all three surfaces that draw edges — the canvas,
   `svg.js` (export and headless render), and `viewer.js` — which currently
   disagree with each other.
-- Open question, deliberately not decided: elements. Classic C4 renders
-  `[Container: Rust]`; ours shows a kicker reading `CONTAINER · RUST`. The
-  same convention would apply, but it restyles every node in the product, so
-  it wants a look before it is done.
+- ~~Open question, deliberately not decided: elements.~~ **Decided
+  2026-08-25** (owner): apply it there too. Classic C4 renders
+  `[Container: Rust]` where ours showed a kicker reading `CONTAINER · RUST`.
+  It restyles every node in the product, which is the point.
 - No schema change: `protocol` already exists on relations. A free-form
   `tags:` list is a separate, larger question and is not part of this.
 
@@ -725,6 +743,20 @@ rather than today's `calls · JSON/HTTPS`.
 tester giving up, and neither is visible in a checkout. 3 is minutes. 4 is
 the largest and the most valuable to a newcomer. 5 after the interpretation
 is settled, with the export bug fixed immediately either way.
+
+### What still needs a real machine
+
+Everything above is covered by tests, but two of these bugs existed
+*because* a checkout cannot see them, and the same is true of their fixes:
+
+- **Install the packaged build and run `introspect` on a C# repository.**
+  The published-extractor path, the read-only install directory, and the
+  runtime-not-SDK claim are all only truly exercised there. The release
+  smoke test pipes a fixture through the staged extractor, which catches a
+  missing payload but not a Windows-install quirk.
+- **Point the installed app at a repository with no workspace**, take the
+  offer, and follow the prompt through to a model — the 5-minute-stranger
+  run, which is now a much shorter path than it was.
 
 ## 0.6.0 — candidate pool (2026-08-25)
 

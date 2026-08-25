@@ -19,11 +19,12 @@ test('L1 context renders the dogfood model', async ({ page }) => {
   await expect(page.locator('.node.is-external')).toHaveCount(4);
   await expect(page.locator('#breadcrumb')).toContainText('Context');
   // the tree lists the whole model regardless of altitude: 25 authored
-  // elements + 48 derived L4 rows (four introspected components now that
-  // model-service and sync-engine are mapped for drift detection, ADR-0019),
+  // elements + 49 derived L4 rows (four introspected components now that
+  // model-service and sync-engine are mapped for drift detection, ADR-0019;
+  // the 49th is ui/js/labels.js, added with the C4 bracket rendering),
   // + 20 deployment rows under their own root (ADR-0018)
-  await expect(page.locator('.tree-row')).toHaveCount(93);
-  await expect(page.locator('.tree-row.is-derived')).toHaveCount(48);
+  await expect(page.locator('.tree-row')).toHaveCount(94);
+  await expect(page.locator('.tree-row.is-derived')).toHaveCount(49);
   expect(page.errors).toEqual([]);
   await page.screenshot({ path: 'test-results/webkit-L1.png', fullPage: true });
 });
