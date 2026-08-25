@@ -569,6 +569,135 @@ theme 1 and a 0.6.0 item both sit on it.
 a published Store build; and arm64's first real-hardware exposure, whose
 first test remains Store certification.
 
+## First-user findings (2026-08-25) — fixes before the next test
+
+Five issues from the first person to use Blastradius without the owner
+driving. Ordered by what most damages a first run. Four have confirmed root
+causes; one needs a decision.
+
+### 1. The Store build cannot introspect TypeScript or C# at all
+
+**Worst of the five, and reported only as "C# introspection didn't work".**
+`tools/pack-msix.ps1` stages exactly two files into the package — the app and
+the CLI — so there is no `extractors/` directory beside the installed binary.
+Core looks for `current_exe()/../extractors`, then `<repo-root>/extractors`;
+on an installed machine neither exists, so every C# **and TypeScript**
+mapping fails with "no csharp extractor found". Only Rust works, because it
+is compiled into core.
+
+The 0.5.0 portable archive already ships the extractors — this is specific
+to the MSIX, and it has been true of every Store build ever published.
+
+- Stage `extractors/` into the package in `pack-msix.ps1` (minus
+  `node_modules`, `bin`, `obj`, `fixtures` — the same filter
+  `tools/stage-portable.mjs` already applies; factor it so the two cannot
+  drift). Note `Remove-Item packaging\msix\dist\*` needs `-Recurse` once the
+  staged tree contains directories.
+- Make the failure legible when it does happen: the error should say the
+  language needs an extractor, where it looked, and that Rust needs none.
+- Two runtime prerequisites remain, and should be named in the error rather
+  than discovered: TypeScript needs Node, C# needs a .NET SDK and a first-run
+  NuGet restore of `Microsoft.CodeAnalysis`. On a locked-down machine that
+  restore is itself a failure mode.
+- Verify by installing the package and running `introspect` on a C# repo —
+  the only way to catch this class of bug, since it cannot reproduce in a
+  checkout.
+
+### 2. The agent skill guessed the schema instead of using MCP
+
+Reported: the skill asked for a sample file, inferred the schema from it, and
+then looped fixing validation errors. The instructions do tell the agent to
+use the MCP tools first, so the likely cause is that **the tools were not
+there** — and nothing told the agent that, so it improvised.
+
+Two plausible reasons, and the fix should cover both:
+
+- `blastradius init` writes `{"command": "blastradius"}` into `.mcp.json`,
+  which only resolves if the CLI is on PATH. The MSIX declares an execution
+  alias so a Store install is fine, but a **portable install is not**.
+  → Write the absolute path of the running executable
+  (`std::env::current_exe()`) when the bare name does not resolve.
+- Claude Code requires the user to approve a project-scoped `.mcp.json`
+  before its tools appear. An unapproved server looks exactly like no server.
+  → `init` should end by saying what remains to be done, in order.
+
+Then make the failure loud rather than silent:
+
+- **Harden the skill**: if the `blastradius` tools are unavailable, stop and
+  say so — never infer the schema from a sample file. That single instruction
+  turns this failure from an error-loop into one clear sentence.
+- Point at the real reference: the schema is `spec/model-format.md`, and
+  `blastradius validate` is the check. Guessing was never necessary.
+- Have `init` verify the server actually starts (spawn it, expect an MCP
+  handshake, report the result) rather than only writing config that may not
+  work.
+
+### 3. Help is a dead end
+
+`select()` clears `state.doc` and `state.selectedRel` but not `state.help`,
+and `renderSide()` tests help first — so once help is open, clicking an
+element changes the selection on the canvas while the panel keeps showing
+help. Reported exactly as "no way to switch back".
+
+- Clear `state.help` in `select()` and `selectRelation()`: choosing something
+  in the model is an unambiguous request to inspect it.
+- Keep the Help button a toggle, so there is also a deliberate way out.
+- e2e: click an element while help is open and assert the inspector returns.
+
+### 4. Opening a folder should lead somewhere, not error
+
+Today the welcome screen offers three routes (open / new / demo), and opening
+a folder that is not a workspace falls through to an error naming the folder.
+For someone pointing the app at their own repo for the first time, that is
+the whole experience.
+
+- **One primary action**: open a folder or repository. (Owner asked for this
+  explicitly; the demo and "new workspace" routes need a decision — keep them
+  as secondary, or drop them. The e2e onboarding spec asserts all three
+  today.)
+- On open, **detect** rather than fail: a workspace here → open it; one
+  below → open that; several → pick; **none → offer to initialise**.
+- The offer should be the useful one: scaffold the workspace *and* register
+  the agent skills and MCP server, since that is what makes the next step
+  work.
+- On success, show **a sample prompt to paste into the agent** — the thing
+  that turns an empty workspace into a model. Something like: *"Read this
+  repository and model its architecture in the Blastradius workspace at
+  docs/ — use the blastradius MCP tools, and validate when you're done."*
+- This needs a runtime command for "initialise here with agents", which the
+  CLI already has (`init --agents …`); the app currently exposes only
+  `workspace_init`, which does not do the agent half.
+
+### 5. Relations should carry protocol/tech as a visible tag
+
+Interpretation needed before building. What exists today: a relation has
+`label` and `protocol`; the canvas draws `label · protocol` as one muted
+string; the inspector edits both as plain text fields. There is no `tech`.
+
+**A real bug found while checking**: `ui/js/svg.js` renders
+`e.label ?? e.protocol` — so an exported SVG or PNG shows the label *or* the
+protocol, never both. Any relation with both loses its protocol in every
+exported diagram, while the in-app canvas shows it. Worth fixing regardless
+of the wider question.
+
+Options for the feature itself:
+
+- **Render protocol as a tag** — a distinct chip on the edge and in the
+  inspector rather than text appended after a separator. Smallest change,
+  matches "show optional tags".
+- **Add a `tags:` list to relations** — free-form labels, rendered as chips.
+  More expressive, a schema addition (spec §3, snapshot, sync engine).
+- **Add `tech:` to relations** — mirrors elements, but overlaps `protocol`
+  almost entirely; likely the wrong answer unless they mean something
+  distinct from protocol.
+
+### Sequencing
+
+1 and 2 first: they are the difference between a tester succeeding and a
+tester giving up, and neither is visible in a checkout. 3 is minutes. 4 is
+the largest and the most valuable to a newcomer. 5 after the interpretation
+is settled, with the export bug fixed immediately either way.
+
 ## 0.6.0 — candidate pool (2026-08-25)
 
 **Theme selection is deliberately on hold** (2026-08-25): 0.5.0 reached a
