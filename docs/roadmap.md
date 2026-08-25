@@ -582,7 +582,26 @@ theme 1 and a 0.6.0 item both sit on it.
 a published Store build; and arm64's first real-hardware exposure, whose
 first test remains Store certification.
 
-## First-user findings (2026-08-25) — **all five fixed**, 2026-08-25
+## 0.6.0 — released (2026-08-25): the first-user findings
+
+**Cut 2026-08-25.** No theme selection: 0.6.0 is what the first outside
+user found, fixed. That is exactly what the hold below was waiting for —
+"a single real reaction is worth more than re-ranking the list" — and the
+reaction arrived before any theme was chosen, so the release is the
+reaction rather than the list.
+
+Two of the five were worse than reported. **No Store build has ever been
+able to introspect TypeScript or C#**: the package shipped two
+executables and no `extractors/`, so the one language that worked was
+Rust, being compiled into core. And the SVG export had been **silently
+dropping the protocol** of every relation that also carried a label,
+since the renderer picked one or the other.
+
+Everything below is covered by tests; the two items that need a real
+installed machine are listed at the end of this section and carry into
+the next release.
+
+### First-user findings (2026-08-25) — **all five fixed**, 2026-08-25
 
 Five issues from the first person to use Blastradius without the owner
 driving. Every one is now fixed, with the root cause and the guard recorded
@@ -771,15 +790,15 @@ Everything above is covered by tests, but two of these bugs existed
   offer, and follow the prompt through to a model — the 5-minute-stranger
   run, which is now a much shorter path than it was.
 
-## 0.6.0 — candidate pool (2026-08-25)
+## 0.7.0 — candidate pool (2026-08-25)
 
-**Theme selection is deliberately on hold** (2026-08-25): 0.5.0 reached a
-first outside user, and the owner is gathering their feedback before
-choosing. Everything below came from inference or owner judgement — not
-one item is backed by someone who has actually used the product — so a
-single real reaction is worth more than re-ranking the list. Worth asking:
-what confused them, what they reached for and could not find, and whether
-they got their own repo rendered or stopped at the demo.
+**The hold resolved itself.** This pool was 0.6.0's, held (2026-08-25)
+because 0.5.0 had reached a first outside user and not one item below was
+backed by anyone who had actually used the product — "a single real
+reaction is worth more than re-ranking the list". The reaction arrived
+first, so 0.6.0 became the reaction and the list moved down a version,
+unranked and still unbacked by use. The same caution applies to picking
+from it now: the second tester has not run yet.
 
 Held back from 0.5.0 to keep it shippable, not rejected:
 
@@ -801,6 +820,13 @@ Held back from 0.5.0 to keep it shippable, not rejected:
   (spec/l4-introspection.md), C# semantic mode could name dependencies by
   assembly rather than by namespace root, and a render-a-view MCP tool
   for agents that need pixels rather than JSON.
+- **Carried from 0.6.0, and owed on a real machine** — the two checks no
+  checkout can make: `introspect` against a C# repository from the
+  *installed* package (the read-only install directory and the
+  runtime-not-SDK claim are only truly exercised there), and pointing the
+  installed app at a repository with no workspace to follow the offer
+  through to a model. Two 0.6.0 bugs existed precisely because a checkout
+  cannot see them.
 - **macOS distribution** — deferred four times; the $99/year Apple
   Developer ID and a Mac in the loop remain the decision.
 - **Going-public launch dressing** — public-audience README,
