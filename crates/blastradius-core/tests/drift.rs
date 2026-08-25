@@ -1,0 +1,170 @@
+//! Architecture drift detection (ADR-0019): the model checked against the
+//! code, rather than against itself.
+
+use blastradius_core::drift::{detect, DriftKind};
+use std::fs;
+use std::path::{Path, PathBuf};
+
+struct TempDir {
+    dir: PathBuf,
+}
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.dir);
+    }
+}
+fn temp(tag: &str) -> TempDir {
+    let dir = std::env::temp_dir().join(format!("br-drift-{tag}-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    TempDir { dir }
+}
+fn write(root: &Path, rel: &str, content: &str) {
+    let path = root.join(rel);
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(path, content).unwrap();
+}
+
+const MANIFEST: &str = "workspace:\n  name: Shop\n  version: 1\nmodel:\n  include: [model/*.yaml]\n";
+
+/// Two components in *different* containers, each owning one Rust file;
+/// `store.rs` imports from `ledger.rs`, so the code says store depends on
+/// ledger.
+fn fixture(tag: &str, relations: &str) -> (TempDir, blastradius_core::Workspace) {
+    let t = temp(tag);
+    write(&t.dir, "src/ledger.rs", "pub struct Entry;\n");
+    write(
+        &t.dir,
+        "src/store.rs",
+        "use crate::ledger::Entry;\n\npub struct Store {\n    last: Entry,\n}\n",
+    );
+    let model = format!(
+        r#"system: shop
+name: Shop
+containers:
+  api:
+    name: API
+    components:
+      store:
+        name: Store
+        source:
+          language: rust
+          root: src
+          include: [store.rs]
+  data:
+    name: Data
+    components:
+      ledger:
+        name: Ledger
+        source:
+          language: rust
+          root: src
+          include: [ledger.rs]
+{relations}"#
+    );
+    write(&t.dir, "docs/model/shop.yaml", &model);
+    write(&t.dir, "docs/blastradius.yaml", MANIFEST);
+
+    // Extract both components the way the CLI would.
+    let (ws, _) = blastradius_core::load_workspace(&t.dir.join("docs"));
+    for id in ["shop.api.store", "shop.data.ledger"] {
+        let mapping = ws.elements[id].source.as_ref().unwrap();
+        let (facts, _) = blastradius_core::introspect::extract(&t.dir, id, mapping).unwrap();
+        write(
+            &t.dir,
+            &format!("docs/model/derived/{id}.l4.json"),
+            &blastradius_core::introspect::facts_bytes(&facts),
+        );
+    }
+    let (ws, _) = blastradius_core::load_workspace(&t.dir.join("docs"));
+    (t, ws)
+}
+
+#[test]
+fn an_undeclared_code_dependency_is_drift() {
+    let (_t, ws) = fixture("undeclared", "");
+    let found = detect(&ws);
+    let undeclared: Vec<_> = found.iter().filter(|d| d.kind == DriftKind::Undeclared).collect();
+    assert_eq!(undeclared.len(), 1, "{found:?}");
+    assert_eq!(undeclared[0].from, "shop.api.store");
+    assert_eq!(undeclared[0].to, "shop.data.ledger");
+    // The finding names the file that proves it — otherwise it is unarguable.
+    assert_eq!(undeclared[0].via.as_deref(), Some("src/ledger.rs"));
+}
+
+#[test]
+fn declaring_the_dependency_clears_it() {
+    let (_t, ws) = fixture(
+        "declared",
+        "relations:\n  - from: api.store\n    to: data.ledger\n    label: reads entries\n",
+    );
+    assert!(detect(&ws).is_empty(), "{:?}", detect(&ws));
+}
+
+#[test]
+fn a_relation_higher_up_the_hierarchy_covers_it() {
+    // A container-level relation declares the dependency between anything
+    // inside them — the same lifting the canvas does when it draws an edge.
+    let (_t, ws) = fixture(
+        "lifted",
+        "relations:\n  - from: api\n    to: data\n    label: reads\n",
+    );
+    let found = detect(&ws);
+    assert!(
+        !found.iter().any(|d| d.kind == DriftKind::Undeclared),
+        "a relation between the shared ancestors should cover it: {found:?}"
+    );
+}
+
+#[test]
+fn a_declaration_the_code_does_not_support_is_drift() {
+    // Declared backwards: ledger -> store, while the code runs store -> ledger.
+    let (_t, ws) = fixture(
+        "unbacked",
+        "relations:\n  - from: data.ledger\n    to: api.store\n    label: pushes entries\n",
+    );
+    let found = detect(&ws);
+    assert!(
+        found.iter().any(|d| d.kind == DriftKind::Unbacked
+            && d.from == "shop.data.ledger"
+            && d.to == "shop.api.store"),
+        "{found:?}"
+    );
+    // And the real dependency is still reported as undeclared.
+    assert!(
+        found.iter().any(|d| d.kind == DriftKind::Undeclared && d.from == "shop.api.store"),
+        "{found:?}"
+    );
+}
+
+#[test]
+fn a_cross_language_relation_is_never_called_unbacked() {
+    // A TypeScript UI talking to a Rust engine is a real relation that no
+    // static import can evidence, so its silence must not be reported.
+    let t = temp("crosslang");
+    write(&t.dir, "src/ledger.rs", "pub struct Entry;\n");
+    write(&t.dir, "web/app.ts", "export class App {}\n");
+    write(
+        &t.dir,
+        "docs/model/shop.yaml",
+        "system: shop\nname: Shop\ncontainers:\n  api:\n    name: API\n    components:\n      \
+         ledger:\n        name: Ledger\n        source:\n          language: rust\n          \
+         root: src\n          include: [ledger.rs]\n      web:\n        name: Web\n        source:\n          \
+         language: typescript\n          root: web\nrelations:\n  - from: api.web\n    to: data.ledger\n    label: calls over IPC\n",
+    );
+    write(&t.dir, "docs/blastradius.yaml", MANIFEST);
+    let (ws, _) = blastradius_core::load_workspace(&t.dir.join("docs"));
+    let mapping = ws.elements["shop.api.ledger"].source.as_ref().unwrap();
+    let (facts, _) = blastradius_core::introspect::extract(&t.dir, "shop.api.ledger", mapping).unwrap();
+    write(
+        &t.dir,
+        "docs/model/derived/shop.api.ledger.l4.json",
+        &blastradius_core::introspect::facts_bytes(&facts),
+    );
+    let (ws, _) = blastradius_core::load_workspace(&t.dir.join("docs"));
+    assert!(
+        !detect(&ws).iter().any(|d| d.kind == DriftKind::Unbacked),
+        "cross-language relations cannot be evidenced by imports: {:?}",
+        detect(&ws)
+    );
+}

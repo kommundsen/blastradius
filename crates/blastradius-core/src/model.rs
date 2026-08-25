@@ -173,6 +173,10 @@ pub struct DerivedGraph {
     pub stale: bool,
     pub elements: Vec<DerivedElement>,
     pub edges: Vec<DerivedEdge>,
+    /// References leaving this component's corpus: (derived element id,
+    /// repo-relative file it points at). Drift detection resolves the file to
+    /// whichever component owns it (ADR-0019).
+    pub outbound: Vec<(ElementId, String)>,
 }
 
 #[derive(Debug, Clone)]

@@ -1,0 +1,324 @@
+{
+  "schema": 1,
+  "language": "rust",
+  "extractor": "blastradius-extract-rust 0.3.0",
+  "component": "blastradius.core.model-service",
+  "root": "crates/blastradius-core/src",
+  "sourceDigest": "sha256:26489f92a2ddbfec1475932603afb3f7fd7e9ca07e1a66a5c5119ceabab9fdad",
+  "elements": [
+    {
+      "id": "dep.marked_yaml",
+      "kind": "dependency",
+      "name": "marked_yaml",
+      "path": ""
+    },
+    {
+      "id": "manifest",
+      "kind": "module",
+      "name": "manifest.rs",
+      "path": "crates/blastradius-core/src/manifest.rs"
+    },
+    {
+      "id": "manifest.Manifest",
+      "kind": "class",
+      "name": "Manifest",
+      "parent": "manifest",
+      "path": "crates/blastradius-core/src/manifest.rs",
+      "line": 28
+    },
+    {
+      "id": "model",
+      "kind": "module",
+      "name": "model.rs",
+      "path": "crates/blastradius-core/src/model.rs"
+    },
+    {
+      "id": "model.DerivedEdge",
+      "kind": "class",
+      "name": "DerivedEdge",
+      "parent": "model",
+      "path": "crates/blastradius-core/src/model.rs",
+      "line": 197
+    },
+    {
+      "id": "model.DerivedElement",
+      "kind": "class",
+      "name": "DerivedElement",
+      "parent": "model",
+      "path": "crates/blastradius-core/src/model.rs",
+      "line": 182
+    },
+    {
+      "id": "model.DerivedGraph",
+      "kind": "class",
+      "name": "DerivedGraph",
+      "parent": "model",
+      "path": "crates/blastradius-core/src/model.rs",
+      "line": 160
+    },
+    {
+      "id": "model.Direction",
+      "kind": "enum",
+      "name": "Direction",
+      "parent": "model",
+      "path": "crates/blastradius-core/src/model.rs",
+      "line": 108
+    },
+    {
+      "id": "model.Doc",
+      "kind": "class",
+      "name": "Doc",
+      "parent": "model",
+      "path": "crates/blastradius-core/src/model.rs",
+      "line": 149
+    },
+    {
+      "id": "model.Element",
+      "kind": "class",
+      "name": "Element",
+      "parent": "model",
+      "path": "crates/blastradius-core/src/model.rs",
+      "line": 70
+    },
+    {
+      "id": "model.ElementKind",
+      "kind": "enum",
+      "name": "ElementKind",
+      "parent": "model",
+      "path": "crates/blastradius-core/src/model.rs",
+      "line": 17
+    },
+    {
+      "id": "model.Relation",
+      "kind": "class",
+      "name": "Relation",
+      "parent": "model",
+      "path": "crates/blastradius-core/src/model.rs",
+      "line": 115
+    },
+    {
+      "id": "model.SourceMapping",
+      "kind": "class",
+      "name": "SourceMapping",
+      "parent": "model",
+      "path": "crates/blastradius-core/src/model.rs",
+      "line": 93
+    },
+    {
+      "id": "model.View",
+      "kind": "class",
+      "name": "View",
+      "parent": "model",
+      "path": "crates/blastradius-core/src/model.rs",
+      "line": 132
+    },
+    {
+      "id": "model.Workspace",
+      "kind": "class",
+      "name": "Workspace",
+      "parent": "model",
+      "path": "crates/blastradius-core/src/model.rs",
+      "line": 205
+    },
+    {
+      "id": "parse",
+      "kind": "module",
+      "name": "parse.rs",
+      "path": "crates/blastradius-core/src/parse.rs"
+    },
+    {
+      "id": "parse.RawRelation",
+      "kind": "class",
+      "name": "RawRelation",
+      "parent": "parse",
+      "path": "crates/blastradius-core/src/parse.rs",
+      "line": 12
+    },
+    {
+      "id": "validate",
+      "kind": "module",
+      "name": "validate.rs",
+      "path": "crates/blastradius-core/src/validate.rs"
+    },
+    {
+      "id": "views",
+      "kind": "module",
+      "name": "views.rs",
+      "path": "crates/blastradius-core/src/views.rs"
+    }
+  ],
+  "edges": [
+    {
+      "from": "manifest",
+      "to": "manifest.Manifest",
+      "kind": "references"
+    },
+    {
+      "from": "model",
+      "to": "model.ElementKind",
+      "kind": "references"
+    },
+    {
+      "from": "model.DerivedGraph",
+      "to": "model.DerivedEdge",
+      "kind": "references"
+    },
+    {
+      "from": "model.DerivedGraph",
+      "to": "model.DerivedElement",
+      "kind": "references"
+    },
+    {
+      "from": "model.Element",
+      "to": "model.ElementKind",
+      "kind": "references"
+    },
+    {
+      "from": "model.Element",
+      "to": "model.SourceMapping",
+      "kind": "references"
+    },
+    {
+      "from": "model.Relation",
+      "to": "model.Direction",
+      "kind": "references"
+    },
+    {
+      "from": "model.Workspace",
+      "to": "model.DerivedElement",
+      "kind": "references"
+    },
+    {
+      "from": "model.Workspace",
+      "to": "model.DerivedGraph",
+      "kind": "references"
+    },
+    {
+      "from": "model.Workspace",
+      "to": "model.Doc",
+      "kind": "references"
+    },
+    {
+      "from": "model.Workspace",
+      "to": "model.Element",
+      "kind": "references"
+    },
+    {
+      "from": "model.Workspace",
+      "to": "model.Relation",
+      "kind": "references"
+    },
+    {
+      "from": "model.Workspace",
+      "to": "model.View",
+      "kind": "references"
+    },
+    {
+      "from": "parse",
+      "to": "dep.marked_yaml",
+      "kind": "imports"
+    },
+    {
+      "from": "parse",
+      "to": "model.Element",
+      "kind": "references"
+    },
+    {
+      "from": "parse",
+      "to": "model.ElementKind",
+      "kind": "references"
+    },
+    {
+      "from": "parse",
+      "to": "model.Relation",
+      "kind": "references"
+    },
+    {
+      "from": "parse",
+      "to": "model.SourceMapping",
+      "kind": "references"
+    },
+    {
+      "from": "parse",
+      "to": "model.Workspace",
+      "kind": "references"
+    },
+    {
+      "from": "parse.RawRelation",
+      "to": "model.Direction",
+      "kind": "references"
+    },
+    {
+      "from": "validate",
+      "to": "model",
+      "kind": "imports"
+    },
+    {
+      "from": "validate",
+      "to": "model.Workspace",
+      "kind": "references"
+    },
+    {
+      "from": "views",
+      "to": "dep.marked_yaml",
+      "kind": "imports"
+    },
+    {
+      "from": "views",
+      "to": "model",
+      "kind": "imports"
+    },
+    {
+      "from": "views",
+      "to": "model.View",
+      "kind": "references"
+    },
+    {
+      "from": "views",
+      "to": "model.Workspace",
+      "kind": "references"
+    }
+  ],
+  "outbound": [
+    {
+      "from": "manifest",
+      "path": "crates/blastradius-core/src/diagnostics.rs"
+    },
+    {
+      "from": "manifest",
+      "path": "crates/blastradius-core/src/vfs.rs"
+    },
+    {
+      "from": "manifest",
+      "path": "crates/blastradius-core/src/yaml.rs"
+    },
+    {
+      "from": "parse",
+      "path": "crates/blastradius-core/src/diagnostics.rs"
+    },
+    {
+      "from": "parse",
+      "path": "crates/blastradius-core/src/vfs.rs"
+    },
+    {
+      "from": "parse",
+      "path": "crates/blastradius-core/src/yaml.rs"
+    },
+    {
+      "from": "validate",
+      "path": "crates/blastradius-core/src/diagnostics.rs"
+    },
+    {
+      "from": "views",
+      "path": "crates/blastradius-core/src/diagnostics.rs"
+    },
+    {
+      "from": "views",
+      "path": "crates/blastradius-core/src/vfs.rs"
+    },
+    {
+      "from": "views",
+      "path": "crates/blastradius-core/src/yaml.rs"
+    }
+  ]
+}

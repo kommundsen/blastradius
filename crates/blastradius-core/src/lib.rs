@@ -8,6 +8,7 @@
 
 pub mod diagnostics;
 pub mod diff;
+pub mod drift;
 pub mod discover;
 pub mod docs;
 pub mod export;
@@ -72,5 +73,7 @@ pub fn load_workspace_vfs(source: &dyn vfs::Vfs) -> (Workspace, Vec<Diagnostic>)
     introspect::load_derived(source, &mut ws, &mut diags);
 
     validate::cross_validate(&ws, &mut diags);
+    // Code-versus-model comparison, once everything is loaded (ADR-0019).
+    drift::diagnose(&ws, &mut diags);
     (ws, diags)
 }

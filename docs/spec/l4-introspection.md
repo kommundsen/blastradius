@@ -80,6 +80,36 @@ Schema v1:
   dependency), `references` (type→type, name-based), `extends`,
   `implements`.
 
+### Outbound references and drift (ADR-0019)
+
+A reference that leaves a component's mapped corpus but stays inside the
+repository is recorded in `outbound` as `{from, path}` — the element holding
+it, and the repo-relative file it points at:
+
+```json
+"outbound": [
+  { "from": "git", "path": "crates/blastradius-core/src/model.rs" }
+]
+```
+
+Deliberately a **file**, not a component: a per-component extractor cannot know
+who owns that file, and guessing would bake one component's view into its own
+facts. The workspace resolves ownership at load time by matching the path
+against every `source:` mapping, which turns the reference into a code
+dependency between components — the input to drift detection.
+
+- **Rust** records any `crate::`/`self::`/`super::` path that its corpus cannot
+  resolve, mapping the module path to `<root>/<a>/<b>.rs` or `.../mod.rs`
+  (longest prefix that exists on disk wins, since trailing segments may be
+  types). Bare unanchored paths remain external-crate rollups.
+- **TypeScript** records anything the compiler resolves to a real file outside
+  the mapped root but inside the repository — the resolver already knows the
+  exact path, so there is no inference.
+- **C#** records nothing yet: at syntax level it resolves namespaces, not
+  paths, so there is no file to name. Recorded, not solved.
+
+Empty is omitted, and facts written before 0.5.0 simply have none.
+
 ### External dependency rollups
 
 Imports that leave the mapped tree used to vanish, which made a module

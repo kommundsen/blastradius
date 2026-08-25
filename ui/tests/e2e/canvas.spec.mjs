@@ -19,11 +19,11 @@ test('L1 context renders the dogfood model', async ({ page }) => {
   await expect(page.locator('.node.is-external')).toHaveCount(4);
   await expect(page.locator('#breadcrumb')).toContainText('Context');
   // the tree lists the whole model regardless of altitude: 25 authored
-  // elements + 19 derived L4 rows (6 canvas modules; git-service's 2
-  // modules, 9 types and 2 dependency rollups), the latter styled as code,
+  // elements + 48 derived L4 rows (four introspected components now that
+  // model-service and sync-engine are mapped for drift detection, ADR-0019),
   // + 20 deployment rows under their own root (ADR-0018)
-  await expect(page.locator('.tree-row')).toHaveCount(64);
-  await expect(page.locator('.tree-row.is-derived')).toHaveCount(19);
+  await expect(page.locator('.tree-row')).toHaveCount(93);
+  await expect(page.locator('.tree-row.is-derived')).toHaveCount(48);
   expect(page.errors).toEqual([]);
   await page.screenshot({ path: 'test-results/webkit-L1.png', fullPage: true });
 });

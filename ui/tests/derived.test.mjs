@@ -19,7 +19,7 @@ const COMP = 'blastradius.core.git-service';
 test('derivedGraphFor finds the graph for the component and its src ids', () => {
   assert.equal(derivedGraphFor(snapshot, COMP)?.language, 'rust');
   assert.equal(derivedGraphFor(snapshot, `${COMP}.src.git.GitContext`)?.component, COMP);
-  assert.equal(derivedGraphFor(snapshot, 'blastradius.core.sync-engine'), null);
+  assert.equal(derivedGraphFor(snapshot, 'blastradius.core.exporter'), null);
 });
 
 test('L4 at the component shows top-level modules with lifted edges', () => {
@@ -67,7 +67,7 @@ test('L4 at a module shows its types via the parent field', () => {
 });
 
 test('L4 with no graph (hand-modeled component) is empty, not an error', () => {
-  const view = computeView(snapshot, 'L4', 'blastradius.core.sync-engine');
+  const view = computeView(snapshot, 'L4', 'blastradius.core.exporter');
   assert.deepEqual(view.nodes, []);
   assert.deepEqual(view.edges, []);
 });

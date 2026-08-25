@@ -469,7 +469,34 @@ theme 1 and a 0.6.0 item both sit on it.
    importer stops emitting "groups are not modelled" for a corpus
    workspace that uses them.
 
-2. **Architecture drift detection** — the follow-up ADR-0016 named as
+2. **Architecture drift detection** — **shipped 2026-08-25** (ADR-0019).
+   The premise turned out to be wrong: ADR-0016 assumed cross-component
+   code edges were already being recorded, but **there were none, and
+   could not be** — each component is extracted against its own corpus,
+   so a reference to another component's code fails to resolve and is
+   dropped. `git.rs` really does import `crate::model`,
+   `crate::diagnostics`, `crate::vfs`, `crate::splice` and `crate::diff`;
+   every one was discarded at extraction time.
+   So extractors now record what they used to throw away: an `outbound`
+   entry naming the repo-relative file a reference points at. The
+   workspace resolves that file to whichever component's mapping owns it,
+   which turns a raw reference into a code dependency between components,
+   and compares it against the declared relations — lifted through the
+   hierarchy, so a container-level relation covers its components.
+   Reported both ways: **undeclared** (code goes somewhere the model does
+   not say) and **unbacked** (a declared relation with no code behind it,
+   which usually means it points the wrong way). Unbacked is only claimed
+   between components in the same language — a TypeScript canvas calling
+   a Rust engine over IPC is a real relation no static import can
+   evidence. Warnings by default; `validate --strict-drift` is the CI
+   opt-in, and this repo now runs it as a hard gate.
+   *Exit met, and it earned its keep on first run*: it found three real
+   problems in our own model — two undeclared dependencies from
+   `git-service`, and a declared `model-service -> sync-engine` edge with
+   no code behind it, because the dependency runs the other way and the
+   relation had been written as a data flow. All three are corrected, and
+   the dogfood model is now drift-free with the gate enforcing it.
+   The original framing: the follow-up ADR-0016 named as
    "the natural one this design enables". L4 facts already record edges
    that cross component boundaries; nothing yet *judges* them. Compare
    them against the declared L3 relations and report the disagreements:

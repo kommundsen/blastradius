@@ -179,5 +179,35 @@
       "to": "resolve.Side",
       "kind": "references"
     }
+  ],
+  "outbound": [
+    {
+      "from": "git",
+      "path": "crates/blastradius-core/src/diagnostics.rs"
+    },
+    {
+      "from": "git",
+      "path": "crates/blastradius-core/src/model.rs"
+    },
+    {
+      "from": "git",
+      "path": "crates/blastradius-core/src/vfs.rs"
+    },
+    {
+      "from": "resolve",
+      "path": "crates/blastradius-core/src/diff.rs"
+    },
+    {
+      "from": "resolve",
+      "path": "crates/blastradius-core/src/model.rs"
+    },
+    {
+      "from": "resolve",
+      "path": "crates/blastradius-core/src/splice.rs"
+    },
+    {
+      "from": "resolve",
+      "path": "crates/blastradius-core/src/vfs.rs"
+    }
   ]
 }

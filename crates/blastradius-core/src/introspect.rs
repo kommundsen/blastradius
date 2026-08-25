@@ -34,6 +34,21 @@ pub struct Facts {
     pub source_digest: String,
     pub elements: Vec<FactElement>,
     pub edges: Vec<FactEdge>,
+    /// References that leave this component's mapped corpus but stay inside
+    /// the repository — the raw material for drift detection (ADR-0019).
+    /// Recorded as the repo-relative file they point at, because which
+    /// *component* owns that file is a question only the whole workspace can
+    /// answer. Additive: facts written before 0.5.0 simply have none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outbound: Vec<FactOutbound>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Clone)]
+pub struct FactOutbound {
+    /// Element id inside this component that holds the reference.
+    pub from: String,
+    /// Repo-root-relative path of the file referenced, forward slashes.
+    pub path: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -70,6 +85,8 @@ pub fn canonicalize(f: &mut Facts) {
     f.edges.dedup();
     // Self-edges say nothing at L4.
     f.edges.retain(|e| e.from != e.to);
+    f.outbound.sort();
+    f.outbound.dedup();
 }
 
 /// The exact committed bytes: 2-space pretty JSON, LF, trailing newline.
@@ -168,6 +185,11 @@ fn graft(f: &Facts) -> DerivedGraph {
         language: f.language.clone(),
         source_digest: f.source_digest.clone(),
         stale: false,
+        outbound: f
+            .outbound
+            .iter()
+            .map(|o| (full(&o.from), o.path.clone()))
+            .collect(),
         elements: f
             .elements
             .iter()
@@ -191,7 +213,7 @@ fn skip_dir(name: &str) -> bool {
     name.starts_with('.') || matches!(name, "target" | "node_modules" | "bin" | "obj" | "dist" | "build" | "out" | "vendor")
 }
 
-fn glob_set(globs: &[String], label: &str) -> Result<Option<globset::GlobSet>, String> {
+pub fn glob_set(globs: &[String], label: &str) -> Result<Option<globset::GlobSet>, String> {
     if globs.is_empty() {
         return Ok(None);
     }
@@ -375,8 +397,9 @@ pub fn extract_rust(repo_root: &Path, component: &str, mapping: &SourceMapping) 
     // Pass 3: edges, plus the external crates they reach for.
     let mut edges: BTreeSet<(String, String, String)> = BTreeSet::new();
     let mut deps: BTreeSet<String> = BTreeSet::new();
+    let mut outside: BTreeSet<(String, String)> = BTreeSet::new();
     for (mid, _rel, ast) in &parsed {
-        collect_edges(&ast.items, mid, &corpus, &mut edges, &mut deps);
+        collect_edges(&ast.items, mid, &corpus, &mut edges, &mut deps, &mut outside);
     }
 
     let mut elements: Vec<FactElement> = corpus
@@ -411,6 +434,15 @@ pub fn extract_rust(repo_root: &Path, component: &str, mapping: &SourceMapping) 
         line: None,
     }));
 
+    // Turn each unresolved crate-relative path into the file it names, so the
+    // workspace can later ask which component owns that file (ADR-0019).
+    let outbound = outside
+        .iter()
+        .filter_map(|(from, path)| {
+            rust_module_file(repo_root, &mapping.root, path).map(|p| FactOutbound { from: from.clone(), path: p })
+        })
+        .collect();
+
     let mut facts = Facts {
         schema: FACTS_SCHEMA,
         language: "rust".into(),
@@ -420,9 +452,31 @@ pub fn extract_rust(repo_root: &Path, component: &str, mapping: &SourceMapping) 
         source_digest: digest,
         elements,
         edges: edges.into_iter().map(|(from, to, kind)| FactEdge { from, to, kind }).collect(),
+        outbound,
     };
     canonicalize(&mut facts);
     Ok((facts, warnings))
+}
+
+/// The file a crate-relative module path names, if it exists.
+///
+/// `crate::model::Workspace` arrives here as `model/Workspace`; the trailing
+/// segments may be types rather than modules, so prefixes are tried longest
+/// first and the first file that exists wins. Returned repo-root-relative
+/// with forward slashes — the form the whole model speaks (ADR-0019).
+fn rust_module_file(repo_root: &Path, root: &str, path: &str) -> Option<String> {
+    let segs: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    let base = root.trim_end_matches('/');
+    for cut in (1..=segs.len()).rev() {
+        let stem = segs[..cut].join("/");
+        for candidate in [format!("{stem}.rs"), format!("{stem}/mod.rs")] {
+            let rel = format!("{base}/{candidate}");
+            if repo_root.join(rel.replace('/', std::path::MAIN_SEPARATOR_STR)).is_file() {
+                return Some(rel);
+            }
+        }
+    }
+    None
 }
 
 /// Nesting for the canvas: a module whose id extends another module's id by
@@ -475,6 +529,7 @@ fn collect_items(items: &[syn::Item], module: &str, path: &str, corpus: &mut Rus
 fn resolve_path(segments: &[String], module: &str, corpus: &RustCorpus) -> Option<Resolved> {
     let mut segs: &[String] = segments;
     let mut base: Vec<&str> = Vec::new();
+    let anchored = matches!(segs.first().map(String::as_str), Some("crate" | "self" | "super"));
     match segs.first().map(String::as_str) {
         Some("crate") => segs = &segs[1..],
         Some("self") => {
@@ -515,12 +570,18 @@ fn resolve_path(segments: &[String], module: &str, corpus: &RustCorpus) -> Optio
             return Some(Resolved::Module(mid));
         }
     }
-    None
+    // Anchored but unresolved: real code in this repo that this corpus cannot
+    // see. An unanchored bare path is an external crate instead (below).
+    anchored.then(|| Resolved::Outside(full))
 }
 
 enum Resolved {
     Module(String),
     Type(String),
+    /// Anchored inside this crate (`crate::`/`self::`/`super::`) but not in
+    /// this component's corpus — it belongs to some other part of the repo,
+    /// which is exactly what drift detection needs to know (ADR-0019).
+    Outside(Vec<String>),
 }
 
 /// Flatten a use tree into `(path segments, name it binds locally)` pairs —
@@ -628,6 +689,7 @@ fn collect_edges(
     corpus: &RustCorpus,
     edges: &mut BTreeSet<(String, String, String)>,
     deps: &mut BTreeSet<String>,
+    outside: &mut BTreeSet<(String, String)>,
 ) {
     // File-level use map: unqualified name -> corpus type id.
     let mut use_map: BTreeMap<String, String> = BTreeMap::new();
@@ -643,6 +705,12 @@ fn collect_edges(
                             edges.insert((module.to_string(), target_module, "imports".into()));
                         }
                         use_map.insert(binding, tid);
+                    }
+                    Some(Resolved::Outside(full)) => {
+                        // Real code in this repo that this corpus cannot see.
+                        // Which component owns it is a workspace-level question
+                        // (ADR-0019), so the crate-relative path is recorded raw.
+                        outside.insert((module.to_string(), full.join("/")));
                     }
                     Some(Resolved::Module(mid)) => {
                         if mid != module {
@@ -687,7 +755,7 @@ fn collect_edges(
                     .unwrap_or_else(|| module.to_string());
                 if let syn::Item::Mod(m) = item {
                     if let Some((_, inner)) = &m.content {
-                        collect_edges(inner, &format!("{module}.{}", m.ident), corpus, edges, deps);
+                        collect_edges(inner, &format!("{module}.{}", m.ident), corpus, edges, deps, outside);
                         continue;
                     }
                 }
@@ -722,7 +790,7 @@ fn resolve_type_path(
     if segs.len() > 1 {
         return match resolve_path(&segs, module, corpus)? {
             Resolved::Type(tid) => Some(tid),
-            Resolved::Module(_) => None,
+            Resolved::Module(_) | Resolved::Outside(_) => None,
         };
     }
     let name = segs.first()?;

@@ -63,10 +63,18 @@ containers:
     components:
       model-service:
         group: Model
+        source:            # owns the parse/validate half of the model
+          language: rust
+          root: crates/blastradius-core/src
+          include: [model.rs, parse.rs, validate.rs, views.rs, manifest.rs]
         name: Model Service
         description: Workspace loading, schema parse and validation, doc registry, semantic model diff (spec/model-format.md).
       sync-engine:
         group: Model
+        source:
+          language: rust
+          root: crates/blastradius-core/src
+          include: [sync.rs, splice.rs, journal.rs]
         name: Sync Engine
         description: Arbiter between canvas, panel, and external editors; CST-preserving writes, staleness, shared undo (ADR-0008).
       git-service:
@@ -117,9 +125,20 @@ relations:
     to: ui.layout-worker
     label: layout requests
     protocol: postMessage
-  - from: core.model-service
+  # Direction corrected 2026-08-25 after drift detection (ADR-0019) found no
+  # code behind the old model-service -> sync-engine edge: sync.rs imports the
+  # model types, so the dependency runs this way. The old edge described the
+  # data flow, which is not what a relation means here.
+  - from: core.sync-engine
+    to: core.model-service
+    label: reads the parsed model
+  # Both found as undeclared code dependencies by the same pass.
+  - from: core.git-service
+    to: core.model-service
+    label: reads model types
+  - from: core.git-service
     to: core.sync-engine
-    label: parse results
+    label: rebuilds files through the splice primitives
   - from: core.sync-engine
     to: git-repo
     label: reads & writes workspace files

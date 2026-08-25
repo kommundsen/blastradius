@@ -23,8 +23,11 @@ jobs:
           node-version: "22"
       - name: Test (unit, seeded-fault, conformance suites)
         run: cargo test -p blastradius-core -p blastradius-cli
-      - name: Dogfood gate — validate docs/
-        run: cargo run -p blastradius-cli -- validate docs
+      - name: Dogfood gate — validate docs/ (drift is a hard failure here)
+        # --strict-drift turns architecture drift into a build failure
+        # (ADR-0019). This repo holds itself to it; for anyone else drift is
+        # a warning until they opt in.
+        run: cargo run -p blastradius-cli -- validate docs --strict-drift
       - name: L4 facts staleness gate (spec/l4-introspection.md)
         # Both dogfood mappings: Rust is built in; TypeScript needs node + the
         # typescript package (dev dependency).

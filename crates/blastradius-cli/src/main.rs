@@ -8,7 +8,13 @@ use std::process::ExitCode;
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
-        Some("validate") => resolving(args.get(1), validate),
+        Some("validate") => {
+            // --strict-drift is how CI opts in: drift stays a warning by
+            // default so an existing repo is not red on day one (ADR-0019).
+            let strict = args.iter().any(|a| a == "--strict-drift");
+            let dir = args.iter().skip(1).find(|a| !a.starts_with("--"));
+            resolving(dir, move |d| validate(d, strict))
+        }
         Some("diff") => match (args.get(1), args.get(2)) {
             (Some(a), Some(b)) => match (resolve(a), resolve(b)) {
                 (Ok(a), Ok(b)) => diff(&a, &b),
@@ -54,7 +60,7 @@ fn resolve(dir: &str) -> Result<String, ExitCode> {
     }
 }
 
-fn resolving(dir: Option<&String>, run: fn(&str) -> ExitCode) -> ExitCode {
+fn resolving(dir: Option<&String>, run: impl FnOnce(&str) -> ExitCode) -> ExitCode {
     match resolve(dir.map(String::as_str).unwrap_or(".")) {
         Ok(d) => run(&d),
         Err(c) => c,
@@ -63,7 +69,7 @@ fn resolving(dir: Option<&String>, run: fn(&str) -> ExitCode) -> ExitCode {
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage:\n  blastradius init [dir] [--name <name>]\n  blastradius validate [workspace-dir]\n  blastradius diff <base-dir> <current-dir>\n  blastradius gitdiff <dir> [base-ref] [cur-ref]\n  blastradius snapshot [workspace-dir]\n  blastradius export <dir> -o <file.html> [--with-doc-bodies]\n  blastradius introspect [dir] [component-id] [--check]\n  blastradius import <workspace.dsl> <out-dir>\n  blastradius mcp [workspace-dir]"
+        "usage:\n  blastradius init [dir] [--name <name>]\n  blastradius validate [workspace-dir] [--strict-drift]\n  blastradius diff <base-dir> <current-dir>\n  blastradius gitdiff <dir> [base-ref] [cur-ref]\n  blastradius snapshot [workspace-dir]\n  blastradius export <dir> -o <file.html> [--with-doc-bodies]\n  blastradius introspect [dir] [component-id] [--check]\n  blastradius import <workspace.dsl> <out-dir>\n  blastradius mcp [workspace-dir]"
     );
     ExitCode::from(2)
 }
@@ -199,7 +205,7 @@ fn snapshot(dir: &str) -> ExitCode {
     }
 }
 
-fn validate(dir: &str) -> ExitCode {
+fn validate(dir: &str, strict_drift: bool) -> ExitCode {
     let (ws, diags) = blastradius_core::load_workspace(Path::new(dir));
 
     let views = ws.views.len();
@@ -223,6 +229,11 @@ fn validate(dir: &str) -> ExitCode {
         warns,
         infos
     );
+    let drift = blastradius_core::drift::detect(&ws);
+    if strict_drift && !drift.is_empty() {
+        println!("RESULT: FAIL — {} drift finding(s); the model and the code disagree", drift.len());
+        return ExitCode::FAILURE;
+    }
     if has_errors(&diags) {
         println!("RESULT: FAIL");
         ExitCode::FAILURE

@@ -371,9 +371,21 @@
       "direction": "forward"
     },
     {
-      "from": "blastradius.core.model-service",
+      "from": "blastradius.core.sync-engine",
+      "to": "blastradius.core.model-service",
+      "label": "reads the parsed model",
+      "direction": "forward"
+    },
+    {
+      "from": "blastradius.core.git-service",
+      "to": "blastradius.core.model-service",
+      "label": "reads model types",
+      "direction": "forward"
+    },
+    {
+      "from": "blastradius.core.git-service",
       "to": "blastradius.core.sync-engine",
-      "label": "parse results",
+      "label": "rebuilds files through the splice primitives",
       "direction": "forward"
     },
     {
@@ -812,6 +824,17 @@
       "body": "# ADR-0018: Deployment views dive rather than nest\n\n## Status\nAccepted — 2026-08-24\n\n## Context\n\n0.4.0 adds the C4 deployment view: environments containing deployment\nnodes (which nest arbitrarily) containing instances of modelled\ncontainers. Two questions had to be settled before any code.\n\n**How should a nested tree be drawn?** C4 deployment diagrams are\nconventionally nested boxes — a region inside a data centre inside an\nenvironment. Blastradius has never drawn containment: every existing\nview shows exactly one altitude, with children collapsed to a count\n(\"6 components\") until you dive into them. `ui/js/layout.js` builds a\nflat ELK graph with fixed per-kind node sizes, no `hierarchyHandling`,\nand a routing pass that treats every other node as an obstacle.\n\n**Where should deployment elements live?** ADR-0016 put L4 code\nelements in a *parallel* namespace outside `Workspace::elements`,\nprecisely so they could stay read-only and out of sync, diff, and\nvalidation. Deployment elements are hand-authored and editable, which\npulls the other way.\n\n## Decision\n\n**Deployment views dive; they do not nest.** An environment is a view\nscope, its deployment nodes render as ordinary boxes, and diving into a\nnode shows its children — the same grammar as system → containers →\ncomponents. Nested-box rendering is explicitly not v1.\n\n**Deployment elements are ordinary elements** in `Workspace::elements`,\nwith dotted ids (`dev-machine.workstation.app.shell`) and three new\nkinds: `environment`, `deployment-node`, `container-instance`.\n\n## Consequences\n\n- **The layout engine needs no hierarchy work at all.** One altitude at\n  a time is a flat graph, which is what `layout.js` already produces.\n  This removes the largest and riskiest piece of the theme, along with\n  the knock-on rework it would have forced: ancestor-exclusion in\n  obstacle routing, label placement against containment boxes, SVG\n  z-ordering and fills so a parent does not paint over its children.\n- **The result is more consistent, not merely cheaper.** A user who has\n  learned to dive through the logical model navigates the physical one\n  identically. Nested boxes would have been the only view in the product\n  that reads by containment.\n- Dotted ids mean `computeView`'s existing depth arithmetic\n  (`startsWith(scope + '.')` one level down) computes deployment views\n  with no new algorithm — the L2/L3 branch already does exactly this.\n- Because they are real elements, deployment nodes get relations,\n  layout pins, blast radius, doc links, diff, and canvas editing for\n  free, and the MCP server answers about them like anything else.\n- The cost of that choice: four exhaustive `ElementKind` matches must\n  grow (`model.rs`, `snapshot.rs`, `resolve.rs`, `sync.rs`), and the\n  editing paths (`element_chain`, create, delete) need a variable-depth\n  chain, because deployment nodes nest arbitrarily while containers and\n  components sit at fixed depths.\n- `container-instance` elements point at a modelled container. That\n  reference is validated, so a deployment cannot drift into naming\n  containers that no longer exist — the point of modelling it here\n  rather than in prose.\n- The **overview** — every environment at once — is the one view with no\n  scope element, so `scope:` became optional for `LD` views and its pins are\n  absolute ids. Without that, the single most useful deployment picture, the\n  delivery chain between environments, could be neither pinned nor rendered\n  headlessly. It also draws the people and external systems the deployment\n  actually touches, chosen by relation rather than shown wholesale as L1 does.\n- **Recorded follow-ups**: nested-box rendering as an optional display\n  mode, should real use ask for it; instance multiplicity (`replicas`)\n  as a field rather than repeated elements; and the Structurizr\n  importer's `deploymentEnvironment`/`deploymentNode` blocks, which are\n  currently parsed and discarded (`import.rs`) and become importable now\n  that the primitives exist.\n"
     },
     {
+      "id": "adr-0019",
+      "type": "adr",
+      "status": "accepted",
+      "elements": [
+        "blastradius.core.introspector"
+      ],
+      "file": "adr/0019-architecture-drift-detection.md",
+      "title": "ADR-0019: Drift detection compares recorded references, not a shared corpus",
+      "body": "# ADR-0019: Drift detection compares recorded references, not a shared corpus\n\n## Status\nAccepted — 2026-08-25\n\n## Context\n\nADR-0016 closed with the observation that \"facts edges that cross component\nboundaries are recorded but not yet judged — comparing them against declared\nL3 relations (architecture drift detection) is the natural follow-up this\ndesign enables.\"\n\nBuilding it revealed that the premise was wrong: **there were no\ncross-component edges at all**, and could not be. Each component is extracted\nagainst its own corpus — the files its `source:` mapping claims — so a\nreference to code another component owns simply fails to resolve and is\ndropped. In this repository, `git.rs` genuinely imports `crate::model`,\n`crate::diagnostics`, `crate::vfs`, `crate::splice` and `crate::diff`; every\none of those was discarded at extraction time. The whole dogfood model\ncontained zero cross-component derived edges.\n\nSo drift detection needed a signal that did not exist yet.\n\n## Decision\n\n**Extractors record what they used to discard.** A reference that leaves the\nmapped corpus but stays inside the repository is written to the facts file as\n`outbound`: the element that holds it, and the **repo-relative file it points\nat**. Which *component* owns that file is deliberately not decided there — a\nper-component extractor cannot know, and pretending otherwise would bake one\ncomponent's view of the world into its own facts.\n\n**The workspace resolves ownership.** At load time each recorded path is\nmatched against every `source:` mapping; the owning component turns the raw\nreference into a code dependency between components. That is compared with the\ndeclared relations, lifted through the hierarchy: a container-level relation\ncovers what its components do, the same way the canvas lifts an edge to a\ncoarser altitude.\n\n**Both findings are warnings**, and `validate --strict-drift` is how CI opts\nin.\n\nThe alternative — extracting each language once over the union of all mapped\nroots and attributing elements afterwards — gives exact edges and is\narchitecturally cleaner. It was rejected for now because it changes what a\nfacts file *is*: extraction stops being per-component, the staleness digest has\nto span the union, and all three extractors change. Recording references keeps\nthe existing contract and is additive to the schema.\n\n## Consequences\n\n- Drift is reported in two directions. **Undeclared**: code reaches somewhere\n  the model never says it does. **Unbacked**: the model declares a dependency\n  and no code reference supports it — which usually means the relation points\n  the wrong way.\n- **Unbacked is only claimed between components in the same language.** A\n  TypeScript canvas calling a Rust engine over IPC is a real relation that no\n  static import will ever evidence, so its silence proves nothing. Without this\n  rule the feature reports every cross-process dependency as drift.\n- Absence of a mapping is never drift: a file no component claims is simply not\n  introspected, and a component with no facts is not evidence of anything.\n- Warnings, not errors, because a team turning this on for the first time on an\n  existing repository would otherwise get a red build on day one.\n- **It found real drift in this repository the first time it ran**: two\n  undeclared dependencies from `git-service`, and a declared\n  `model-service -> sync-engine` edge with no code behind it — the code\n  dependency runs the other way. The model described a data flow where a\n  relation means a dependency. All three are now corrected, which is the\n  behaviour the feature is supposed to produce.\n- Only Rust and TypeScript record outbound references today. C# resolves\n  namespaces rather than paths at syntax level, so it has no file to record\n  until semantic mode is involved — recorded, not solved.\n"
+    },
+    {
       "id": "prd",
       "type": "prd",
       "status": "draft",
@@ -878,7 +901,7 @@
       ],
       "file": "spec/l4-introspection.md",
       "title": "Spec: L4 code introspection",
-      "body": "# Spec: L4 code introspection\n\nImplements ADR-0016. Components opt in to a source mapping; per-language\nextractors emit a common facts file; core derives read-only L4 elements\nfrom it. Languages in scope: TypeScript/JavaScript and C#/.NET (the\npriority stack) plus Rust (built-in, dogfooding this repo's own crates).\n\n**Introspection is optional, per component.** L4 is an ordinary model\nlevel first: users can hand-model code-level children in the YAML like\nany other element — editable, sync-engine-managed, no toolchain\ninvolved. A component only gets derived elements if it carries a\n`source:` mapping; without one, nothing runs and nothing is generated.\nThe two styles coexist even on the same component: derived elements\nlive under the reserved `.src.` id segment, hand-modeled children\noutside it, so neither can collide with or overwrite the other.\n\n## The `source:` mapping\n\nOn a component (L3), in the model YAML:\n\n```yaml\ncomponents:\n  canvas:\n    name: Canvas\n    source:\n      language: typescript        # typescript | csharp | rust\n      root: ui/js                 # repo-root-relative (ADR-0014 anchor)\n      include: [\"**/*.mjs\"]       # optional, extractor defaults apply\n      exclude: [\"**/*.test.mjs\"]  # optional\n      mode: syntax                # optional: syntax (default) | semantic\n```\n\n`root` is relative to the **repository root**, not the workspace\ndirectory — code lives beside the workspace, and ADR-0014's discovery\nalready anchors every workspace inside a repo. Validation errors if the\nroot does not exist or `language` is unknown; `include`/`exclude` are\ngitignore-style globs evaluated by the extractor.\n\n## Facts files\n\nOne per opted-in component, committed:\n\n```\ndocs/model/derived/<component-id>.l4.json     # e.g. blastradius.ui.canvas.l4.json\n```\n\nSchema v1:\n\n```json\n{\n  \"schema\": 1,\n  \"language\": \"typescript\",\n  \"extractor\": \"blastradius-extract-ts 0.1.0\",\n  \"component\": \"blastradius.ui.canvas\",\n  \"root\": \"ui/js\",\n  \"sourceDigest\": \"sha256:…\",\n  \"elements\": [\n    { \"id\": \"layout\",  \"kind\": \"module\", \"name\": \"layout.js\", \"path\": \"ui/js/layout.js\" },\n    { \"id\": \"svg\",     \"kind\": \"module\", \"name\": \"svg.js\",    \"path\": \"ui/js/svg.js\" }\n  ],\n  \"edges\": [\n    { \"from\": \"app\", \"to\": \"layout\", \"kind\": \"imports\" }\n  ]\n}\n```\n\n- `elements[].kind`: `module`, `namespace`, `class`, `interface`,\n  `record`, `enum`, `dependency`. Type elements carry `parent` (the\n  containing module or namespace id). `path` is repo-root-relative with\n  forward slashes; type elements add `line` (1-based declaration line)\n  for click-through.\n- `edges[].kind`: `imports` (module→module, and module/namespace→\n  dependency), `references` (type→type, name-based), `extends`,\n  `implements`.\n\n### External dependency rollups\n\nImports that leave the mapped tree used to vanish, which made a module\nthat leans on `serde` or `react` look self-contained. They now roll up\nto **one node per package**:\n\n- Id `dep.<package>` with the package name verbatim — `dep.serde`,\n  `dep.left-pad`, `dep.@scope/widgets`, `dep.Newtonsoft`. Kind\n  `dependency`, no `parent` (they sit beside the modules at the top of\n  the derived scene), and `path` empty: there is no file to open,\n  because the package is not part of the mapped tree.\n- Nothing derives hierarchy from dots in fact ids — nesting comes from\n  the explicit `parent` field — so dotted and scoped package names are\n  inert. The TypeScript and C# extractors delimit their internal edge\n  encoding with NUL, not spaces, so no package name can break it.\n- **Collision rule**: if a corpus element already owns the id (a module\n  literally named `dep.foo`), the rollup is skipped rather than\n  colliding — under-reporting over a silent clash, as everywhere else.\n- Per-language detection and exclusions are in each extractor's section\n  below. Each excludes the language's own standard library: it ships\n  with the toolchain, appears in nearly every file, and carries no\n  architectural signal.\n- `sourceDigest`: sha256 over the sorted list of (relative path,\n  content sha256) of every file the extractor consumed. Cheap to\n  recompute without running the extractor — this is the staleness probe.\n- **Determinism contract**: elements and edges sorted by id/(from,to),\n  LF line endings, two-space indent, no timestamps, no absolute paths.\n  Running an extractor twice on the same tree is byte-identical.\n- Ids follow ADR-0003 (derived from stable names, not positions):\n  module id = root-relative path minus extension, slashes → dots\n  (`js/layout` under root `ui` → `js.layout`); C# type id =\n  fully-qualified metadata name (`Acme.Billing.Invoice`).\n\n## Derived elements in the model\n\nAt workspace open, core loads every facts file, validates it against\nthe schema and the component's current `source:` mapping, and grafts\nread-only elements beneath the owning component:\n\n- Full id: `<component-id>.src.<fact-id>` — the `src` segment keeps the\n  derived namespace disjoint from hand-modeled children forever.\n- `derived: true` on every grafted element; `apply_operation` and the\n  sync engine refuse writes to them with an error naming the source\n  file to edit instead.\n- A facts file whose `component` no longer exists or no longer has a\n  `source:` mapping is a validation **warning** (stale artifact, safe\n  to delete); a mapping with no facts file is an **info** (run\n  `blastradius introspect`).\n- If the recomputed `sourceDigest` disagrees with the facts file, the\n  elements still load but carry `stale: true` — surfaced as a canvas\n  badge and a validation warning, never an error (committed facts may\n  lag the working tree mid-edit; that is normal).\n\n## CLI\n\n```\nblastradius introspect [dir] [component-id] [--check]\n```\n\n- No argument: extract every opted-in component. With an id: just that\n  one. Workspace resolution follows ADR-0014 discovery like every other\n  command.\n- Core spawns the extractor for the mapping's language, passes the\n  mapping as JSON on stdin, reads facts JSON on stdout, validates, and\n  writes `docs/model/derived/…` atomically. Nonzero extractor exit or\n  schema-invalid output fails the command with the extractor's stderr.\n- `--check`: extract to memory and byte-compare against the committed\n  file; nonzero exit on drift. This is the CI staleness gate, same\n  pattern as the snapshot gate. CI's validate job runs `--check` for\n  both dogfood mappings (Rust is built in; TypeScript uses the runner's\n  Node plus the `typescript` dev dependency). Both out-of-process\n  extractors additionally carry a byte-exact fixture gate —\n  `extractors/dotnet/test.sh` and `extractors/typescript/test.sh` — run\n  in the same job. The C# extractor has no dogfood mapping, so its\n  fixture gate is its only coverage; the TypeScript one covers cases the\n  dogfood corpus lacks (external packages, scoped names, builtins).\n\nExtractor commands (overridable per mapping with `extractor:`, for\nmonorepos with pinned toolchains):\n\n| language   | default command                                   |\n|------------|---------------------------------------------------|\n| typescript | `node <repo>/extractors/typescript/extract.mjs`   |\n| csharp     | `dotnet run --project <repo>/extractors/dotnet -c Release` |\n| rust       | built into core (`syn`) — no external process     |\n\nThe defaults resolve against the Blastradius install dir first, then\nthe repo, so users don't need the extractors vendored in their repo.\n\n## TypeScript / JavaScript extractor\n\n`extractors/typescript/` — Node ≥ 20, sole dependency the `typescript`\nnpm package (the compiler API; MIT; the same engine as tsserver).\n\n- Program construction: if `root` (or an ancestor up to the repo root)\n  has a `tsconfig.json`, use it via `ts.getParsedCommandLineOfConfigFile`\n  filtered to files under `root`; otherwise a default program with\n  `allowJs: true, checkJs: false` over the include set (default\n  `**/*.{ts,tsx,mts,js,mjs,jsx}`, minus `node_modules`, `.d.ts`, and\n  the mapping's excludes).\n- **Modules**: every program source file under `root` becomes a\n  `module` element. **Types**: exported `class`/`interface`/`enum`\n  declarations become children of their module (modules + types\n  granularity; functions/consts are not elements in v1).\n- **Edges**: `imports` from import declarations, `export … from`\n  re-exports, and dynamic `import()` with string literals — resolved\n  through the compiler's own module resolution (tsconfig `paths`,\n  index files, extension probing). Imports that resolve outside `root`\n  but still inside the repo are dropped. Type-only imports collapse into\n  the same `imports` edge. `extends`/`implements` edges between\n  extracted types via the checker's declared heritage.\n- **Dependencies**: a specifier that resolves into `node_modules` rolls\n  up under the resolver's own `packageId.name`; one that does not\n  resolve at all still rolls up, using the specifier read lexically\n  (`pkg/sub` → `pkg`, `@scope/pkg/sub` → `@scope/pkg`). Facts therefore\n  do not depend on whether `node_modules` happens to be installed on the\n  machine running the extractor. Excluded: `node:`-prefixed builtins.\n  Deliberately *not* consulted: `module.builtinModules` — that list\n  grows with the Node version, so an unprefixed `import fs from 'fs'`\n  rolls up like any other package rather than making facts depend on\n  which Node ran.\n- Dogfood: `blastradius.ui.canvas` maps `root: ui/js` — diving below\n  the Canvas component shows the real `app/layout/svg/…` module graph.\n  Determinism proven by double-run byte-compare in the node test suite.\n\n## C# extractor\n\n`extractors/dotnet/` — a small dotnet console project on\n`Microsoft.CodeAnalysis.CSharp`, **syntax-level only** in v1\n(ADR-0016): no MSBuild, no restore, works on any checkout regardless of\nwhether the solution builds.\n\n- Input: `**/*.cs` under `root`, minus `obj/`, `bin/`, generated files\n  (`*.g.cs`, `*.Designer.cs`), and the mapping's excludes.\n- **Elements**: namespaces (block-scoped and file-scoped) become\n  `namespace` elements; `class`/`interface`/`record`/`enum`\n  declarations become children of their namespace. Partial types merge\n  into one element keyed by fully-qualified name; nested types fold\n  into their outermost type in v1.\n- **Edges, name-based** (the honest limit of syntax-level): base-list\n  identifiers matched against the extracted type corpus produce\n  `extends`/`implements`; identifier + qualified-name occurrences in\n  type bodies matched against the corpus (respecting that file's\n  `using` set) produce `references`. Ambiguous or extern names are\n  dropped, not guessed — under-reporting beats false edges.\n- **Dependencies**: at syntax level the honest proxy for a package is\n  the **namespace root** of a plain `using` that no corpus namespace\n  claims (`using Newtonsoft.Json` → `dep.Newtonsoft`); `System` is\n  excluded as the BCL. The edge is owned by the namespace the file\n  declares types into, not by each type: a using directive is\n  file-scoped, so attributing it per type would invent precision the\n  syntax does not carry. A file that declares no namespaced type emits\n  no dependency edge. Semantic mode can do better — assembly identity\n  rather than a namespace-root proxy — which is a recorded follow-up.\n- Tested against a fixture corpus (`extractors/dotnet/fixtures/`)\n  covering file-scoped namespaces, partials, records, and a\n  cross-namespace reference — asserting exact facts bytes.\n### Semantic mode (C#)\n\nOpt in per mapping with `mode: semantic` (the extractor also takes a\n`--semantic` flag, which is how `test.sh` drives it). Default stays\n`syntax`; `mode:` on a language with no semantic pass warns.\n\n- **What it buys**: real symbol resolution instead of name matching —\n  same-named types in different projects, global usings, cross-project\n  references. Everything the syntax pass cannot know from one file.\n- **What it does not change**: pass 1 and `sourceDigest`. The element\n  set and the staleness probe are defined by the mapping's file\n  collection, never by MSBuild; only *edges* differ between modes.\n- **Discovery**: one `.sln` under the source root (sorted first, with a\n  note, if several), else every `.csproj`; `bin`/`obj`/dotfile\n  directories skipped. Projects must be restored.\n- **Fallback contract**: any failure — no MSBuild instance, no solution,\n  a project that will not open, no mapped file in a loaded project — is\n  reported on stderr and degrades to the syntax pass, exit 0. Semantic\n  mode is never worse than syntax mode.\n- **Effective mode is recorded** in the facts' `extractor` string:\n  `blastradius-extract-cs 0.3.0 (semantic)` versus `(syntax-fallback)`.\n  This is what lets `introspect --check` tell a machine that *cannot*\n  run the semantic pass apart from facts that are genuinely stale: the\n  former reports \"NOT VERIFIED\" and passes, the latter fails. Repos\n  using semantic mode should regenerate facts somewhere with a known\n  SDK — CI — rather than from whichever developer machine ran last.\n- **SDK resolution**: extractors are spawned from their own directory,\n  not the target repo, so a repo pinning an old SDK in `global.json`\n  cannot break the extractor's own build. Semantic mode then switches\n  to the repo root before registering the MSBuild locator, so the\n  target solution still loads under the SDK it pins. Extractors receive\n  an absolute `repoRoot` and must not depend on the working directory.\n- **Dependency identity**: rollups still come from the using-directive\n  scan in both modes. Semantic mode could name packages by assembly\n  instead of namespace root — recorded follow-up, not done.\n\n## Rust extractor\n\nBuilt into core as a module on `syn` (compile-time dependency; no\nexternal process, no toolchain requirement at extraction time — the one\nlanguage where \"spawn the extractor\" is a function call). Syntax-level,\nsame honesty rules as C#.\n\n- Input: `**/*.rs` under `root`, minus `target/` and the mapping's\n  excludes. Files parse with `syn::parse_file`; a file that fails to\n  parse is reported as a warning and skipped, never fatal.\n- **Elements**: modules from the file tree and inline `mod` blocks\n  (id = crate-relative module path, `src/git.rs` → `git`,\n  `src/model/loader.rs` → `model.loader`); `struct`/`enum`/`trait`\n  declarations become children of their module. `impl` blocks are not\n  elements; they contribute edges.\n- **Edges**: `use` declarations resolved syntactically against the\n  extracted corpus (`crate::`/`self::`/`super::` paths; glob imports\n  dropped) produce `imports`; `impl Trait for Type` where both sides\n  are in the corpus produces `implements`; path references in\n  signatures and bodies matched against the corpus produce\n  `references`. Ambiguous or external names are dropped, not guessed.\n- **Re-exports**: `pub use` (and restricted forms like `pub(crate) use`,\n  visible to the rest of the corpus) build a per-module export table —\n  the name a façade re-exports mapped to the type that defines it. The\n  table is built by fixpoint, so a name forwarded through a chain of\n  façades resolves **transitively**, and `as` renames are honored. Edges\n  then point at the *defining* module, never the façade that forwarded\n  the name: `use crate::facade::Engine` in module `user`, where `facade`\n  re-exports from `engine`, yields `user → engine`. Not followed: glob\n  re-exports (`pub use x::*`) and module re-exports (`pub use crate::a;`)\n  — dropped, in keeping with the ambiguity rule. A re-export cycle\n  resolves nothing and is dropped rather than guessed.\n- **Dependencies**: a `use` path that resolves to nothing and is not\n  anchored with `crate::`/`self::`/`super::` names an external crate in\n  its first segment (`use serde::Serialize` → `dep.serde`). Excluded:\n  the sysroot crates `std`, `core`, `alloc`, `proc_macro`, `test`.\n  Detection is from `use` declarations only — an inline `git2::Repository`\n  path in an expression stays dropped. Two honest limits: a crate renamed\n  in `Cargo.toml` (`foo = { package = \"bar\" }`) shows as `dep.foo`,\n  because the extractor reads syntax and the name in the code is what it\n  sees; and a bare path to a sibling module excluded by the mapping's\n  include globs would be misattributed as a dependency — the `crate::`\n  convention avoids this in practice.\n- **Honest limit**: `syn` sees surface syntax only — macro-generated\n  items (`#[derive]`, proc-macros) are invisible. Good enough for\n  module/type structure, which is what L4 draws.\n- Dogfood: a mapping on a Core component using `include` globs (e.g.\n  `blastradius.core.git-service` ← `crates/blastradius-core/src` with\n  `include: [git.rs, resolve.rs]`) — this also exercises the glob\n  semantics that the whole-directory TypeScript dogfood doesn't.\n\n## Other languages\n\nThe facts schema is the extension point: any tool that emits valid\nfacts is a Blastradius extractor, which is also the future SCIP/LSIF\nimport path (ADR-0016 option 3).\n\n## App & MCP behavior\n\n- **Canvas**: an opted-in component dives like a container (same\n  grammar); one more dive steps from a module into its types, and\n  Escape climbs back out. The header's L4 segment is enabled whenever\n  the model has derived graphs and jumps to the nearest introspected\n  component (selection first, then current scope, then the first\n  graph); with no `source:` mappings it stays disabled. The model\n  explorer lists derived elements under their component (modules, then\n  types), styled as code; clicking a row jumps the canvas to that\n  element's code altitude. L4 uses the existing deterministic layout\n  pipeline with no pinning (derived layouts are pure auto-layout);\n  derived nodes carry a kind kicker with a derived marker (\"Module ·\n  derived\") and monospace, case-preserving titles; a stale graph badges\n  the breadcrumb and dashes the nodes. Dependency rollups read as\n  external rather than derived — outline-only nodes, kicker\n  \"Dependency · external\" — and are leaves, so a dive does nothing. The\n  inspector shows `path:line` and opens the file via the `open_source`\n  command (repo-root-relative, unlike `open_in_editor`'s\n  workspace-relative paths); for an element with no path — a dependency\n  rollup, or a C# namespace, which owns no single file — it says so\n  instead of offering a button that cannot work.\n- **MCP**: derived elements appear in `find_elements`, `element`, and\n  `blast_radius` (marked `derived: true`) — an agent asking for the\n  blast radius of a module sees real code-level fan-in. Write tools\n  refuse them as above. A `introspect` MCP tool mirrors the CLI\n  command so agents can refresh facts.\n- **Exports**: derived elements ride along in snapshots and HTML/PNG/SVG\n  export automatically (they're ordinary elements by render time).\n  **Recorded gap**: the standalone exported viewer (`ui/js/viewer.js`)\n  has no derived handling of its own — its kind labels and node classes\n  know only authored kinds, so an exported page cannot browse L4 the way\n  the app does. Not a regression from dependency rollups (nothing L4\n  rendered there before); worth closing when the viewer next gets\n  attention.\n\n## Exit criteria (0.3.0 theme 1)\n\n1. Diving below `blastradius.ui.canvas` in the app shows the real\n   `ui/js` module/import graph, from committed facts, with click-through\n   to source.\n2. Diving below the Rust-mapped Core component shows its real\n   module/type graph via the built-in extractor.\n3. `blastradius introspect --check` green in CI on both dogfood\n   mappings; double-run determinism asserted in tests.\n4. C# fixture corpus round-trips through the dotnet extractor with\n   byte-exact facts in tests, without any MSBuild/restore step.\n5. Derived elements are visibly read-only: `apply_operation` against\n   one returns the source-file-pointing error, covered by a test.\n6. A component with no `source:` mapping is completely untouched by\n   the feature — hand-modeled L4 children remain editable as ordinary\n   elements (covered by a test).\n"
+      "body": "# Spec: L4 code introspection\n\nImplements ADR-0016. Components opt in to a source mapping; per-language\nextractors emit a common facts file; core derives read-only L4 elements\nfrom it. Languages in scope: TypeScript/JavaScript and C#/.NET (the\npriority stack) plus Rust (built-in, dogfooding this repo's own crates).\n\n**Introspection is optional, per component.** L4 is an ordinary model\nlevel first: users can hand-model code-level children in the YAML like\nany other element — editable, sync-engine-managed, no toolchain\ninvolved. A component only gets derived elements if it carries a\n`source:` mapping; without one, nothing runs and nothing is generated.\nThe two styles coexist even on the same component: derived elements\nlive under the reserved `.src.` id segment, hand-modeled children\noutside it, so neither can collide with or overwrite the other.\n\n## The `source:` mapping\n\nOn a component (L3), in the model YAML:\n\n```yaml\ncomponents:\n  canvas:\n    name: Canvas\n    source:\n      language: typescript        # typescript | csharp | rust\n      root: ui/js                 # repo-root-relative (ADR-0014 anchor)\n      include: [\"**/*.mjs\"]       # optional, extractor defaults apply\n      exclude: [\"**/*.test.mjs\"]  # optional\n      mode: syntax                # optional: syntax (default) | semantic\n```\n\n`root` is relative to the **repository root**, not the workspace\ndirectory — code lives beside the workspace, and ADR-0014's discovery\nalready anchors every workspace inside a repo. Validation errors if the\nroot does not exist or `language` is unknown; `include`/`exclude` are\ngitignore-style globs evaluated by the extractor.\n\n## Facts files\n\nOne per opted-in component, committed:\n\n```\ndocs/model/derived/<component-id>.l4.json     # e.g. blastradius.ui.canvas.l4.json\n```\n\nSchema v1:\n\n```json\n{\n  \"schema\": 1,\n  \"language\": \"typescript\",\n  \"extractor\": \"blastradius-extract-ts 0.1.0\",\n  \"component\": \"blastradius.ui.canvas\",\n  \"root\": \"ui/js\",\n  \"sourceDigest\": \"sha256:…\",\n  \"elements\": [\n    { \"id\": \"layout\",  \"kind\": \"module\", \"name\": \"layout.js\", \"path\": \"ui/js/layout.js\" },\n    { \"id\": \"svg\",     \"kind\": \"module\", \"name\": \"svg.js\",    \"path\": \"ui/js/svg.js\" }\n  ],\n  \"edges\": [\n    { \"from\": \"app\", \"to\": \"layout\", \"kind\": \"imports\" }\n  ]\n}\n```\n\n- `elements[].kind`: `module`, `namespace`, `class`, `interface`,\n  `record`, `enum`, `dependency`. Type elements carry `parent` (the\n  containing module or namespace id). `path` is repo-root-relative with\n  forward slashes; type elements add `line` (1-based declaration line)\n  for click-through.\n- `edges[].kind`: `imports` (module→module, and module/namespace→\n  dependency), `references` (type→type, name-based), `extends`,\n  `implements`.\n\n### Outbound references and drift (ADR-0019)\n\nA reference that leaves a component's mapped corpus but stays inside the\nrepository is recorded in `outbound` as `{from, path}` — the element holding\nit, and the repo-relative file it points at:\n\n```json\n\"outbound\": [\n  { \"from\": \"git\", \"path\": \"crates/blastradius-core/src/model.rs\" }\n]\n```\n\nDeliberately a **file**, not a component: a per-component extractor cannot know\nwho owns that file, and guessing would bake one component's view into its own\nfacts. The workspace resolves ownership at load time by matching the path\nagainst every `source:` mapping, which turns the reference into a code\ndependency between components — the input to drift detection.\n\n- **Rust** records any `crate::`/`self::`/`super::` path that its corpus cannot\n  resolve, mapping the module path to `<root>/<a>/<b>.rs` or `.../mod.rs`\n  (longest prefix that exists on disk wins, since trailing segments may be\n  types). Bare unanchored paths remain external-crate rollups.\n- **TypeScript** records anything the compiler resolves to a real file outside\n  the mapped root but inside the repository — the resolver already knows the\n  exact path, so there is no inference.\n- **C#** records nothing yet: at syntax level it resolves namespaces, not\n  paths, so there is no file to name. Recorded, not solved.\n\nEmpty is omitted, and facts written before 0.5.0 simply have none.\n\n### External dependency rollups\n\nImports that leave the mapped tree used to vanish, which made a module\nthat leans on `serde` or `react` look self-contained. They now roll up\nto **one node per package**:\n\n- Id `dep.<package>` with the package name verbatim — `dep.serde`,\n  `dep.left-pad`, `dep.@scope/widgets`, `dep.Newtonsoft`. Kind\n  `dependency`, no `parent` (they sit beside the modules at the top of\n  the derived scene), and `path` empty: there is no file to open,\n  because the package is not part of the mapped tree.\n- Nothing derives hierarchy from dots in fact ids — nesting comes from\n  the explicit `parent` field — so dotted and scoped package names are\n  inert. The TypeScript and C# extractors delimit their internal edge\n  encoding with NUL, not spaces, so no package name can break it.\n- **Collision rule**: if a corpus element already owns the id (a module\n  literally named `dep.foo`), the rollup is skipped rather than\n  colliding — under-reporting over a silent clash, as everywhere else.\n- Per-language detection and exclusions are in each extractor's section\n  below. Each excludes the language's own standard library: it ships\n  with the toolchain, appears in nearly every file, and carries no\n  architectural signal.\n- `sourceDigest`: sha256 over the sorted list of (relative path,\n  content sha256) of every file the extractor consumed. Cheap to\n  recompute without running the extractor — this is the staleness probe.\n- **Determinism contract**: elements and edges sorted by id/(from,to),\n  LF line endings, two-space indent, no timestamps, no absolute paths.\n  Running an extractor twice on the same tree is byte-identical.\n- Ids follow ADR-0003 (derived from stable names, not positions):\n  module id = root-relative path minus extension, slashes → dots\n  (`js/layout` under root `ui` → `js.layout`); C# type id =\n  fully-qualified metadata name (`Acme.Billing.Invoice`).\n\n## Derived elements in the model\n\nAt workspace open, core loads every facts file, validates it against\nthe schema and the component's current `source:` mapping, and grafts\nread-only elements beneath the owning component:\n\n- Full id: `<component-id>.src.<fact-id>` — the `src` segment keeps the\n  derived namespace disjoint from hand-modeled children forever.\n- `derived: true` on every grafted element; `apply_operation` and the\n  sync engine refuse writes to them with an error naming the source\n  file to edit instead.\n- A facts file whose `component` no longer exists or no longer has a\n  `source:` mapping is a validation **warning** (stale artifact, safe\n  to delete); a mapping with no facts file is an **info** (run\n  `blastradius introspect`).\n- If the recomputed `sourceDigest` disagrees with the facts file, the\n  elements still load but carry `stale: true` — surfaced as a canvas\n  badge and a validation warning, never an error (committed facts may\n  lag the working tree mid-edit; that is normal).\n\n## CLI\n\n```\nblastradius introspect [dir] [component-id] [--check]\n```\n\n- No argument: extract every opted-in component. With an id: just that\n  one. Workspace resolution follows ADR-0014 discovery like every other\n  command.\n- Core spawns the extractor for the mapping's language, passes the\n  mapping as JSON on stdin, reads facts JSON on stdout, validates, and\n  writes `docs/model/derived/…` atomically. Nonzero extractor exit or\n  schema-invalid output fails the command with the extractor's stderr.\n- `--check`: extract to memory and byte-compare against the committed\n  file; nonzero exit on drift. This is the CI staleness gate, same\n  pattern as the snapshot gate. CI's validate job runs `--check` for\n  both dogfood mappings (Rust is built in; TypeScript uses the runner's\n  Node plus the `typescript` dev dependency). Both out-of-process\n  extractors additionally carry a byte-exact fixture gate —\n  `extractors/dotnet/test.sh` and `extractors/typescript/test.sh` — run\n  in the same job. The C# extractor has no dogfood mapping, so its\n  fixture gate is its only coverage; the TypeScript one covers cases the\n  dogfood corpus lacks (external packages, scoped names, builtins).\n\nExtractor commands (overridable per mapping with `extractor:`, for\nmonorepos with pinned toolchains):\n\n| language   | default command                                   |\n|------------|---------------------------------------------------|\n| typescript | `node <repo>/extractors/typescript/extract.mjs`   |\n| csharp     | `dotnet run --project <repo>/extractors/dotnet -c Release` |\n| rust       | built into core (`syn`) — no external process     |\n\nThe defaults resolve against the Blastradius install dir first, then\nthe repo, so users don't need the extractors vendored in their repo.\n\n## TypeScript / JavaScript extractor\n\n`extractors/typescript/` — Node ≥ 20, sole dependency the `typescript`\nnpm package (the compiler API; MIT; the same engine as tsserver).\n\n- Program construction: if `root` (or an ancestor up to the repo root)\n  has a `tsconfig.json`, use it via `ts.getParsedCommandLineOfConfigFile`\n  filtered to files under `root`; otherwise a default program with\n  `allowJs: true, checkJs: false` over the include set (default\n  `**/*.{ts,tsx,mts,js,mjs,jsx}`, minus `node_modules`, `.d.ts`, and\n  the mapping's excludes).\n- **Modules**: every program source file under `root` becomes a\n  `module` element. **Types**: exported `class`/`interface`/`enum`\n  declarations become children of their module (modules + types\n  granularity; functions/consts are not elements in v1).\n- **Edges**: `imports` from import declarations, `export … from`\n  re-exports, and dynamic `import()` with string literals — resolved\n  through the compiler's own module resolution (tsconfig `paths`,\n  index files, extension probing). Imports that resolve outside `root`\n  but still inside the repo are dropped. Type-only imports collapse into\n  the same `imports` edge. `extends`/`implements` edges between\n  extracted types via the checker's declared heritage.\n- **Dependencies**: a specifier that resolves into `node_modules` rolls\n  up under the resolver's own `packageId.name`; one that does not\n  resolve at all still rolls up, using the specifier read lexically\n  (`pkg/sub` → `pkg`, `@scope/pkg/sub` → `@scope/pkg`). Facts therefore\n  do not depend on whether `node_modules` happens to be installed on the\n  machine running the extractor. Excluded: `node:`-prefixed builtins.\n  Deliberately *not* consulted: `module.builtinModules` — that list\n  grows with the Node version, so an unprefixed `import fs from 'fs'`\n  rolls up like any other package rather than making facts depend on\n  which Node ran.\n- Dogfood: `blastradius.ui.canvas` maps `root: ui/js` — diving below\n  the Canvas component shows the real `app/layout/svg/…` module graph.\n  Determinism proven by double-run byte-compare in the node test suite.\n\n## C# extractor\n\n`extractors/dotnet/` — a small dotnet console project on\n`Microsoft.CodeAnalysis.CSharp`, **syntax-level only** in v1\n(ADR-0016): no MSBuild, no restore, works on any checkout regardless of\nwhether the solution builds.\n\n- Input: `**/*.cs` under `root`, minus `obj/`, `bin/`, generated files\n  (`*.g.cs`, `*.Designer.cs`), and the mapping's excludes.\n- **Elements**: namespaces (block-scoped and file-scoped) become\n  `namespace` elements; `class`/`interface`/`record`/`enum`\n  declarations become children of their namespace. Partial types merge\n  into one element keyed by fully-qualified name; nested types fold\n  into their outermost type in v1.\n- **Edges, name-based** (the honest limit of syntax-level): base-list\n  identifiers matched against the extracted type corpus produce\n  `extends`/`implements`; identifier + qualified-name occurrences in\n  type bodies matched against the corpus (respecting that file's\n  `using` set) produce `references`. Ambiguous or extern names are\n  dropped, not guessed — under-reporting beats false edges.\n- **Dependencies**: at syntax level the honest proxy for a package is\n  the **namespace root** of a plain `using` that no corpus namespace\n  claims (`using Newtonsoft.Json` → `dep.Newtonsoft`); `System` is\n  excluded as the BCL. The edge is owned by the namespace the file\n  declares types into, not by each type: a using directive is\n  file-scoped, so attributing it per type would invent precision the\n  syntax does not carry. A file that declares no namespaced type emits\n  no dependency edge. Semantic mode can do better — assembly identity\n  rather than a namespace-root proxy — which is a recorded follow-up.\n- Tested against a fixture corpus (`extractors/dotnet/fixtures/`)\n  covering file-scoped namespaces, partials, records, and a\n  cross-namespace reference — asserting exact facts bytes.\n### Semantic mode (C#)\n\nOpt in per mapping with `mode: semantic` (the extractor also takes a\n`--semantic` flag, which is how `test.sh` drives it). Default stays\n`syntax`; `mode:` on a language with no semantic pass warns.\n\n- **What it buys**: real symbol resolution instead of name matching —\n  same-named types in different projects, global usings, cross-project\n  references. Everything the syntax pass cannot know from one file.\n- **What it does not change**: pass 1 and `sourceDigest`. The element\n  set and the staleness probe are defined by the mapping's file\n  collection, never by MSBuild; only *edges* differ between modes.\n- **Discovery**: one `.sln` under the source root (sorted first, with a\n  note, if several), else every `.csproj`; `bin`/`obj`/dotfile\n  directories skipped. Projects must be restored.\n- **Fallback contract**: any failure — no MSBuild instance, no solution,\n  a project that will not open, no mapped file in a loaded project — is\n  reported on stderr and degrades to the syntax pass, exit 0. Semantic\n  mode is never worse than syntax mode.\n- **Effective mode is recorded** in the facts' `extractor` string:\n  `blastradius-extract-cs 0.3.0 (semantic)` versus `(syntax-fallback)`.\n  This is what lets `introspect --check` tell a machine that *cannot*\n  run the semantic pass apart from facts that are genuinely stale: the\n  former reports \"NOT VERIFIED\" and passes, the latter fails. Repos\n  using semantic mode should regenerate facts somewhere with a known\n  SDK — CI — rather than from whichever developer machine ran last.\n- **SDK resolution**: extractors are spawned from their own directory,\n  not the target repo, so a repo pinning an old SDK in `global.json`\n  cannot break the extractor's own build. Semantic mode then switches\n  to the repo root before registering the MSBuild locator, so the\n  target solution still loads under the SDK it pins. Extractors receive\n  an absolute `repoRoot` and must not depend on the working directory.\n- **Dependency identity**: rollups still come from the using-directive\n  scan in both modes. Semantic mode could name packages by assembly\n  instead of namespace root — recorded follow-up, not done.\n\n## Rust extractor\n\nBuilt into core as a module on `syn` (compile-time dependency; no\nexternal process, no toolchain requirement at extraction time — the one\nlanguage where \"spawn the extractor\" is a function call). Syntax-level,\nsame honesty rules as C#.\n\n- Input: `**/*.rs` under `root`, minus `target/` and the mapping's\n  excludes. Files parse with `syn::parse_file`; a file that fails to\n  parse is reported as a warning and skipped, never fatal.\n- **Elements**: modules from the file tree and inline `mod` blocks\n  (id = crate-relative module path, `src/git.rs` → `git`,\n  `src/model/loader.rs` → `model.loader`); `struct`/`enum`/`trait`\n  declarations become children of their module. `impl` blocks are not\n  elements; they contribute edges.\n- **Edges**: `use` declarations resolved syntactically against the\n  extracted corpus (`crate::`/`self::`/`super::` paths; glob imports\n  dropped) produce `imports`; `impl Trait for Type` where both sides\n  are in the corpus produces `implements`; path references in\n  signatures and bodies matched against the corpus produce\n  `references`. Ambiguous or external names are dropped, not guessed.\n- **Re-exports**: `pub use` (and restricted forms like `pub(crate) use`,\n  visible to the rest of the corpus) build a per-module export table —\n  the name a façade re-exports mapped to the type that defines it. The\n  table is built by fixpoint, so a name forwarded through a chain of\n  façades resolves **transitively**, and `as` renames are honored. Edges\n  then point at the *defining* module, never the façade that forwarded\n  the name: `use crate::facade::Engine` in module `user`, where `facade`\n  re-exports from `engine`, yields `user → engine`. Not followed: glob\n  re-exports (`pub use x::*`) and module re-exports (`pub use crate::a;`)\n  — dropped, in keeping with the ambiguity rule. A re-export cycle\n  resolves nothing and is dropped rather than guessed.\n- **Dependencies**: a `use` path that resolves to nothing and is not\n  anchored with `crate::`/`self::`/`super::` names an external crate in\n  its first segment (`use serde::Serialize` → `dep.serde`). Excluded:\n  the sysroot crates `std`, `core`, `alloc`, `proc_macro`, `test`.\n  Detection is from `use` declarations only — an inline `git2::Repository`\n  path in an expression stays dropped. Two honest limits: a crate renamed\n  in `Cargo.toml` (`foo = { package = \"bar\" }`) shows as `dep.foo`,\n  because the extractor reads syntax and the name in the code is what it\n  sees; and a bare path to a sibling module excluded by the mapping's\n  include globs would be misattributed as a dependency — the `crate::`\n  convention avoids this in practice.\n- **Honest limit**: `syn` sees surface syntax only — macro-generated\n  items (`#[derive]`, proc-macros) are invisible. Good enough for\n  module/type structure, which is what L4 draws.\n- Dogfood: a mapping on a Core component using `include` globs (e.g.\n  `blastradius.core.git-service` ← `crates/blastradius-core/src` with\n  `include: [git.rs, resolve.rs]`) — this also exercises the glob\n  semantics that the whole-directory TypeScript dogfood doesn't.\n\n## Other languages\n\nThe facts schema is the extension point: any tool that emits valid\nfacts is a Blastradius extractor, which is also the future SCIP/LSIF\nimport path (ADR-0016 option 3).\n\n## App & MCP behavior\n\n- **Canvas**: an opted-in component dives like a container (same\n  grammar); one more dive steps from a module into its types, and\n  Escape climbs back out. The header's L4 segment is enabled whenever\n  the model has derived graphs and jumps to the nearest introspected\n  component (selection first, then current scope, then the first\n  graph); with no `source:` mappings it stays disabled. The model\n  explorer lists derived elements under their component (modules, then\n  types), styled as code; clicking a row jumps the canvas to that\n  element's code altitude. L4 uses the existing deterministic layout\n  pipeline with no pinning (derived layouts are pure auto-layout);\n  derived nodes carry a kind kicker with a derived marker (\"Module ·\n  derived\") and monospace, case-preserving titles; a stale graph badges\n  the breadcrumb and dashes the nodes. Dependency rollups read as\n  external rather than derived — outline-only nodes, kicker\n  \"Dependency · external\" — and are leaves, so a dive does nothing. The\n  inspector shows `path:line` and opens the file via the `open_source`\n  command (repo-root-relative, unlike `open_in_editor`'s\n  workspace-relative paths); for an element with no path — a dependency\n  rollup, or a C# namespace, which owns no single file — it says so\n  instead of offering a button that cannot work.\n- **MCP**: derived elements appear in `find_elements`, `element`, and\n  `blast_radius` (marked `derived: true`) — an agent asking for the\n  blast radius of a module sees real code-level fan-in. Write tools\n  refuse them as above. A `introspect` MCP tool mirrors the CLI\n  command so agents can refresh facts.\n- **Exports**: derived elements ride along in snapshots and HTML/PNG/SVG\n  export automatically (they're ordinary elements by render time).\n  **Recorded gap**: the standalone exported viewer (`ui/js/viewer.js`)\n  has no derived handling of its own — its kind labels and node classes\n  know only authored kinds, so an exported page cannot browse L4 the way\n  the app does. Not a regression from dependency rollups (nothing L4\n  rendered there before); worth closing when the viewer next gets\n  attention.\n\n## Exit criteria (0.3.0 theme 1)\n\n1. Diving below `blastradius.ui.canvas` in the app shows the real\n   `ui/js` module/import graph, from committed facts, with click-through\n   to source.\n2. Diving below the Rust-mapped Core component shows its real\n   module/type graph via the built-in extractor.\n3. `blastradius introspect --check` green in CI on both dogfood\n   mappings; double-run determinism asserted in tests.\n4. C# fixture corpus round-trips through the dotnet extractor with\n   byte-exact facts in tests, without any MSBuild/restore step.\n5. Derived elements are visibly read-only: `apply_operation` against\n   one returns the source-file-pointing error, covered by a test.\n6. A component with no `source:` mapping is completely untouched by\n   the feature — hand-modeled L4 children remain editable as ordinary\n   elements (covered by a test).\n"
     },
     {
       "id": "spec-mcp-server",
@@ -900,7 +923,7 @@
       ],
       "file": "spec/model-format.md",
       "title": "Spec: workspace and model format",
-      "body": "# Spec: workspace and model format\n\nNormative reference for the Blastradius YAML schema, v1. The workspace in this\n`docs/` folder is the conformance example; where prose and that workspace\ndisagree, it is a bug in one of them and CI should have caught it.\n\n## 1. Workspace\n\nA workspace is a folder containing a `blastradius.yaml` manifest\n(ADR-0014; the pre-0.2.0 name `workspace.yaml` still loads with a\ndeprecation warning, and `blastradius.yaml` wins when both exist):\n\n```yaml\nworkspace:\n  name: Blastradius        # display name\n  version: 1               # schema version — integer, required\nmodel:\n  include: [model/*.yaml]\nviews:\n  include: [views/*.yaml]\ndocs:\n  include: [\"*.md\", \"adr/*.md\", \"spec/*.md\"]\n```\n\n- Globs are relative to the manifest, forward-slash, `*` and `**` only.\n- `version` gates parsing: a loader encountering a greater version than it\n  knows refuses with an upgrade message, never a partial parse. Migrations\n  between versions are a roadmap deliverable.\n- Files matched by no glob are ignored — a workspace can live inside a bigger\n  `docs/` tree without claiming all of it.\n\n## 2. Identity\n\nPer ADR-0003: the YAML key of an element is its immutable id — lowercase slug\n`[a-z0-9-]{1,64}`, unique among siblings. Global references use dotted paths:\n`<system>.<container>.<component>` (`blastradius.core.sync-engine`). People\nand external systems are addressed by bare id (`architect`, `git-repo`).\n\n## 3. Model files\n\nEach model file declares either context elements or one software system.\n\n`model/context.yaml`:\n\n```yaml\npeople:\n  architect:\n    name: Platform Architect\n    description: Owns the architecture documentation for their group.\nexternal:\n  os-shell:\n    name: Operating System\n    description: File system, WebView, window manager.\n```\n\n`model/<system-id>.yaml` (one system per file, per ADR-0004):\n\n```yaml\nsystem: blastradius            # id of this system; must match one glob'd file\nname: Blastradius\ndescription: Local-first desktop app for C4 architecture models.\n\ncontainers:\n  ui:\n    name: Canvas UI\n    tech: WebView · design system\n    description: Rendering and interaction; owns no domain state.\n    components:                # L3, optional\n      canvas:\n        name: Canvas\n        tech: SVG + DOM\n  core:\n    name: Core\n    tech: Rust\n    components:\n      model-service: { name: Model Service }\n      sync-engine:   { name: Sync Engine }\n\nrelations:\n  - from: ui\n    to: core.model-service     # dotted path, relative to this system\n    label: load & edit model\n    protocol: Tauri IPC\n  - from: architect            # context elements by bare id\n    to: ui\n    label: models the system\n```\n\nRules:\n\n- `name` defaults to the titleized id. `tech`, `description` optional.\n- `relations` may appear at system level (as above), nested under a\n  container (then `from` defaults to that container), or in a **context\n  file** (endpoints are then absolute — bare context ids or dotted paths;\n  there is no scope). `from`/`to` accept bare ids (context), sibling ids, or\n  dotted paths; cross-system references use full paths from the root.\n  Context-file relations were silently dropped by the parser before\n  2026-08-22 even though the sync engine wrote person-relations there — a\n  data-loss bug found by the MCP test suite; both surfaces now agree.\n- Relations are **directed** (`from` → `to`). `direction: both | none`\n  overrides; omitted means forward — an undirected relation is a deliberate\n  choice, mirroring the canvas grammar.\n- `external: true` on a system renders the dashed external style. Scalar\n  one-line form (`model-service: { name: Model Service }`) is valid YAML flow\n  style and encouraged for terse L3 listings.\n\n## 3c. Groups (0.5.0)\n\nA `group:` label draws a boundary around the elements that share it:\n\n```yaml\ncontainers:\n  web:    { name: Web, group: Storefront }\n  api:    { name: API, group: Storefront }\n  ledger: { name: Ledger, group: Finance }\n```\n\n- **Presentation, not structure.** A group is not a nesting level: ids stay\n  `system.container`, no altitude is added, and no element gains a parent.\n  Nothing about identity (ADR-0003), relations, or pins changes because an\n  element joined a group.\n- Elements group with their **siblings** — the same label under two different\n  parents is two different boundaries, because a boundary is drawn inside one\n  scene.\n- The label is free text, and is what the boundary is titled. Blank is treated\n  as absent.\n- **Rendering is opt-in per view**: `show-groups: true` (§4), off by default,\n  so adding a label never changes an existing diagram's shape.\n- This mirrors Structurizr's `group`, which the importer previously flattened\n  with a \"groups are not modelled\" diagnostic — grouped workspaces now import\n  with their grouping intact.\n\n## 3b. Deployment (ADR-0018)\n\nThe physical counterpart to the logical model: where the containers\nactually run. One file, `model/deployment.yaml`, holding every\nenvironment:\n\n```yaml\nenvironments:\n  dev-machine:\n    name: Developer Machine\n    description: Where the app is built and dogfooded.\n    nodes:\n      workstation:\n        name: Windows 11 Workstation\n        tech: x64\n        nodes:                          # deployment nodes nest arbitrarily\n          dev-build:\n            name: Blastradius (dev build)\n            tech: cargo tauri dev\n            instances:\n              shell: { container: blastradius.shell }\n              ui:    { container: blastradius.ui }\n    relations:\n      - from: workstation\n        to: ci.runner\n        label: push\n```\n\n- **Three kinds**: `environment` (top of a tree), `deployment-node`\n  (anything a thing runs *on* — machine, runner, service, image), and\n  `container-instance` (a modelled container actually running there).\n- **Ids are dotted, like everything else** (ADR-0003): the key is the id,\n  unique among siblings, and the full address is the path —\n  `dev-machine.workstation.dev-build.shell`. Environments are top-level\n  ids and must not collide with system or context ids.\n- `instances:` entries carry `container:`, a reference to a `container`\n  element resolved exactly like a relation endpoint. A dangling\n  reference is an error — the point of modelling deployment here rather\n  than in prose is that it cannot quietly drift.\n- `nodes:` and `instances:` may both appear on a node. `name`, `tech`,\n  `description` behave as everywhere else; an instance's `name` defaults\n  to the referenced container's name.\n- `relations:` may appear on an environment (endpoints relative to it)\n  and works like system relations. Deployment and logical elements are\n  in one id space, so a relation may cross between them.\n- **Rendering is by altitude, not containment** (ADR-0018): a\n  deployment view shows one level and dives, exactly like\n  containers → components. Nested boxes are a recorded follow-up.\n\n## 4. Views\n\n`views/<view-id>.yaml`:\n\n```yaml\nview: containers            # view id\nname: Containers            # optional display name\nscope: blastradius          # element whose children this view shows\nlevel: L2                   # L1 | L2 | L3 | LD — which altitude this view captures\n                            # LD is a deployment view (ADR-0018); its scope is an\n                            # environment or a deployment node — or omitted, for\n                            # the overview of every environment, whose pins are\n                            # then absolute ids\nlayout:                     # pinned positions — grid units (26px cells @ 1×)\n  ui: [4, 2]\n  core: [10, 4]\nshow-groups: false          # draw `group:` boundaries (§3c) — default false\ninclude-context: true       # show people/externals related to scope (default true)\n                            # (honored by the renderer since 2026-08-22 — it was\n                            # parsed-but-ignored before; core-components.yaml\n                            # exercises the false path)\n```\n\n- Elements absent from `layout:` are auto-placed (ADR-0006). Pinning is the\n  exception, not the rule.\n- Grid units, not pixels: layouts survive zoom and density changes.\n- A workspace with zero view files is valid — every level renders fully\n  auto-laid-out.\n- `scope:` is required except on an `LD` overview, the one view whose subject\n  is the whole deployment rather than one element.\n\n## 5. Documents\n\nMarkdown files matched by `docs.include` and starting with frontmatter join\nthe model (ADR-0010):\n\n```yaml\n---\ndoc: adr-0007            # document id — same slug rules, unique workspace-wide\ntype: adr                # prd | adr | spec | roadmap | note\nstatus: accepted         # see vocabularies below\nelements: [blastradius.core.git-service]\nsupersedes: adr-0004     # optional, adr only\n---\n```\n\nStatus vocabularies — `adr`: proposed / accepted / superseded / rejected;\n`prd`, `spec`, `roadmap`: draft / current / superseded; `note`: none.\nA matched file **without** frontmatter is ignored with an info-level notice\n(ordinary READMEs may share the folder).\n\n## 6. Validation\n\nErrors (workspace loads, marked invalid; affected elements get `is-invalid`):\nduplicate id in scope; dangling reference from a relation, layout, or doc\n`elements:` list; unknown schema version; malformed YAML in any included file.\n\nWarnings: doc frontmatter with unknown `type`; empty system; relation\nduplicated verbatim.\n\nEverything is reported with file + line, in the panel footer and on the\ncanvas — never only in a log.\n\n## 7. Stability contract\n\nAdditions to the schema are minor (same `version`); anything that changes the\nmeaning of an existing construct bumps `version` and ships with a migration.\nFrontmatter counts as schema surface under the same contract.\n"
+      "body": "# Spec: workspace and model format\n\nNormative reference for the Blastradius YAML schema, v1. The workspace in this\n`docs/` folder is the conformance example; where prose and that workspace\ndisagree, it is a bug in one of them and CI should have caught it.\n\n## 1. Workspace\n\nA workspace is a folder containing a `blastradius.yaml` manifest\n(ADR-0014; the pre-0.2.0 name `workspace.yaml` still loads with a\ndeprecation warning, and `blastradius.yaml` wins when both exist):\n\n```yaml\nworkspace:\n  name: Blastradius        # display name\n  version: 1               # schema version — integer, required\nmodel:\n  include: [model/*.yaml]\nviews:\n  include: [views/*.yaml]\ndocs:\n  include: [\"*.md\", \"adr/*.md\", \"spec/*.md\"]\n```\n\n- Globs are relative to the manifest, forward-slash, `*` and `**` only.\n- `version` gates parsing: a loader encountering a greater version than it\n  knows refuses with an upgrade message, never a partial parse. Migrations\n  between versions are a roadmap deliverable.\n- Files matched by no glob are ignored — a workspace can live inside a bigger\n  `docs/` tree without claiming all of it.\n\n## 2. Identity\n\nPer ADR-0003: the YAML key of an element is its immutable id — lowercase slug\n`[a-z0-9-]{1,64}`, unique among siblings. Global references use dotted paths:\n`<system>.<container>.<component>` (`blastradius.core.sync-engine`). People\nand external systems are addressed by bare id (`architect`, `git-repo`).\n\n## 3. Model files\n\nEach model file declares either context elements or one software system.\n\n`model/context.yaml`:\n\n```yaml\npeople:\n  architect:\n    name: Platform Architect\n    description: Owns the architecture documentation for their group.\nexternal:\n  os-shell:\n    name: Operating System\n    description: File system, WebView, window manager.\n```\n\n`model/<system-id>.yaml` (one system per file, per ADR-0004):\n\n```yaml\nsystem: blastradius            # id of this system; must match one glob'd file\nname: Blastradius\ndescription: Local-first desktop app for C4 architecture models.\n\ncontainers:\n  ui:\n    name: Canvas UI\n    tech: WebView · design system\n    description: Rendering and interaction; owns no domain state.\n    components:                # L3, optional\n      canvas:\n        name: Canvas\n        tech: SVG + DOM\n  core:\n    name: Core\n    tech: Rust\n    components:\n      model-service: { name: Model Service }\n      sync-engine:   { name: Sync Engine }\n\nrelations:\n  - from: ui\n    to: core.model-service     # dotted path, relative to this system\n    label: load & edit model\n    protocol: Tauri IPC\n  - from: architect            # context elements by bare id\n    to: ui\n    label: models the system\n```\n\nRules:\n\n- `name` defaults to the titleized id. `tech`, `description` optional.\n- `relations` may appear at system level (as above), nested under a\n  container (then `from` defaults to that container), or in a **context\n  file** (endpoints are then absolute — bare context ids or dotted paths;\n  there is no scope). `from`/`to` accept bare ids (context), sibling ids, or\n  dotted paths; cross-system references use full paths from the root.\n  Context-file relations were silently dropped by the parser before\n  2026-08-22 even though the sync engine wrote person-relations there — a\n  data-loss bug found by the MCP test suite; both surfaces now agree.\n- Relations are **directed** (`from` → `to`). `direction: both | none`\n  overrides; omitted means forward — an undirected relation is a deliberate\n  choice, mirroring the canvas grammar.\n- `external: true` on a system renders the dashed external style. Scalar\n  one-line form (`model-service: { name: Model Service }`) is valid YAML flow\n  style and encouraged for terse L3 listings.\n\n## 3c. Groups (0.5.0)\n\nA `group:` label draws a boundary around the elements that share it:\n\n```yaml\ncontainers:\n  web:    { name: Web, group: Storefront }\n  api:    { name: API, group: Storefront }\n  ledger: { name: Ledger, group: Finance }\n```\n\n- **Presentation, not structure.** A group is not a nesting level: ids stay\n  `system.container`, no altitude is added, and no element gains a parent.\n  Nothing about identity (ADR-0003), relations, or pins changes because an\n  element joined a group.\n- Elements group with their **siblings** — the same label under two different\n  parents is two different boundaries, because a boundary is drawn inside one\n  scene.\n- The label is free text, and is what the boundary is titled. Blank is treated\n  as absent.\n- **Rendering is opt-in per view**: `show-groups: true` (§4), off by default,\n  so adding a label never changes an existing diagram's shape.\n- This mirrors Structurizr's `group`, which the importer previously flattened\n  with a \"groups are not modelled\" diagnostic — grouped workspaces now import\n  with their grouping intact.\n\n**How a boundary is placed.** A group whose members are all auto-laid becomes a\nreal ELK compound, so the members are laid out *together* and ELK sizes the\nbox. A group holding a pinned member cannot be — pinned nodes never enter the\nELK graph — so its boundary is a box drawn round the finished geometry\ninstead: the user has taken manual control of where those nodes sit, and the\nboundary follows rather than overrides. In the canvas the drawn box is then\ngrown to cover its members' real rendered heights, because a `.node` is\ncontent-sized and a long name wraps taller than layout's per-kind estimate;\nthe SVG path needs no such correction, since there nodes and boundaries use\nthe same numbers.\n\n## 3b. Deployment (ADR-0018)\n\nThe physical counterpart to the logical model: where the containers\nactually run. One file, `model/deployment.yaml`, holding every\nenvironment:\n\n```yaml\nenvironments:\n  dev-machine:\n    name: Developer Machine\n    description: Where the app is built and dogfooded.\n    nodes:\n      workstation:\n        name: Windows 11 Workstation\n        tech: x64\n        nodes:                          # deployment nodes nest arbitrarily\n          dev-build:\n            name: Blastradius (dev build)\n            tech: cargo tauri dev\n            instances:\n              shell: { container: blastradius.shell }\n              ui:    { container: blastradius.ui }\n    relations:\n      - from: workstation\n        to: ci.runner\n        label: push\n```\n\n- **Three kinds**: `environment` (top of a tree), `deployment-node`\n  (anything a thing runs *on* — machine, runner, service, image), and\n  `container-instance` (a modelled container actually running there).\n- **Ids are dotted, like everything else** (ADR-0003): the key is the id,\n  unique among siblings, and the full address is the path —\n  `dev-machine.workstation.dev-build.shell`. Environments are top-level\n  ids and must not collide with system or context ids.\n- `instances:` entries carry `container:`, a reference to a `container`\n  element resolved exactly like a relation endpoint. A dangling\n  reference is an error — the point of modelling deployment here rather\n  than in prose is that it cannot quietly drift.\n- `nodes:` and `instances:` may both appear on a node. `name`, `tech`,\n  `description` behave as everywhere else; an instance's `name` defaults\n  to the referenced container's name.\n- `relations:` may appear on an environment (endpoints relative to it)\n  and works like system relations. Deployment and logical elements are\n  in one id space, so a relation may cross between them.\n- **Rendering is by altitude, not containment** (ADR-0018): a\n  deployment view shows one level and dives, exactly like\n  containers → components. Nested boxes are a recorded follow-up.\n\n## 4. Views\n\n`views/<view-id>.yaml`:\n\n```yaml\nview: containers            # view id\nname: Containers            # optional display name\nscope: blastradius          # element whose children this view shows\nlevel: L2                   # L1 | L2 | L3 | LD — which altitude this view captures\n                            # LD is a deployment view (ADR-0018); its scope is an\n                            # environment or a deployment node — or omitted, for\n                            # the overview of every environment, whose pins are\n                            # then absolute ids\nlayout:                     # pinned positions — grid units (26px cells @ 1×)\n  ui: [4, 2]\n  core: [10, 4]\nshow-groups: false          # draw `group:` boundaries (§3c) — default false\ninclude-context: true       # show people/externals related to scope (default true)\n                            # (honored by the renderer since 2026-08-22 — it was\n                            # parsed-but-ignored before; core-components.yaml\n                            # exercises the false path)\n```\n\n- Elements absent from `layout:` are auto-placed (ADR-0006). Pinning is the\n  exception, not the rule.\n- Grid units, not pixels: layouts survive zoom and density changes.\n- A workspace with zero view files is valid — every level renders fully\n  auto-laid-out.\n- `scope:` is required except on an `LD` overview, the one view whose subject\n  is the whole deployment rather than one element.\n\n## 5. Documents\n\nMarkdown files matched by `docs.include` and starting with frontmatter join\nthe model (ADR-0010):\n\n```yaml\n---\ndoc: adr-0007            # document id — same slug rules, unique workspace-wide\ntype: adr                # prd | adr | spec | roadmap | note\nstatus: accepted         # see vocabularies below\nelements: [blastradius.core.git-service]\nsupersedes: adr-0004     # optional, adr only\n---\n```\n\nStatus vocabularies — `adr`: proposed / accepted / superseded / rejected;\n`prd`, `spec`, `roadmap`: draft / current / superseded; `note`: none.\nA matched file **without** frontmatter is ignored with an info-level notice\n(ordinary READMEs may share the folder).\n\n## 6. Validation\n\nErrors (workspace loads, marked invalid; affected elements get `is-invalid`):\nduplicate id in scope; dangling reference from a relation, layout, or doc\n`elements:` list; unknown schema version; malformed YAML in any included file.\n\nWarnings: doc frontmatter with unknown `type`; empty system; relation\nduplicated verbatim.\n\nEverything is reported with file + line, in the panel footer and on the\ncanvas — never only in a log.\n\n## 7. Stability contract\n\nAdditions to the schema are minor (same `version`); anything that changes the\nmeaning of an existing construct bumps `version` and ships with a migration.\nFrontmatter counts as schema surface under the same contract.\n"
     },
     {
       "id": "spec-msix-store-packaging",
@@ -1112,6 +1135,426 @@
         {
           "from": "blastradius.core.git-service.src.resolve.Resolution",
           "to": "blastradius.core.git-service.src.resolve.Side",
+          "kind": "references"
+        }
+      ]
+    },
+    {
+      "component": "blastradius.core.model-service",
+      "language": "rust",
+      "stale": false,
+      "elements": [
+        {
+          "id": "blastradius.core.model-service.src.dep.marked_yaml",
+          "kind": "dependency",
+          "name": "marked_yaml",
+          "path": ""
+        },
+        {
+          "id": "blastradius.core.model-service.src.manifest",
+          "kind": "module",
+          "name": "manifest.rs",
+          "path": "crates/blastradius-core/src/manifest.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.manifest.Manifest",
+          "kind": "class",
+          "name": "Manifest",
+          "parent": "blastradius.core.model-service.src.manifest",
+          "path": "crates/blastradius-core/src/manifest.rs",
+          "line": 28
+        },
+        {
+          "id": "blastradius.core.model-service.src.model",
+          "kind": "module",
+          "name": "model.rs",
+          "path": "crates/blastradius-core/src/model.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.DerivedEdge",
+          "kind": "class",
+          "name": "DerivedEdge",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs",
+          "line": 197
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.DerivedElement",
+          "kind": "class",
+          "name": "DerivedElement",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs",
+          "line": 182
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.DerivedGraph",
+          "kind": "class",
+          "name": "DerivedGraph",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs",
+          "line": 160
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.Direction",
+          "kind": "enum",
+          "name": "Direction",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs",
+          "line": 108
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.Doc",
+          "kind": "class",
+          "name": "Doc",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs",
+          "line": 149
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.Element",
+          "kind": "class",
+          "name": "Element",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs",
+          "line": 70
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.ElementKind",
+          "kind": "enum",
+          "name": "ElementKind",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs",
+          "line": 17
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.Relation",
+          "kind": "class",
+          "name": "Relation",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs",
+          "line": 115
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.SourceMapping",
+          "kind": "class",
+          "name": "SourceMapping",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs",
+          "line": 93
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.View",
+          "kind": "class",
+          "name": "View",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs",
+          "line": 132
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.Workspace",
+          "kind": "class",
+          "name": "Workspace",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs",
+          "line": 205
+        },
+        {
+          "id": "blastradius.core.model-service.src.parse",
+          "kind": "module",
+          "name": "parse.rs",
+          "path": "crates/blastradius-core/src/parse.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.parse.RawRelation",
+          "kind": "class",
+          "name": "RawRelation",
+          "parent": "blastradius.core.model-service.src.parse",
+          "path": "crates/blastradius-core/src/parse.rs",
+          "line": 12
+        },
+        {
+          "id": "blastradius.core.model-service.src.validate",
+          "kind": "module",
+          "name": "validate.rs",
+          "path": "crates/blastradius-core/src/validate.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.views",
+          "kind": "module",
+          "name": "views.rs",
+          "path": "crates/blastradius-core/src/views.rs"
+        }
+      ],
+      "edges": [
+        {
+          "from": "blastradius.core.model-service.src.manifest",
+          "to": "blastradius.core.model-service.src.manifest.Manifest",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model",
+          "to": "blastradius.core.model-service.src.model.ElementKind",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.DerivedGraph",
+          "to": "blastradius.core.model-service.src.model.DerivedEdge",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.DerivedGraph",
+          "to": "blastradius.core.model-service.src.model.DerivedElement",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.Element",
+          "to": "blastradius.core.model-service.src.model.ElementKind",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.Element",
+          "to": "blastradius.core.model-service.src.model.SourceMapping",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.Relation",
+          "to": "blastradius.core.model-service.src.model.Direction",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.Workspace",
+          "to": "blastradius.core.model-service.src.model.DerivedElement",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.Workspace",
+          "to": "blastradius.core.model-service.src.model.DerivedGraph",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.Workspace",
+          "to": "blastradius.core.model-service.src.model.Doc",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.Workspace",
+          "to": "blastradius.core.model-service.src.model.Element",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.Workspace",
+          "to": "blastradius.core.model-service.src.model.Relation",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.Workspace",
+          "to": "blastradius.core.model-service.src.model.View",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.parse",
+          "to": "blastradius.core.model-service.src.dep.marked_yaml",
+          "kind": "imports"
+        },
+        {
+          "from": "blastradius.core.model-service.src.parse",
+          "to": "blastradius.core.model-service.src.model.Element",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.parse",
+          "to": "blastradius.core.model-service.src.model.ElementKind",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.parse",
+          "to": "blastradius.core.model-service.src.model.Relation",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.parse",
+          "to": "blastradius.core.model-service.src.model.SourceMapping",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.parse",
+          "to": "blastradius.core.model-service.src.model.Workspace",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.parse.RawRelation",
+          "to": "blastradius.core.model-service.src.model.Direction",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.validate",
+          "to": "blastradius.core.model-service.src.model",
+          "kind": "imports"
+        },
+        {
+          "from": "blastradius.core.model-service.src.validate",
+          "to": "blastradius.core.model-service.src.model.Workspace",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.views",
+          "to": "blastradius.core.model-service.src.dep.marked_yaml",
+          "kind": "imports"
+        },
+        {
+          "from": "blastradius.core.model-service.src.views",
+          "to": "blastradius.core.model-service.src.model",
+          "kind": "imports"
+        },
+        {
+          "from": "blastradius.core.model-service.src.views",
+          "to": "blastradius.core.model-service.src.model.View",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.model-service.src.views",
+          "to": "blastradius.core.model-service.src.model.Workspace",
+          "kind": "references"
+        }
+      ]
+    },
+    {
+      "component": "blastradius.core.sync-engine",
+      "language": "rust",
+      "stale": false,
+      "elements": [
+        {
+          "id": "blastradius.core.sync-engine.src.dep.marked_yaml",
+          "kind": "dependency",
+          "name": "marked_yaml",
+          "path": ""
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.dep.serde",
+          "kind": "dependency",
+          "name": "serde",
+          "path": ""
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.splice",
+          "kind": "module",
+          "name": "splice.rs",
+          "path": "crates/blastradius-core/src/splice.rs"
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.splice.EntrySpan",
+          "kind": "class",
+          "name": "EntrySpan",
+          "parent": "blastradius.core.sync-engine.src.splice",
+          "path": "crates/blastradius-core/src/splice.rs",
+          "line": 12
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.sync",
+          "kind": "module",
+          "name": "sync.rs",
+          "path": "crates/blastradius-core/src/sync.rs"
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.sync.FileChange",
+          "kind": "class",
+          "name": "FileChange",
+          "parent": "blastradius.core.sync-engine.src.sync",
+          "path": "crates/blastradius-core/src/sync.rs",
+          "line": 55
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.sync.JournalEvent",
+          "kind": "enum",
+          "name": "JournalEvent",
+          "parent": "blastradius.core.sync-engine.src.sync",
+          "path": "crates/blastradius-core/src/sync.rs",
+          "line": 1117
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.sync.Operation",
+          "kind": "enum",
+          "name": "Operation",
+          "parent": "blastradius.core.sync-engine.src.sync",
+          "path": "crates/blastradius-core/src/sync.rs",
+          "line": 14
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.sync.SyncEngine",
+          "kind": "class",
+          "name": "SyncEngine",
+          "parent": "blastradius.core.sync-engine.src.sync",
+          "path": "crates/blastradius-core/src/sync.rs",
+          "line": 72
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.sync.Transaction",
+          "kind": "class",
+          "name": "Transaction",
+          "parent": "blastradius.core.sync-engine.src.sync",
+          "path": "crates/blastradius-core/src/sync.rs",
+          "line": 64
+        }
+      ],
+      "edges": [
+        {
+          "from": "blastradius.core.sync-engine.src.splice",
+          "to": "blastradius.core.sync-engine.src.dep.marked_yaml",
+          "kind": "imports"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.splice",
+          "to": "blastradius.core.sync-engine.src.splice.EntrySpan",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync",
+          "to": "blastradius.core.sync-engine.src.dep.serde",
+          "kind": "imports"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync",
+          "to": "blastradius.core.sync-engine.src.splice",
+          "kind": "imports"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync",
+          "to": "blastradius.core.sync-engine.src.sync.Operation",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync",
+          "to": "blastradius.core.sync-engine.src.sync.Transaction",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync.JournalEvent",
+          "to": "blastradius.core.sync-engine.src.sync.Transaction",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync.SyncEngine",
+          "to": "blastradius.core.sync-engine.src.sync.FileChange",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync.SyncEngine",
+          "to": "blastradius.core.sync-engine.src.sync.JournalEvent",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync.SyncEngine",
+          "to": "blastradius.core.sync-engine.src.sync.Operation",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync.SyncEngine",
+          "to": "blastradius.core.sync-engine.src.sync.Transaction",
+          "kind": "references"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync.Transaction",
+          "to": "blastradius.core.sync-engine.src.sync.FileChange",
           "kind": "references"
         }
       ]

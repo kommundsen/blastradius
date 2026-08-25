@@ -1,0 +1,158 @@
+{
+  "schema": 1,
+  "language": "rust",
+  "extractor": "blastradius-extract-rust 0.3.0",
+  "component": "blastradius.core.sync-engine",
+  "root": "crates/blastradius-core/src",
+  "sourceDigest": "sha256:9cc048d15bd77d384cd31025f785bed4cc3f15a8c69774d061a92e59723b90cb",
+  "elements": [
+    {
+      "id": "dep.marked_yaml",
+      "kind": "dependency",
+      "name": "marked_yaml",
+      "path": ""
+    },
+    {
+      "id": "dep.serde",
+      "kind": "dependency",
+      "name": "serde",
+      "path": ""
+    },
+    {
+      "id": "splice",
+      "kind": "module",
+      "name": "splice.rs",
+      "path": "crates/blastradius-core/src/splice.rs"
+    },
+    {
+      "id": "splice.EntrySpan",
+      "kind": "class",
+      "name": "EntrySpan",
+      "parent": "splice",
+      "path": "crates/blastradius-core/src/splice.rs",
+      "line": 12
+    },
+    {
+      "id": "sync",
+      "kind": "module",
+      "name": "sync.rs",
+      "path": "crates/blastradius-core/src/sync.rs"
+    },
+    {
+      "id": "sync.FileChange",
+      "kind": "class",
+      "name": "FileChange",
+      "parent": "sync",
+      "path": "crates/blastradius-core/src/sync.rs",
+      "line": 55
+    },
+    {
+      "id": "sync.JournalEvent",
+      "kind": "enum",
+      "name": "JournalEvent",
+      "parent": "sync",
+      "path": "crates/blastradius-core/src/sync.rs",
+      "line": 1117
+    },
+    {
+      "id": "sync.Operation",
+      "kind": "enum",
+      "name": "Operation",
+      "parent": "sync",
+      "path": "crates/blastradius-core/src/sync.rs",
+      "line": 14
+    },
+    {
+      "id": "sync.SyncEngine",
+      "kind": "class",
+      "name": "SyncEngine",
+      "parent": "sync",
+      "path": "crates/blastradius-core/src/sync.rs",
+      "line": 72
+    },
+    {
+      "id": "sync.Transaction",
+      "kind": "class",
+      "name": "Transaction",
+      "parent": "sync",
+      "path": "crates/blastradius-core/src/sync.rs",
+      "line": 64
+    }
+  ],
+  "edges": [
+    {
+      "from": "splice",
+      "to": "dep.marked_yaml",
+      "kind": "imports"
+    },
+    {
+      "from": "splice",
+      "to": "splice.EntrySpan",
+      "kind": "references"
+    },
+    {
+      "from": "sync",
+      "to": "dep.serde",
+      "kind": "imports"
+    },
+    {
+      "from": "sync",
+      "to": "splice",
+      "kind": "imports"
+    },
+    {
+      "from": "sync",
+      "to": "sync.Operation",
+      "kind": "references"
+    },
+    {
+      "from": "sync",
+      "to": "sync.Transaction",
+      "kind": "references"
+    },
+    {
+      "from": "sync.JournalEvent",
+      "to": "sync.Transaction",
+      "kind": "references"
+    },
+    {
+      "from": "sync.SyncEngine",
+      "to": "sync.FileChange",
+      "kind": "references"
+    },
+    {
+      "from": "sync.SyncEngine",
+      "to": "sync.JournalEvent",
+      "kind": "references"
+    },
+    {
+      "from": "sync.SyncEngine",
+      "to": "sync.Operation",
+      "kind": "references"
+    },
+    {
+      "from": "sync.SyncEngine",
+      "to": "sync.Transaction",
+      "kind": "references"
+    },
+    {
+      "from": "sync.Transaction",
+      "to": "sync.FileChange",
+      "kind": "references"
+    }
+  ],
+  "outbound": [
+    {
+      "from": "sync",
+      "path": "crates/blastradius-core/src/diagnostics.rs"
+    },
+    {
+      "from": "sync",
+      "path": "crates/blastradius-core/src/model.rs"
+    },
+    {
+      "from": "sync",
+      "path": "crates/blastradius-core/src/vfs.rs"
+    }
+  ]
+}
