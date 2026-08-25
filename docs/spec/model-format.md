@@ -111,6 +111,32 @@ Rules:
   one-line form (`model-service: { name: Model Service }`) is valid YAML flow
   style and encouraged for terse L3 listings.
 
+## 3c. Groups (0.5.0)
+
+A `group:` label draws a boundary around the elements that share it:
+
+```yaml
+containers:
+  web:    { name: Web, group: Storefront }
+  api:    { name: API, group: Storefront }
+  ledger: { name: Ledger, group: Finance }
+```
+
+- **Presentation, not structure.** A group is not a nesting level: ids stay
+  `system.container`, no altitude is added, and no element gains a parent.
+  Nothing about identity (ADR-0003), relations, or pins changes because an
+  element joined a group.
+- Elements group with their **siblings** — the same label under two different
+  parents is two different boundaries, because a boundary is drawn inside one
+  scene.
+- The label is free text, and is what the boundary is titled. Blank is treated
+  as absent.
+- **Rendering is opt-in per view**: `show-groups: true` (§4), off by default,
+  so adding a label never changes an existing diagram's shape.
+- This mirrors Structurizr's `group`, which the importer previously flattened
+  with a "groups are not modelled" diagnostic — grouped workspaces now import
+  with their grouping intact.
+
 ## 3b. Deployment (ADR-0018)
 
 The physical counterpart to the logical model: where the containers
@@ -176,6 +202,7 @@ level: L2                   # L1 | L2 | L3 | LD — which altitude this view cap
 layout:                     # pinned positions — grid units (26px cells @ 1×)
   ui: [4, 2]
   core: [10, 4]
+show-groups: false          # draw `group:` boundaries (§3c) — default false
 include-context: true       # show people/externals related to scope (default true)
                             # (honored by the renderer since 2026-08-22 — it was
                             # parsed-but-ignored before; core-components.yaml

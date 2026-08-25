@@ -70,6 +70,9 @@ pub struct SnapElement {
     pub description: Option<String>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub external: bool,
+    /// Visual grouping label (spec §3c) — omitted when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -96,6 +99,8 @@ pub struct SnapView {
     /// element id -> [x, y] grid units (pins only — auto-layout is the renderer's job)
     pub layout: std::collections::BTreeMap<String, (f64, f64)>,
     pub include_context: bool,
+    /// Draw `group:` boundaries in this view (spec §3c); off by default.
+    pub show_groups: bool,
 }
 
 #[derive(Serialize)]
@@ -145,6 +150,7 @@ pub fn snap_element(e: &crate::model::Element) -> SnapElement {
         tech: e.tech.clone(),
         description: e.description.clone(),
         external: e.external || e.kind == ElementKind::External,
+        group: e.group.clone(),
     }
 }
 
@@ -182,6 +188,7 @@ pub fn snapshot(vfs: &dyn Vfs, ws: &Workspace, diags: &[Diagnostic]) -> Snapshot
             level: v.level.clone(),
             layout: v.layout.clone(),
             include_context: v.include_context,
+            show_groups: v.show_groups,
         })
         .collect();
 

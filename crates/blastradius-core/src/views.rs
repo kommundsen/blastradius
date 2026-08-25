@@ -79,6 +79,7 @@ pub fn parse_view_file(vfs: &dyn Vfs, rel: &str, ws: &mut Workspace, diags: &mut
         scope,
         level,
         layout,
+        show_groups: yaml::get_str(map, "show-groups") == Some("true"),
         include_context: yaml::get_str(map, "include-context") != Some("false"),
         file: rel.to_string(),
         line,

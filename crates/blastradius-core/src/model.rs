@@ -81,6 +81,10 @@ pub struct Element {
     /// The container a `container-instance` instantiates, as written
     /// (ADR-0018). Resolved and checked in cross-validation.
     pub instance_of: Option<String>,
+    /// Free-text visual grouping (spec §3c). Presentation only: siblings
+    /// sharing a group draw inside one boundary. Never part of the id, never
+    /// a nesting level.
+    pub group: Option<String>,
     /// Workspace-relative file that declares this element.
     pub file: String,
     pub line: u64,
@@ -134,6 +138,10 @@ pub struct View {
     /// element id -> [x, y] grid units
     pub layout: BTreeMap<ElementId, (f64, f64)>,
     pub include_context: bool,
+    /// Draw `group:` boundaries in this view (spec §3c). Off by default:
+    /// grouping is presentation, and no existing diagram should change shape
+    /// because an element gained a label.
+    pub show_groups: bool,
     pub file: String,
     pub line: u64,
 }

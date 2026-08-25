@@ -121,7 +121,7 @@ fn parse_context_section(
         let (name, tech, description) = fields(body, &id);
         register(
             ws,
-            Element { id, kind, name, tech, description, external: kind == ElementKind::External, source: None, instance_of: None, file: rel.to_string(), line },
+            Element { id, kind, name, tech, description, external: kind == ElementKind::External, source: None, instance_of: None, group: group_of(body), file: rel.to_string(), line },
             diags,
         );
     }
@@ -149,6 +149,7 @@ fn parse_system(map: &MarkedMappingNode, rel: &str, ws: &mut Workspace, diags: &
             external,
             source: None,
             instance_of: None,
+                    group: None,
             file: rel.to_string(),
             line: sys_line,
         },
@@ -169,7 +170,7 @@ fn parse_system(map: &MarkedMappingNode, rel: &str, ws: &mut Workspace, diags: &
             let (name, tech, description) = fields(cbody, &cid);
             register(
                 ws,
-                Element { id: full.clone(), kind: ElementKind::Container, name, tech, description, external: false, source: None, instance_of: None, file: rel.to_string(), line: cline },
+                Element { id: full.clone(), kind: ElementKind::Container, name, tech, description, external: false, source: None, instance_of: None, group: group_of(cbody), file: rel.to_string(), line: cline },
                 diags,
             );
 
@@ -187,7 +188,7 @@ fn parse_system(map: &MarkedMappingNode, rel: &str, ws: &mut Workspace, diags: &
                         let source = parse_source(kbody, rel, diags);
                         register(
                             ws,
-                            Element { id: format!("{full}.{kid}"), kind: ElementKind::Component, name, tech, description, external: false, source, instance_of: None, file: rel.to_string(), line: kline },
+                            Element { id: format!("{full}.{kid}"), kind: ElementKind::Component, name, tech, description, external: false, source, instance_of: None, group: group_of(kbody), file: rel.to_string(), line: kline },
                             diags,
                         );
                     }
@@ -235,6 +236,7 @@ fn parse_environments(node: &Node, rel: &str, ws: &mut Workspace, diags: &mut Ve
                 external: false,
                 source: None,
                 instance_of: None,
+                group: group_of(body),
                 file: rel.to_string(),
                 line,
             },
@@ -279,6 +281,7 @@ fn parse_deployment_children(
                     external: false,
                     source: None,
                     instance_of: None,
+                    group: group_of(body),
                     file: rel.to_string(),
                     line,
                 },
@@ -327,6 +330,7 @@ fn parse_deployment_children(
                     external: false,
                     source: None,
                     instance_of: container,
+                    group: group_of(body),
                     file: rel.to_string(),
                     line,
                 },
@@ -476,6 +480,18 @@ fn parse_source(body: &Node, rel: &str, diags: &mut Vec<Diagnostic>) -> Option<S
         extractor: yaml::get_str(sm, "extractor").map(str::to_string),
         mode,
     })
+}
+
+/// A `group:` label, if the element carries one (spec §3c). Blank is treated
+/// as absent — an empty boundary name would draw a nameless box.
+fn group_of(body: &Node) -> Option<String> {
+    match body {
+        Node::Mapping(m) => yaml::get_str(m, "group")
+            .map(str::trim)
+            .filter(|g| !g.is_empty())
+            .map(str::to_string),
+        _ => None,
+    }
 }
 
 fn fields(body: &Node, id: &str) -> (String, Option<String>, Option<String>) {
