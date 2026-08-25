@@ -11,7 +11,8 @@ Both write the same files, and the app and your editor stay in step.
 - **Rename and describe** in the inspector: name, technology, and description
   are editable in place.
 - **`R`**, then click a target, draws a relation from the selected element.
-  Give it a label and a protocol so the line means something.
+  Give it a label and a protocol so the line means something — the label reads
+  on the line, the protocol under it in brackets, `calls` / `[JSON/HTTPS]`.
 - **`Delete`** removes the selected element. You are told first what else goes
   with it — relations that pointed at it, and any layout pins.
 - **`Ctrl+Z` / `Ctrl+Y`** undo and redo, including across a restart.

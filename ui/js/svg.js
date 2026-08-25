@@ -6,30 +6,12 @@
 // ADR-0005 tradition.
 
 import { GRID } from './layout.js';
+import { edgeLabelLines, kicker } from './labels.js';
+
+export { kicker };
 
 export function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
-const DERIVED_KINDS = { module: 'Module', namespace: 'Namespace', class: 'Class', interface: 'Interface', record: 'Record', enum: 'Enum', dependency: 'Dependency' };
-
-export function kicker(el) {
-  // Dependency rollups are derived, but "external" reads truer than "derived"
-  // for something that lives outside the mapped source tree entirely.
-  if (el.kind === 'dependency') return `${DERIVED_KINDS.dependency} · external`;
-  if (el.derived) return `${DERIVED_KINDS[el.kind] ?? el.kind} · derived`;
-  const kind = {
-    person: 'Person',
-    system: 'Software system',
-    container: 'Container',
-    component: 'Component',
-    external: 'External system',
-    environment: 'Environment',
-    'deployment-node': 'Deployment node',
-    'container-instance': 'Container instance',
-  }[el.kind] ?? el.kind;
-  const label = el.external && el.kind === 'system' ? 'External system' : kind;
-  return el.tech ? `${label} · ${el.tech}` : label;
 }
 
 export function childCount(el, elements) {
@@ -84,9 +66,13 @@ export function viewSvg({ layout, elements, colors, fontCss = '', footer = true 
     const marker = e.direction === 'none' ? '' : ' marker-end="url(#arr)"' +
       (e.direction === 'both' ? ' marker-start="url(#arr)"' : '');
     out += `<path d="${d}" fill="none" stroke="${colors.edge}"${dash}${marker}/>\n`;
-    const label = e.label ?? e.protocol;
-    if (label) {
-      out += `<text class="lbl" x="${e.labelAt.x}" y="${e.labelAt.y}" text-anchor="middle">${esc(label)}</text>\n`;
+    // Was `e.label ?? e.protocol`: an exported diagram showed one or the
+    // other and never both, so every relation carrying a protocol lost it on
+    // the way out while the canvas kept showing it.
+    const lines = edgeLabelLines(e);
+    for (const [i, line] of lines.entries()) {
+      const y = e.labelAt.y - (lines.length - 1 - i) * 12;
+      out += `<text class="lbl" x="${e.labelAt.x}" y="${y}" text-anchor="middle">${esc(line)}</text>\n`;
     }
   }
 

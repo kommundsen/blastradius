@@ -104,9 +104,17 @@ Rules:
   Context-file relations were silently dropped by the parser before
   2026-08-22 even though the sync engine wrote person-relations there — a
   data-loss bug found by the MCP test suite; both surfaces now agree.
-- Relations are **directed** (`from` → `to`). `direction: both | none`
-  overrides; omitted means forward — an undirected relation is a deliberate
-  choice, mirroring the canvas grammar.
+- Relations are **directed** (`from` → `to`), and the direction is the
+  *dependency*, not the flow of data. `direction: both | none` overrides;
+  omitted means forward — an undirected relation is a deliberate choice,
+  mirroring the canvas grammar.
+- `label` says what the dependency is; `protocol` says what it runs on and is
+  rendered **beneath the label in square brackets** (`calls` / `[JSON/HTTPS]`),
+  which is how C4 writes technology. Elements carry the same convention on
+  their type line: `[Container: Rust]`, `[Person]`. One implementation
+  (`ui/js/labels.js`) serves the canvas, the SVG export, the exported viewer
+  and the layout engine's label measuring — before 0.6.0 all four disagreed,
+  and the SVG export dropped the protocol entirely whenever a label was set.
 - `external: true` on a system renders the dashed external style. Scalar
   one-line form (`model-service: { name: Model Service }`) is valid YAML flow
   style and encouraged for terse L3 listings.

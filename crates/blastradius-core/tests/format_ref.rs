@@ -5,7 +5,7 @@
 //! a repository with these tools did precisely that with a sample file
 //! (docs/roadmap.md, first-user findings).
 
-use blastradius_cli::format_ref;
+use blastradius_core::format_ref;
 use blastradius_core::diagnostics::has_errors;
 use std::path::PathBuf;
 

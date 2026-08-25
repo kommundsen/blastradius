@@ -3,6 +3,8 @@
 // positions. Pure module — the ELK instance is injected, so node tests can
 // require elk.bundled.js and assert run-to-run determinism.
 
+import { edgeLabelLines } from './labels.js';
+
 export const GRID = 26; // px per grid unit at 1x — the canvas dot pitch
 
 const SIZES = {
@@ -425,10 +427,13 @@ function placeLabels(edges, nodes, groups = []) {
     return w > 0 && h > 0 ? w * h : 0;
   };
   for (const e of edges) {
-    const text = e.protocol && e.label ? `${e.label} \u00b7 ${e.protocol}` : e.label ?? e.protocol;
-    if (!text) continue;
-    const w = text.length * 5.4 + 8; // ~10px font, worst-case advance
-    const h = 14;
+    // The label and its bracketed technology stack on two lines (C4), so the
+    // box is as wide as the wider line and as tall as the stack \u2014 measured
+    // from the same strings the renderers draw.
+    const lines = edgeLabelLines(e);
+    if (!lines.length) continue;
+    const w = Math.max(...lines.map((l) => l.length)) * 5.4 + 8; // ~10px font, worst-case advance
+    const h = 2 + lines.length * 12;
     let best = null;
     let bestScore = Infinity;
     for (const t of [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82]) {

@@ -155,7 +155,7 @@ impl McpServer {
             "validate" => Ok(self.validate()),
             "model_diff" => self.model_diff(str_arg("base")),
             "doc" => self.doc(&str_arg("id").ok_or("id is required")?),
-            "model_format" => Ok(json!({ "format": crate::format_ref::full_reference() })),
+            "model_format" => Ok(json!({ "format": blastradius_core::format_ref::full_reference() })),
             "apply_operation" => {
                 let op = args.get("op").cloned().ok_or("op is required")?;
                 let op: Operation = parse_operation(op)?;

@@ -79,9 +79,19 @@ relations:
     direction: both    # forward | both | none
 ```
 
+`label` is what the dependency *is*; `protocol` is what it runs on, and is
+drawn beneath the label in square brackets, the way C4 writes technology:
+
+    calls
+    [JSON/HTTPS]
+
 Relations may sit at system level, nested under a container (where `from`
 defaults to that container), or in a context file (where both endpoints are
 absolute). Endpoints accept a sibling id, a dotted path, or a bare context id.
+
+Direction is the **dependency**, not the flow of data: point `from` the thing
+that would break at the thing it depends on. A request and its response are
+one relation, not two.
 
 ## Deployment
 

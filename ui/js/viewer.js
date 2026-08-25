@@ -9,7 +9,7 @@
 
 /* global SNAPSHOT, INCLUDE_DOC_BODIES, ELK, marked,
    computeView, findViewDef, resolvePins, docsFor, treeModel, rootOf, depthOf, liftTo,
-   layoutView, groupDivs, fitGroupBoxes, GRID */
+   layoutView, groupDivs, fitGroupBoxes, GRID, kicker, edgeLabelLines */
 
 (() => {
   const state = {
@@ -28,20 +28,9 @@
   const esc = (s) =>
     String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  function kicker(el) {
-    const kind = {
-      person: 'Person',
-      system: 'Software system',
-      container: 'Container',
-      component: 'Component',
-      external: 'External system',
-      environment: 'Environment',
-      'deployment-node': 'Deployment node',
-      'container-instance': 'Container instance',
-    }[el.kind] ?? el.kind;
-    const label = el.external && el.kind === 'system' ? 'External system' : kind;
-    return el.tech ? `${label} · ${el.tech}` : label;
-  }
+  // kicker() and edgeLabelLines() come from labels.js, concatenated ahead of
+  // this file (export.rs). The viewer used to carry its own copy of kicker
+  // and it had already drifted from the app's.
 
   function childCount(el) {
     const children = snap.elements.filter((e) => e.parent === el.id);
@@ -114,14 +103,14 @@
       path.setAttribute('class', cls);
       path.setAttribute('d', d);
       edges.appendChild(path);
-      const label = e.label ?? e.protocol;
-      if (label) {
+      const lines = edgeLabelLines(e);
+      for (const [i, line] of lines.entries()) {
         const text = document.createElementNS(svgNS, 'text');
         text.setAttribute('class', 'edge-label');
         text.setAttribute('x', e.labelAt.x);
-        text.setAttribute('y', e.labelAt.y);
+        text.setAttribute('y', e.labelAt.y - (lines.length - 1 - i) * 12);
         text.setAttribute('text-anchor', 'middle');
-        text.textContent = e.protocol && e.label ? `${e.label} · ${e.protocol}` : label;
+        text.textContent = line;
         edges.appendChild(text);
       }
     }

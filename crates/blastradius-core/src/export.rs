@@ -22,6 +22,7 @@ const APP_CSS: &str = include_str!("../../../ui/app.css");
 const ELK_JS: &str = include_str!("../../../ui/vendor/elk.bundled.js");
 const MARKED_JS: &str = include_str!("../../../ui/vendor/marked.min.js");
 const DATA_JS: &str = include_str!("../../../ui/js/data.js");
+const LABELS_JS: &str = include_str!("../../../ui/js/labels.js");
 const LAYOUT_JS: &str = include_str!("../../../ui/js/layout.js");
 const VIEWER_JS: &str = include_str!("../../../ui/js/viewer.js");
 
@@ -77,7 +78,11 @@ fn font_faces() -> String {
 /// Strip `export ` prefixes so ES modules concatenate into one classic script.
 fn strip_exports(src: &str) -> String {
     // Top-level `export ` prefixes only — our modules never nest exports.
+    // Top-level `import` lines go entirely: the bundle is one classic script
+    // with every module concatenated in dependency order, so the names are
+    // already in scope (our imports are always one line).
     src.lines()
+        .map(|l| if l.starts_with("import ") { "" } else { l })
         .map(|l| l.strip_prefix("export ").unwrap_or(l))
         .collect::<Vec<_>>()
         .join("
@@ -114,7 +119,13 @@ pub fn export_html(
         app = APP_CSS,
     );
 
-    let modules = format!("{}\n{}", strip_exports(DATA_JS), strip_exports(LAYOUT_JS));
+    // labels.js first: layout.js measures the strings it produces.
+    let modules = format!(
+        "{}\n{}\n{}",
+        strip_exports(LABELS_JS),
+        strip_exports(DATA_JS),
+        strip_exports(LAYOUT_JS)
+    );
 
     let name = html_escape(&ws.name);
     // The deployment segment is live only when the model has environments

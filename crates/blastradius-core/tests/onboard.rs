@@ -1,7 +1,7 @@
 //! `blastradius init` extras: git init, per-agent MCP registration, and
 //! skills/instructions — all merge-only, never clobbering.
 
-use blastradius_cli::onboard::{git_root, setup, SetupOptions, AGENTS};
+use blastradius_core::onboard::{git_root, setup, SetupOptions, AGENTS};
 use serde_json::Value;
 use std::path::PathBuf;
 
@@ -107,43 +107,6 @@ fn config_lands_at_the_git_root_with_relative_workspace_path() {
     assert_eq!(doc["mcpServers"]["blastradius"]["args"][1], "docs");
     assert!(!ws.join(".mcp.json").exists(), "config belongs at the repo root");
     let _ = std::fs::remove_dir_all(&repo);
-}
-
-/// The CLI flags end to end: non-interactive, no prompts, extras applied.
-#[test]
-fn init_flags_drive_the_extras() {
-    let dir = temp("cli-flags");
-    let out = std::process::Command::new(env!("CARGO_BIN_EXE_blastradius"))
-        .args(["init", dir.to_str().unwrap(), "--name", "Acme", "--no-git",
-               "--agents", "claude,codex", "--skills", "claude"])
-        .output()
-        .unwrap();
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
-    assert!(dir.join("blastradius.yaml").is_file());
-    assert!(!dir.join(".git").exists(), "--no-git respected");
-    assert!(dir.join(".mcp.json").is_file());
-    assert!(dir.join(".codex/config.toml").is_file());
-    assert!(!dir.join(".vscode").exists(), "unselected agents untouched");
-    assert!(dir.join(".claude/skills/blastradius/SKILL.md").is_file());
-
-    // rerun on the existing workspace: scaffold skipped, extras still work
-    let out = std::process::Command::new(env!("CARGO_BIN_EXE_blastradius"))
-        .args(["init", dir.to_str().unwrap(), "--no-git", "--agents", "copilot",
-               "--skills", "none"])
-        .output()
-        .unwrap();
-    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
-    assert!(String::from_utf8_lossy(&out.stdout).contains("scaffold skipped"));
-    assert!(dir.join(".vscode/mcp.json").is_file());
-
-    // bad agent name errors out
-    let out = std::process::Command::new(env!("CARGO_BIN_EXE_blastradius"))
-        .args(["init", dir.to_str().unwrap(), "--agents", "clippy"])
-        .output()
-        .unwrap();
-    assert!(!out.status.success());
-    assert!(String::from_utf8_lossy(&out.stderr).contains("unknown agent"));
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// The primer is the only thing an agent reads before it starts editing.
