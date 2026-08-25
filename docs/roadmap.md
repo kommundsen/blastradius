@@ -436,10 +436,20 @@ set, deployment views included.
 
 ## 0.5.0 — released (2026-08-25)
 
-**Cut 2026-08-25**: all three themes shipped; version bumped across the
-three surfaces and tagged `v0.5.0`, which drives both the Store
-submission and — new in this release — the portable archives attached to
-a GitHub Release.
+**Released 2026-08-25.** Tagged `v0.5.0`; the pipeline built and
+published both channels from the one tag.
+
+- **Portable archives are live** on the GitHub Release — Windows zip and
+  Linux tar.gz, install-free. They published while the Store job was
+  still running, which is exactly the independence the job split was for.
+- **Store**: submission 1152921505701734607, x64 + arm64, accepted into
+  PreProcessing. It replaced 0.4.0's still-pending submission (owner
+  decision 2026-08-25): 0.5.0 supersedes it, so users move from 0.2.1.0
+  straight to 0.5.0 and arm64's first certification restarts on identical
+  packaging code. **0.4.0 therefore never publishes.**
+
+Still owed: the PRD 5-minute-stranger run. The portable archive now gives
+it a second, faster path that does not wait on certification.
 
 Three themes, user-selected from a pool of five; search and the remaining
 deployment follow-ups were deliberately held for 0.6.0 to keep the Store
