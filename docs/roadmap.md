@@ -285,14 +285,17 @@ three surfaces (`Cargo.toml`, `tauri.conf.json`,
 `packaging/msix/Package.appxmanifest`) and tagged `v0.4.0`, which drives
 the CI submission pipeline proven in 0.3.0.
 
-**Store submission is blocked, and needs one owner action.** The tag
-built both architectures and uploaded the `.msixupload` cleanly, but the
-submission step failed: an in-progress submission created in the Partner
-Center *web dashboard* cannot be deleted or committed through the
-submission API. Delete it in Partner Center, then re-run the release
-workflow — nothing needs rebuilding (spec/msix-store-packaging.md
-Troubleshooting). The lesson is recorded there: once CI owns
-submissions, do not open one in the dashboard.
+**Submitted from CI 2026-08-25**: submission 1152921505701732949,
+x64 + arm64 in one `.msixupload`, accepted into PreProcessing — the
+third release to go out entirely through the pipeline.
+
+It took two attempts. The first failed because an in-progress
+submission created in the Partner Center *web dashboard* can be neither
+committed nor deleted through the submission API, so `-ReplacePending`
+could not clear it either; the owner deleted it in the browser and the
+re-run went straight through. Recorded in
+spec/msix-store-packaging.md Troubleshooting, with the rule it implies:
+once CI owns submissions, do not open one in the dashboard.
 
 Three user-selected themes. macOS/Linux distribution was considered and
 deliberately deferred a third time (same cost/hardware decision; revisit
