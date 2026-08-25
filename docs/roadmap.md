@@ -131,6 +131,19 @@ usage; re-check when bumping Tauri for packaging. Re-checked
 `gtk ^0.18` → `glib ^0.18`; needs a Tauri release on the gtk-rs 0.20
 line, none published.
 
+Re-checked **2026-08-25** (the alert resurfaced on the push that closed the
+first-user findings): unchanged, and the blast radius is smaller than the
+alert suggests. `cargo update -p glib --precise 0.20.0` still fails on
+`gtk 0.18.2` requiring `glib ^0.18`, and 2.11.5 is still the newest Tauri
+published, so there is nothing to move to. `cargo tree -i glib --target
+x86_64-pc-windows-msvc` prints *nothing*: glib is not in the Windows graph
+at all, so neither the Store package nor the Windows portable archive
+contains the code — it is reachable only in the Linux build, only through
+Tauri's GTK backend, and we call glib directly nowhere. The advisory is
+unsoundness in `VariantStrIter`'s iterator impls, which needs code that
+constructs and iterates one; nothing of ours does. Nothing to do but wait
+for Tauri's gtk-rs bump.
+
 **Exit:** a platform engineer who has never seen the product reaches a
 rendered model of their own repo in under 5 minutes (PRD metric), unassisted.
 Everything that makes that run possible now exists (README cold-clone guide,
