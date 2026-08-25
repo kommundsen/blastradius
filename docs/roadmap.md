@@ -603,34 +603,60 @@ to the MSIX, and it has been true of every Store build ever published.
   the only way to catch this class of bug, since it cannot reproduce in a
   checkout.
 
-### 2. The agent skill guessed the schema instead of using MCP
+### 2. The agent edited files by hand and looped on validation
 
-Reported: the skill asked for a sample file, inferred the schema from it, and
-then looped fixing validation errors. The instructions do tell the agent to
-use the MCP tools first, so the likely cause is that **the tools were not
-there** — and nothing told the agent that, so it improvised.
+**Corrected 2026-08-25 after the owner checked**: the MCP server *was*
+reachable and did return results. The agent used the read tools, then wrote
+YAML directly, and validation failed repeatedly. So this is not a
+tools-missing problem — the earlier PATH/approval theory was wrong.
 
-Two plausible reasons, and the fix should cover both:
+Hand-editing is *allowed* by design: files are the source of truth (ADR-0008)
+and external edits are first-class. What is not acceptable is that an agent
+doing so has nothing to write *against*. Three gaps, all ours:
 
-- `blastradius init` writes `{"command": "blastradius"}` into `.mcp.json`,
-  which only resolves if the CLI is on PATH. The MSIX declares an execution
-  alias so a Store install is fine, but a **portable install is not**.
-  → Write the absolute path of the running executable
-  (`std::env::current_exe()`) when the bare name does not resolve.
-- Claude Code requires the user to approve a project-scoped `.mcp.json`
-  before its tools appear. An unapproved server looks exactly like no server.
-  → `init` should end by saying what remains to be done, in order.
+- **The schema is unreachable.** `spec/model-format.md` lives in this
+  repository, not in the user's. No MCP tool returns the format. The primer
+  says "run `blastradius validate` afterwards" but never says what valid
+  looks like — so an agent asked for a sample file and inferred the schema
+  from it, which is exactly what was reported. → Add a **`model_format`
+  tool** returning a compact authoritative reference (element kinds, the
+  nesting, relations, docs frontmatter, deployment, groups), and embed the
+  same summary in the skill so it is available before the first tool call.
+- **`apply_operation` is under-specified for a machine.** Its input schema is
+  `{"op": {"type": "object"}}` with every real shape described only in prose,
+  so mistakes are easy and come back as serde errors. → Give it a proper
+  `oneOf` JSON Schema per operation; the model then cannot misshape a call.
+- **There is no bootstrap path.** Modelling a repository from scratch means
+  dozens of single `create` and `add-relation` calls, so writing one file is
+  the rational choice. → Either accept hand-authoring as the bootstrap route
+  and support it properly (schema tool above, plus a `validate` call the skill
+  is told to make *before* moving on), or add a bulk apply that takes a list
+  of operations in one transaction.
+- **"Prefer `apply_operation`" is too soft.** State the rule and the reason:
+  it splices in place, validates before writing, and is undoable. If the
+  agent does hand-edit, it must validate immediately and never re-serialize
+  a file it did not write.
 
-Then make the failure loud rather than silent:
+### 2b. The skill should teach C4, not just the tool
 
-- **Harden the skill**: if the `blastradius` tools are unavailable, stop and
-  say so — never infer the schema from a sample file. That single instruction
-  turns this failure from an error-loop into one clear sentence.
-- Point at the real reference: the schema is `spec/model-format.md`, and
-  `blastradius validate` is the check. Guessing was never necessary.
-- Have `init` verify the server actually starts (spawn it, expect an MCP
-  handshake, report the result) rather than only writing config that may not
-  work.
+Owner request, and the sharper half of this: an agent that knows the file
+format still models badly. The skill should carry a short set of dos and
+don'ts —
+
+- Stop at components. Below them is *derived* from source (`introspect`);
+  hand-modelling classes is the classic way to make a model no one maintains.
+- One system per file; ids are immutable and renaming means `name:`.
+- **A relation is a dependency, not a data flow.** Our own model got this
+  wrong — `model-service -> sync-engine` was written as "parse results" while
+  the code dependency ran the other way, and drift detection caught it. That
+  is a real, checkable example worth teaching.
+- Name containers and components after what they *are*, and use `tech:`
+  rather than encoding technology in the name.
+- Model what a reader needs to reason about, not everything that exists.
+- Attach ADRs to the elements they govern; a doc that names a dead element is
+  a model error, not a wiki problem.
+- Run `validate` before claiming done, and `blast_radius` before changing or
+  deleting anything.
 
 ### 3. Help is a dead end
 
@@ -668,28 +694,30 @@ the whole experience.
   CLI already has (`init --agents …`); the app currently exposes only
   `workspace_init`, which does not do the agent half.
 
-### 5. Relations should carry protocol/tech as a visible tag
+### 5. Show technology the way C4 does: in brackets
 
-Interpretation needed before building. What exists today: a relation has
-`label` and `protocol`; the canvas draws `label · protocol` as one muted
-string; the inspector edits both as plain text fields. There is no `tech`.
+Owner decision: follow the C4/Structurizr convention rather than inventing
+one — technology renders in **square brackets**, so a relation reads
 
-**A real bug found while checking**: `ui/js/svg.js` renders
-`e.label ?? e.protocol` — so an exported SVG or PNG shows the label *or* the
-protocol, never both. Any relation with both loses its protocol in every
-exported diagram, while the in-app canvas shows it. Worth fixing regardless
-of the wider question.
+    calls
+    [JSON/HTTPS]
 
-Options for the feature itself:
+rather than today's `calls · JSON/HTTPS`.
 
-- **Render protocol as a tag** — a distinct chip on the edge and in the
-  inspector rather than text appended after a separator. Smallest change,
-  matches "show optional tags".
-- **Add a `tags:` list to relations** — free-form labels, rendered as chips.
-  More expressive, a schema addition (spec §3, snapshot, sync engine).
-- **Add `tech:` to relations** — mirrors elements, but overlaps `protocol`
-  almost entirely; likely the wrong answer unless they mean something
-  distinct from protocol.
+- **A real bug found while checking**: `ui/js/svg.js` renders
+  `e.label ?? e.protocol`, so an exported SVG or PNG shows the label *or* the
+  protocol, never both. Every relation carrying both loses its protocol in
+  every exported diagram, while the in-app canvas shows it. Fix regardless of
+  the rendering change.
+- Apply the bracket form in all three surfaces that draw edges — the canvas,
+  `svg.js` (export and headless render), and `viewer.js` — which currently
+  disagree with each other.
+- Open question, deliberately not decided: elements. Classic C4 renders
+  `[Container: Rust]`; ours shows a kicker reading `CONTAINER · RUST`. The
+  same convention would apply, but it restyles every node in the product, so
+  it wants a look before it is done.
+- No schema change: `protocol` already exists on relations. A free-form
+  `tags:` list is a separate, larger question and is not part of this.
 
 ### Sequencing
 
