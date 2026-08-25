@@ -434,6 +434,95 @@ set, deployment views included.
    and reaches a rendered model of their own repo in under 5 minutes,
    unassisted — result recorded in this file.
 
+## 0.5.0 — planned (2026-08-25)
+
+Three themes, user-selected from a pool of five; search and the remaining
+deployment follow-ups were deliberately held for 0.6.0 to keep the Store
+cadence quick. macOS distribution was considered and **deferred a fourth
+time** — the $99/year Apple Developer ID and the Mac-hardware loop remain
+the open cost decision, unchanged by the repo going public.
+
+Sequence matters this time: **containment rendering comes first**, because
+theme 1 and a 0.6.0 item both sit on it.
+
+1. **Grouped elements, on a containment renderer** — a `group:` label on
+   elements that draws a boundary box around them. Decided 2026-08-25:
+   grouping is **presentation, not structure** — ids stay
+   `system.container`, no new altitude, no new parent, so ADR-0003
+   identity and every existing relation are untouched. This is exactly
+   Structurizr's `group` semantics, which matters because the importer
+   already detects `group` and *flattens it* with a "groups are not
+   modelled" diagnostic (`import.rs`) — real workspaces lose their
+   grouping on import today, against the PRD's 80% clean-import bar.
+   Rendering is **opt-in per view**, off by default, so no existing
+   diagram changes shape.
+   The hard part is the renderer, not the schema: `ui/js/layout.js`
+   builds a flat ELK graph with fixed node sizes, and ADR-0018 dodged
+   containment on purpose. This theme finally pays for it —
+   `hierarchyHandling` with real nested children and padding,
+   ancestor-exclusion in the obstacle-routing pass (a child inside its
+   parent must not read as an edge collision), label placement against
+   boundary boxes, and SVG draw order and fills so a box never paints
+   over what it contains.
+   *Exit (draft):* a dogfood view groups its elements behind a flag,
+   renders with boundaries in the app and headlessly, and the Structurizr
+   importer stops emitting "groups are not modelled" for a corpus
+   workspace that uses them.
+
+2. **Architecture drift detection** — the follow-up ADR-0016 named as
+   "the natural one this design enables". L4 facts already record edges
+   that cross component boundaries; nothing yet *judges* them. Compare
+   them against the declared L3 relations and report the disagreements:
+   code that depends on something the model never declared, and declared
+   relations with no code behind them. Surfaced on the canvas, in
+   `validate`, and to agents over MCP.
+   This is the product thesis made enforceable — the PRD's whole claim is
+   documentation that cannot quietly rot, and this is the first feature
+   where the model is checked against reality rather than against itself.
+   *Exit (draft):* a seeded drift in this repo (an undeclared
+   cross-component import) fails a CI gate with the offending code edge
+   named, and clearing it passes.
+
+3. **Reach: a non-Store install path** — publish a **portable zip** of the
+   built binaries on every tag, and a **Linux** AppImage/deb from CI. No
+   signing fees, no new hardware. Prompted by a real case on 2026-08-24:
+   an Intune-enrolled machine with the Store app removed had no install
+   path at all — winget cannot help (Blastradius has no winget manifest
+   and the `msstore` source needs Store infrastructure), and the CI MSIX
+   is deliberately unsigned because the Store signs during ingestion, so
+   it cannot be sideloaded either. Windows distribution being Store-only
+   is a real gap for locked-down and air-gapped machines.
+   *Exit (draft):* a tag publishes a portable Windows zip and a Linux
+   package that both run on a clean machine with no installation and no
+   admin rights.
+
+**Carried, unchanged:** the PRD 5-minute-stranger run, still owed against
+a published Store build; and arm64's first real-hardware exposure, whose
+first test remains Store certification.
+
+## 0.6.0 — candidate pool (2026-08-25)
+
+Held back from 0.5.0 to keep it shippable, not rejected:
+
+- **Finding things in the model** — in-app search or a command palette:
+  jump to any element, doc, or relation by name. Agents already have
+  `find_elements` over MCP; a human in the app has nothing at all, which
+  bites hardest on the monorepo-scale models this is built for.
+- **The rest of the deployment follow-ups** (ADR-0018) — nested-box
+  rendering as an optional display mode, which becomes cheap once
+  0.5.0's containment renderer exists; instance multiplicity
+  (`replicas`) as a field rather than repeated elements; and importing
+  Structurizr's `deploymentEnvironment`/`deploymentNode` blocks, parsed
+  and discarded today.
+- **Recorded debts** — the exported viewer has no L4 handling at all
+  (spec/l4-introspection.md), C# semantic mode could name dependencies by
+  assembly rather than by namespace root, and a render-a-view MCP tool
+  for agents that need pixels rather than JSON.
+- **macOS distribution** — deferred four times; the $99/year Apple
+  Developer ID and a Mac in the loop remain the decision.
+- **Going-public launch dressing** — public-audience README,
+  CONTRIBUTING, issue templates, sponsor setup.
+
 ## v2 themes (not scheduled)
 
 **Bundled in-app help** (idea 2026-08-23, follows dropping Pages
