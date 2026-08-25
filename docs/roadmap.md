@@ -571,15 +571,27 @@ first test remains Store certification.
 
 ## 0.6.0 — candidate pool (2026-08-25)
 
+**Theme selection is deliberately on hold** (2026-08-25): 0.5.0 reached a
+first outside user, and the owner is gathering their feedback before
+choosing. Everything below came from inference or owner judgement — not
+one item is backed by someone who has actually used the product — so a
+single real reaction is worth more than re-ranking the list. Worth asking:
+what confused them, what they reached for and could not find, and whether
+they got their own repo rendered or stopped at the demo.
+
 Held back from 0.5.0 to keep it shippable, not rejected:
 
 - **Finding things in the model** — in-app search or a command palette:
+  *(ranked first on a hunch, not on evidence — the hold above is aimed
+  squarely at this assumption)*
   jump to any element, doc, or relation by name. Agents already have
   `find_elements` over MCP; a human in the app has nothing at all, which
   bites hardest on the monorepo-scale models this is built for.
 - **The rest of the deployment follow-ups** (ADR-0018) — nested-box
-  rendering as an optional display mode, which becomes cheap once
-  0.5.0's containment renderer exists; instance multiplicity
+  rendering as an optional display mode, now **substantially cheaper than
+  when it was deferred**: 0.5.0's grouped elements built the containment
+  renderer it needed (compound ELK layout, absolute-ising, draw order), so
+  what was the expensive half of ADR-0018 is largely done already; instance multiplicity
   (`replicas`) as a field rather than repeated elements; and importing
   Structurizr's `deploymentEnvironment`/`deploymentNode` blocks, parsed
   and discarded today.
