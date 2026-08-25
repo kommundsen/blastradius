@@ -111,10 +111,23 @@ One event, `workspace-changed`, prompts the WebView to re-request everything;
 the originally sketched fine-grained events (`model_updated`, `file_stale`,
 `transaction_applied`) were not needed at this scale and are not planned unless
 profiling demands them. Phase 5 onboarding added runtime workspace switching:
-`workspace_open(path)` (plus `workspace_init(path)` scaffolding into an empty
-folder, `workspace_demo()` for a throwaway sample, and `pick_folder()` for the
-native dialog). A switch retires the old watcher by generation counter and
-drops the engine; the frontend resets all state and reloads.
+`workspace_open(path)` (plus `workspace_init(path, agents)` scaffolding into an
+empty folder, `workspace_demo()` for a throwaway sample, and `pick_folder()`
+for the native dialog). A switch retires the old watcher by generation counter
+and drops the engine; the frontend resets all state and reloads.
+
+**Opening detects rather than fails.** `workspace_open` answers one of three
+shapes: `{opened}`, `{candidates}` when a repository holds several workspaces,
+or `{empty, git}` when it holds none. That last one used to be an error naming
+the folder the user had just picked, which — for someone pointing the app at
+their own repository for the first time — was the entire first-run experience
+(docs/roadmap.md, first-user findings). The frontend turns it into an offer to
+scaffold, with `agents: true` additionally registering the MCP server and
+writing the skill files through `core::onboard`, and returns the sample prompt
+to hand over afterwards. The app writes the *absolute path* of the CLI beside
+it as the server command: a Store install has an execution alias on PATH but a
+portable install has nothing, and a server that cannot start is
+indistinguishable from one that was never registered.
 
 This surface is also the future CLI/CI attachment point (ADR-0005): validate
 and export must be callable without a WebView.

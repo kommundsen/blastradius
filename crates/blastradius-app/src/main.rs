@@ -132,7 +132,7 @@ fn open_root(app: &tauri::AppHandle, state: &State<AppState>, root: PathBuf) -> 
     let root = root.canonicalize().unwrap_or(root);
     if !blastradius_core::discover::is_workspace_dir(&root) {
         return Err(format!(
-            "{}: not a Blastradius workspace (no blastradius.yaml) — use \"New workspace\" to scaffold one",
+            "{}: not a Blastradius workspace (no blastradius.yaml)",
             root.display()
         ));
     }
@@ -157,7 +157,16 @@ fn workspace_open(
     if !blastradius_core::discover::is_workspace_dir(&root) {
         let hits = blastradius_core::discover::discover_workspaces(&root);
         match hits.as_slice() {
-            [] => {} // fall through: open_root's error names the folder picked
+            // Nothing here. Not an error: pointing the app at your own
+            // repository is the expected first move, and answering it with
+            // "not a Blastradius workspace" was the whole first-run
+            // experience for the first outside user (docs/roadmap.md).
+            [] => {
+                return Ok(serde_json::json!({
+                    "empty": root.display().to_string(),
+                    "git": blastradius_core::onboard::git_root(&root).is_some(),
+                }));
+            }
             [one] => {
                 return open_root(&app, &state, one.clone())
                     .map(|p| serde_json::json!({ "opened": p }));
@@ -179,12 +188,35 @@ fn pick_folder() -> Option<String> {
     rfd::FileDialog::new().pick_folder().map(|p| p.display().to_string())
 }
 
+/// Where the CLI lives relative to this app, for the MCP registration we
+/// write on the user's behalf. A Store install puts `blastradius` on PATH via
+/// its execution alias, but a portable install is on no PATH at all — and an
+/// MCP server that cannot start is indistinguishable from one that was never
+/// registered, which is a bad way to spend a first run.
+fn cli_command() -> Option<String> {
+    let exe = std::env::current_exe().ok()?;
+    let cli = exe.with_file_name(if cfg!(windows) { "blastradius.exe" } else { "blastradius" });
+    cli.is_file().then(|| cli.display().to_string())
+}
+
 /// Scaffold `blastradius init` into a folder and open it. Never overwrites;
 /// a folder that already is a workspace is simply opened.
+///
+/// `agents` additionally registers the MCP server and writes the skill files,
+/// which is what turns an empty workspace into one an agent can actually
+/// fill — the CLI has had `init --agents` since 0.2.0 and the app had no way
+/// to offer it. The action log comes back so the frontend can say what
+/// happened rather than claiming success in the abstract.
 #[tauri::command]
-fn workspace_init(app: tauri::AppHandle, state: State<AppState>, path: String) -> Result<String, String> {
+fn workspace_init(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+    path: String,
+    agents: Option<bool>,
+) -> Result<serde_json::Value, String> {
     let root = PathBuf::from(&path);
     let root = root.canonicalize().unwrap_or(root);
+    let mut scaffolded = false;
     if !blastradius_core::discover::is_workspace_dir(&root) {
         let name = root
             .file_name()
@@ -200,8 +232,26 @@ fn workspace_init(app: tauri::AppHandle, state: State<AppState>, path: String) -
             }
             std::fs::write(&target, text).map_err(|e| e.to_string())?;
         }
+        scaffolded = true;
     }
-    open_root(&app, &state, root)
+    let mut log: Vec<String> = Vec::new();
+    if agents.unwrap_or(false) {
+        let all: Vec<String> = blastradius_core::onboard::AGENTS.iter().map(|s| s.to_string()).collect();
+        log = blastradius_core::onboard::setup(
+            &root,
+            &blastradius_core::onboard::SetupOptions {
+                git_init: false, // the user's repository is the user's to create
+                mcp: all.clone(),
+                skills: all,
+                command: cli_command(),
+            },
+        );
+    }
+    let prompt = blastradius_core::onboard::sample_prompt(&blastradius_core::onboard::workspace_rel(&root));
+    let opened = open_root(&app, &state, root)?;
+    Ok(serde_json::json!({
+        "opened": opened, "scaffolded": scaffolded, "log": log, "prompt": prompt,
+    }))
 }
 
 /// A throwaway sample workspace under the OS temp dir — the "try it before

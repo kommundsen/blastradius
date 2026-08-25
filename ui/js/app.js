@@ -4,6 +4,7 @@
 import { computeView, findViewDef, docsFor, treeModel, rootOf, depthOf, liftTo, resolvePins, derivedGraphFor, environments } from './data.js';
 import { layoutView, GRID, groupDivs, fitGroupBoxes } from './layout.js';
 import { viewSvg, kicker, childCount } from './svg.js';
+import { edgeLabelLines } from './labels.js';
 import { HELP_PAGES, helpBody, helpLinkTarget } from './help.js';
 
 // ---- shell bridge -----------------------------------------------------------
@@ -76,7 +77,28 @@ function mockSync(cmd, args) {
     return ['model/blastradius.yaml'];
   }
   if (cmd === 'pick_folder') return '(mock)';
-  if (cmd === 'workspace_open' || cmd === 'workspace_init' || cmd === 'workspace_demo') {
+  if (cmd === 'workspace_open') {
+    // `?emptyfolder` plays the case that matters most on a first run: the
+    // user picked their own repository and there is no workspace in it yet.
+    if (location.search.includes('emptyfolder') && !mockState.initialised) {
+      return { empty: '/home/dev/my-repo', git: true };
+    }
+    mockState.opened = true;
+    return { opened: '(mock)' };
+  }
+  if (cmd === 'workspace_init') {
+    mockState.opened = true;
+    mockState.initialised = true;
+    return {
+      opened: '(mock)',
+      scaffolded: true,
+      log: args?.agents
+        ? ['wrote .mcp.json (Claude Code)', 'wrote .claude/skills/blastradius/SKILL.md (Claude Code)']
+        : [],
+      prompt: 'Read this repository and model its architecture in the Blastradius workspace at `docs`.',
+    };
+  }
+  if (cmd === 'workspace_demo') {
     // the mock has exactly one workspace: "opening" simply leaves the
     // welcome screen and serves the committed snapshot
     mockState.opened = true;
@@ -396,14 +418,15 @@ async function renderCanvas({ animate = true } = {}) {
       els.edges.appendChild(hit);
     }
     els.edges.appendChild(path);
-    const label = e.label ?? e.protocol;
-    if (label) {
+    // C4 puts technology in brackets on its own line under the label.
+    const lines = edgeLabelLines(e);
+    for (const [i, line] of lines.entries()) {
       const text = document.createElementNS(svgNS, 'text');
       text.setAttribute('class', 'edge-label');
       text.setAttribute('x', e.labelAt.x);
-      text.setAttribute('y', e.labelAt.y);
+      text.setAttribute('y', e.labelAt.y - (lines.length - 1 - i) * 12);
       text.setAttribute('text-anchor', 'middle');
-      text.textContent = e.protocol && e.label ? `${e.label} · ${e.protocol}` : label;
+      text.textContent = line;
       els.edges.appendChild(text);
     }
   }
@@ -846,19 +869,16 @@ function renderWelcome() {
     <p class="text-muted">Interactive C4 models as plain YAML in your repo —
       local-first, versioned by git, diffable in PRs.</p>
     <div class="welcome-actions">
-      <button class="btn btn-primary" id="welcome-open">Open a workspace folder…</button>
-      <button class="btn btn-secondary" id="welcome-new">New workspace in a folder…</button>
+      <button class="btn btn-primary" id="welcome-open">Open a folder or repository…</button>
       <button class="btn btn-ghost" id="welcome-demo">Try a demo workspace</button>
     </div>
-    <p class="text-muted welcome-foot">A workspace is any folder with a
-      <span style="font-family:var(--font-mono)">blastradius.yaml</span> — open it
-      directly or pick the repo root and it is found for you.
-      <span style="font-family:var(--font-mono)">blastradius init</span> scaffolds one from the CLI.
+    <p class="text-muted welcome-foot">Point it at any folder: an existing
+      workspace opens, a repository is searched, and somewhere new is offered a
+      starting model.
       <button class="btn btn-ghost" id="welcome-help">Read the help</button></p>
   </div>`;
   els.canvas.appendChild(w);
   document.getElementById('welcome-open').addEventListener('click', () => openWorkspaceFlow('open'));
-  document.getElementById('welcome-new').addEventListener('click', () => openWorkspaceFlow('new'));
   document.getElementById('welcome-help').addEventListener('click', () => openHelp(''));
   document.getElementById('welcome-demo').addEventListener('click', async () => {
     try {
@@ -870,18 +890,89 @@ function renderWelcome() {
   });
 }
 
-/** Pick a folder, then open it ('open') or scaffold into it ('new'). */
-async function openWorkspaceFlow(mode) {
+/** Pick a folder and go somewhere useful with it.
+ *
+ * One action, three outcomes: a workspace here or below opens, several offer a
+ * choice, and none offers to make one — the case that used to be an error
+ * naming the folder, which for someone pointing the app at their own repo for
+ * the first time was the entire experience (docs/roadmap.md).
+ */
+async function openWorkspaceFlow() {
   try {
     const path = await invoke('pick_folder');
     if (!path) return; // dialog cancelled
-    const res = await invoke(mode === 'new' ? 'workspace_init' : 'workspace_open', { path });
-    // a repo root holding several workspaces comes back as candidates
+    const res = await invoke('workspace_open', { path });
     if (res?.candidates) return pickWorkspaceDialog(res.candidates);
+    if (res?.empty) return initWorkspaceDialog(res.empty);
     await switchedWorkspace();
   } catch (e) {
     toast(String(e));
   }
+}
+
+/** No workspace in the picked folder: offer to start one, with the agent
+ *  wiring that makes the next step possible. */
+function initWorkspaceDialog(path) {
+  const shown = path.length > 60 ? `…${path.slice(-59)}` : path;
+  openDialog({
+    title: 'Start a model here?',
+    body: `<p class="text-muted">No Blastradius workspace in
+        <span style="font-family:var(--font-mono)">${esc(shown)}</span>.
+        A starter model can be scaffolded there now — plain YAML, yours to edit
+        or delete.</p>
+      <label class="dlg-check">
+        <input type="checkbox" id="dlg-agents" checked>
+        Set up coding agents too (skill files and the MCP server)
+      </label>`,
+    confirm: 'Create workspace',
+    onConfirm: async () => {
+      try {
+        const res = await invoke('workspace_init', {
+          path,
+          agents: document.getElementById('dlg-agents').checked,
+        });
+        await switchedWorkspace();
+        if (res?.prompt && (res.log ?? []).length) {
+          // openDialog closes the current dialog on a truthy confirm, which
+          // would take this one with it — false leaves the replacement up.
+          startedDialog(res.prompt, res.log);
+          return false;
+        }
+        return;
+      } catch (e) {
+        toast(String(e));
+        return false;
+      }
+    },
+  });
+}
+
+/** The workspace exists and the agents are wired: hand over the prompt that
+ *  turns it into a real model. "Initialised successfully" is not an answer to
+ *  "now what?". */
+function startedDialog(prompt, log) {
+  const wrote = log.filter((l) => l.startsWith('wrote ')).map((l) => l.slice(6));
+  openDialog({
+    title: 'Ready — now ask your agent',
+    body: `<p class="text-muted">Paste this into Claude Code, Copilot, Cursor or
+        Codex in this repository:</p>
+      <textarea class="input dlg-prompt" id="dlg-prompt" rows="6" readonly>${esc(prompt)}</textarea>
+      ${wrote.length ? `<p class="text-muted dlg-note">Wrote ${esc(wrote.join(', '))}.
+        Your agent may need to be restarted, and Claude Code will ask you to
+        approve the project's MCP server the first time.</p>` : ''}`,
+    confirm: 'Copy prompt',
+    cancel: 'Done',
+    onConfirm: async () => {
+      try {
+        await navigator.clipboard.writeText(prompt);
+        toast('Prompt copied');
+      } catch {
+        document.getElementById('dlg-prompt').select();
+        toast('Select and copy the prompt');
+        return false;
+      }
+    },
+  });
 }
 
 /** The picked folder is a monorepo with several workspaces: let the user choose. */
@@ -1104,7 +1195,7 @@ function renderSide() {
       const other = out ? r.to : r.from;
       html += `<div class="insp-rel">${arrow} ${esc(nameOf(other))}` +
         (r.label ? ` <span class="text-muted">· ${esc(r.label)}</span>` : '') +
-        (r.protocol ? ` <span class="proto">${esc(r.protocol)}</span>` : '') + `</div>`;
+        (r.protocol ? ` <span class="proto">[${esc(r.protocol)}]</span>` : '') + `</div>`;
     }
   }
 
@@ -1674,7 +1765,7 @@ function selectRelation(edge) {
 }
 
 // --- dialogs -----------------------------------------------------------------
-function openDialog({ title, body, confirm, danger, onConfirm }) {
+function openDialog({ title, body, confirm, cancel = 'Cancel', danger, onConfirm }) {
   closeDialog();
   const wrap = document.createElement('div');
   wrap.className = 'dialog-backdrop';
@@ -1684,7 +1775,7 @@ function openDialog({ title, body, confirm, danger, onConfirm }) {
     <span class="dialog-title">${esc(title)}</span>
     <div class="dialog-body">${body}</div>
     <div class="dialog-actions">
-      <button class="btn btn-secondary" id="dlg-cancel">Cancel</button>
+      <button class="btn btn-secondary" id="dlg-cancel">${esc(cancel)}</button>
       <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" id="dlg-ok">${esc(confirm)}</button>
     </div></div>`;
   document.body.appendChild(wrap);

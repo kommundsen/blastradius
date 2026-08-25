@@ -7,15 +7,22 @@ rotting.
 
 ## Setting it up
 
-`blastradius init` offers to register the server and write instructions for
-Claude Code, GitHub Copilot, Cursor, and Codex, in each one's native format.
-For an existing workspace:
+Opening a folder that has no workspace offers this along with the starter
+model — tick the box and the server is registered and the skill files written
+for all four agents, then you are handed a prompt to paste.
+
+`blastradius init` does the same from the command line, for Claude Code,
+GitHub Copilot, Cursor, and Codex, in each one's native format. For an
+existing workspace:
 
 ```
 blastradius init --agents claude,copilot --no-git
 ```
 
 Existing config files are merged, never overwritten.
+
+Your agent may need restarting to see a newly registered server, and Claude
+Code asks you to approve a project's MCP server the first time.
 
 To register by hand, the server is:
 
@@ -37,11 +44,16 @@ speaking MCP over stdio, with the workspace path as its argument.
 - `element`, `find_elements` — detail and search.
 - `doc` — the ADRs and specs governing an element.
 - `model_diff` — what changed between two commits, semantically.
+- `model_format` — the schema, authoritative for the build in front of it, so
+  an agent never has to infer the format from a sample file. `blastradius
+  format` prints the same thing.
 
 **Writing** — `apply_operation` routes through the same engine the canvas uses:
 the YAML is spliced in place, comments and formatting survive, the result is
 validated before writing, and it is undoable. An agent editing the model this
-way cannot leave it malformed.
+way cannot leave it malformed. `apply_operations` takes a whole list as one
+transaction, which is how an agent models a repository from scratch without a
+hundred round trips — and one undo takes it all back if you hate the result.
 
 **Git** — `git_status`, `git_conflicts`, and `resolve_conflicts` let an agent
 resolve a merge conflict per element. Files are validated and staged through
@@ -54,10 +66,18 @@ agent asking for the blast radius of a module gets real code-level fan-in.
 ## The rules the agent is told
 
 The generated instructions tell your agent to keep the model in step with
-reality, prefer `apply_operation` over hand-editing, treat element ids as
-immutable (rename via `name:`), and keep document `elements:` links pointing at
-real ids. If it does edit YAML directly, it is told not to re-serialize or
-reorder keys, and to run `blastradius validate` afterwards.
+reality, to edit through `apply_operation` rather than by hand, to treat
+element ids as immutable (rename via `name:`), and to keep document
+`elements:` links pointing at real ids. If it does edit YAML directly — which
+is allowed; the files are the truth — it is told to read `model_format` first
+rather than guess, never to re-serialize or reorder a file, and to run
+`validate` immediately.
+
+They also carry a short set of C4 dos and don'ts, because an agent that knows
+the file format can still model badly: stop at components and let `introspect`
+derive what is below; a relation is a dependency, not a data flow; put
+technology in `tech:` instead of in names; model what a reader needs rather
+than everything that exists.
 
 ## Privacy
 

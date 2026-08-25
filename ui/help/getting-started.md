@@ -17,19 +17,24 @@ archive when you want one.
 
 ## Open something in the next minute
 
-You have three ways in, from the welcome screen or the **Open** button
-(`Ctrl+O`):
+**Open a folder or repository…** — from the welcome screen or the **Open**
+button (`Ctrl+O`) — is the only thing you need. Point it at whatever you have
+and it works out what that is:
 
-- **Open a workspace folder…** — pick a folder containing `blastradius.yaml`,
-  *or* pick your repository root and the workspace inside is found for you. If
-  a repo holds several, you get to choose.
-- **New workspace in a folder…** — scaffolds a small, commented starter model
-  you can edit immediately.
-- **Try a demo workspace** — a throwaway model, useful for a look around
-  before you commit to anything.
+- a folder with a `blastradius.yaml` opens directly;
+- a repository root is searched, and the workspace inside opens — if it holds
+  several, you choose;
+- a folder with no workspace is **offered one**: a small, commented starter
+  model, and optionally the coding-agent setup (skill files and the MCP
+  server) that lets you hand the modelling to an agent. You get the prompt to
+  paste, too. See [Coding agents (MCP)](agents.md).
 
-From the CLI, `blastradius init` scaffolds the same starter workspace, and
-`blastradius validate .` checks one without opening the app.
+There is also **Try a demo workspace** — a throwaway model, useful for a look
+around before you point it at anything of your own.
+
+From the CLI, `blastradius init` does the same scaffolding (`--agents` for the
+agent setup), `blastradius validate .` checks a workspace without opening the
+app, and `blastradius format` prints the model format in full.
 
 ## What you are looking at
 

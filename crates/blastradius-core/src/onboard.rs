@@ -16,6 +16,13 @@ pub struct SetupOptions {
     pub mcp: Vec<String>,
     /// Agent names to write skills/instructions for.
     pub skills: Vec<String>,
+    /// How an agent should launch the server. `None` writes the bare name
+    /// `blastradius`, which is right for a Store install (its execution alias
+    /// puts the CLI on PATH) and for a checkout. The desktop app passes the
+    /// absolute path of the CLI sitting beside it: a portable install is on no
+    /// PATH at all, and a server that cannot start looks exactly like a server
+    /// that was never registered.
+    pub command: Option<String>,
 }
 
 /// Walk up from `dir` looking for a `.git` entry (dir or worktree file).
@@ -28,6 +35,33 @@ pub fn git_root(dir: &Path) -> Option<PathBuf> {
         cur = d.parent().map(Path::to_path_buf);
     }
     None
+}
+
+/// The workspace folder as an agent will refer to it: relative to the git
+/// root it runs from, or `.` when the workspace *is* that root.
+pub fn workspace_rel(workspace: &Path) -> String {
+    let root = git_root(workspace).unwrap_or_else(|| workspace.to_path_buf());
+    workspace
+        .strip_prefix(&root)
+        .ok()
+        .filter(|r| !r.as_os_str().is_empty())
+        .map(|r| r.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|| ".".to_string())
+}
+
+/// What to paste into a coding agent to turn a scaffolded workspace into a
+/// real model. Shown by the app after it sets the agents up, because
+/// "initialised successfully" is not an answer to "now what?".
+pub fn sample_prompt(rel: &str) -> String {
+    let loc = if rel == "." { "this folder".to_string() } else { format!("`{rel}`") };
+    format!(
+        "Read this repository and model its architecture in the Blastradius \
+         workspace at {loc}. Use the blastradius MCP tools — call model_format \
+         first for the schema, then apply_operations to create the systems, \
+         containers and components and the relations between them. Model what \
+         a reader needs to reason about, not everything that exists; stop at \
+         components. Run validate when you are done."
+    )
 }
 
 /// Apply the selected extras. `workspace` is the folder holding
@@ -50,15 +84,11 @@ pub fn setup(workspace: &Path, opts: &SetupOptions) -> Vec<String> {
     }
 
     let root = git_root(workspace).unwrap_or_else(|| workspace.to_path_buf());
-    let rel = workspace
-        .strip_prefix(&root)
-        .ok()
-        .filter(|r| !r.as_os_str().is_empty())
-        .map(|r| r.to_string_lossy().replace('\\', "/"))
-        .unwrap_or_else(|| ".".to_string());
+    let rel = workspace_rel(workspace);
 
+    let command = opts.command.as_deref().unwrap_or("blastradius");
     for agent in &opts.mcp {
-        match write_mcp(agent, &root, &rel) {
+        match write_mcp(agent, &root, &rel, command) {
             Ok(msg) => log.push(msg),
             Err(e) => log.push(format!("{agent}: {e}")),
         }
@@ -111,25 +141,25 @@ fn merge_json_config(
     Ok(format!("wrote {label}"))
 }
 
-fn write_mcp(agent: &str, root: &Path, rel: &str) -> Result<String, String> {
+fn write_mcp(agent: &str, root: &Path, rel: &str, command: &str) -> Result<String, String> {
     let args: Vec<Value> = server_args(rel).into_iter().map(Value::from).collect();
     match agent {
         "claude" => merge_json_config(
             &root.join(".mcp.json"),
             "mcpServers",
-            json!({"command": "blastradius", "args": args}),
+            json!({"command": command, "args": args}),
             ".mcp.json (Claude Code)",
         ),
         "cursor" => merge_json_config(
             &root.join(".cursor/mcp.json"),
             "mcpServers",
-            json!({"command": "blastradius", "args": args}),
+            json!({"command": command, "args": args}),
             ".cursor/mcp.json (Cursor)",
         ),
         "copilot" => merge_json_config(
             &root.join(".vscode/mcp.json"),
             "servers",
-            json!({"type": "stdio", "command": "blastradius", "args": args}),
+            json!({"type": "stdio", "command": command, "args": args}),
             ".vscode/mcp.json (VS Code / Copilot)",
         ),
         "codex" => {
@@ -150,8 +180,11 @@ fn write_mcp(agent: &str, root: &Path, rel: &str) -> Result<String, String> {
                 "\n# Blastradius model server — Codex loads project config only for\n\
                  # trusted projects (`codex --trust` or trust_level in ~/.codex/config.toml).\n\
                  [mcp_servers.blastradius]\n\
-                 command = \"blastradius\"\n\
-                 args = [\"mcp\", \"{rel}\"]\n"
+                 command = \"{cmd}\"\n\
+                 args = [\"mcp\", \"{rel}\"]\n",
+                // TOML basic strings take C-style escapes, and the app passes
+                // a Windows path.
+                cmd = command.replace('\\', "\\\\"),
             ));
             std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
             std::fs::write(&path, text).map_err(|e| e.to_string())?;

@@ -520,7 +520,10 @@ fn init(args: &[String]) -> ExitCode {
         None => Vec::new(),
     };
 
-    let opts = blastradius_cli::onboard::SetupOptions { git_init, mcp, skills };
+    // command: None — the CLI writes the bare name, which resolves for anyone
+    // who could type `blastradius init` in the first place.
+    let opts =
+        blastradius_cli::onboard::SetupOptions { git_init, mcp, skills, command: None };
     if opts.git_init || !opts.mcp.is_empty() || !opts.skills.is_empty() {
         for line in blastradius_cli::onboard::setup(root, &opts) {
             println!("  {line}");
