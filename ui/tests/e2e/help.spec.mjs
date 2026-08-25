@@ -64,6 +64,28 @@ test('help is keyboard-reachable and toggles', async ({ page }) => {
   expect(page.errors).toEqual([]);
 });
 
+test('clicking an element leaves help for the inspector', async ({ page }) => {
+  // Reported by the first outside user: `select()` cleared the doc and the
+  // relation but not help, and renderSide tests help first — so the canvas
+  // selection moved while the panel stayed on help, with no way back short of
+  // finding the toggle again.
+  await page.locator('#help-btn').click();
+  await expect(page.locator('#side-title')).toHaveText('Help');
+
+  const node = page.locator('#nodes .node').first();
+  const id = await node.getAttribute('data-id');
+  await node.click();
+  await expect(page.locator('#side-title')).toHaveText('Inspector');
+  await expect(page.locator('#side-body .insp')).toBeVisible();
+  await expect(node).toHaveClass(/is-active/);
+  expect(id).toBeTruthy();
+
+  // And the button is still a way out and back in.
+  await page.locator('#help-btn').click();
+  await expect(page.locator('#side-title')).toHaveText('Help');
+  expect(page.errors).toEqual([]);
+});
+
 test('help never reaches the network', async ({ page }) => {
   const external = [];
   await page.route('**', (route) => {

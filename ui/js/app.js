@@ -473,6 +473,11 @@ function select(id) {
   state.selected = id;
   state.doc = null;
   state.selectedRel = null;
+  // Picking something in the model is an unambiguous request to inspect it.
+  // Help used to survive this, and renderSide tests help first, so the panel
+  // kept showing help while the canvas selection moved underneath — reported
+  // as "no way to switch back" by the first outside user.
+  state.help = null;
   for (const div of els.nodes.children) {
     div.classList.toggle('is-active', div.dataset.id === id);
   }
@@ -1392,6 +1397,7 @@ async function toggleDiff() {
 async function openHistory() {
   state.history = await invoke('git_history');
   state.doc = null;
+  state.help = null; // help is not a mode you can get stuck in
   renderHistory();
 }
 
@@ -1663,6 +1669,7 @@ function selectRelation(edge) {
   state.selectedRel = { from: edge.from, to: edge.to, label: edge.label };
   state.selected = null;
   state.doc = null;
+  state.help = null; // same as select(): the inspector wins over help
   renderSide();
 }
 
