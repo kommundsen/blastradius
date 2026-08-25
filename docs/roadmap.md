@@ -448,6 +448,14 @@ published both channels from the one tag.
   straight to 0.5.0 and arm64's first certification restarts on identical
   packaging code. **0.4.0 therefore never publishes.**
 
+**First outside use, 2026-08-25**: someone the owner knows tried the
+release and reported a positive experience. Recorded as encouragement,
+**not** as the PRD metric — that one is specific (a platform engineer who
+has never seen the product, their *own* repo rendered, unassisted, under
+five minutes, timed) and none of those conditions were measured here.
+Worth chasing the details while they are fresh; if they hold, this
+becomes the exit run.
+
 Still owed: the PRD 5-minute-stranger run. The portable archive now gives
 it a second, faster path that does not wait on certification.
 
