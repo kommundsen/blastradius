@@ -108,12 +108,23 @@ All from the repo root in PowerShell.
    cargo build --release -p blastradius-app -p blastradius-cli
    ```
 
-10. **Stage** just the payload (target/ is huge; the package wants 2 files):
+10. **Stage** just the payload — the two exes and the extractors (target/ is
+    huge; nothing else belongs in the package):
 
     ```powershell
     New-Item -ItemType Directory -Force packaging\msix\dist | Out-Null
     Copy-Item target\release\blastradius-app.exe, target\release\blastradius.exe packaging\msix\dist\
+    node tools\stage-extractors.mjs --out packaging\msix\dist
     ```
+
+    The extractor step is not optional and was missing until 0.5.0: core
+    looks for `extractors/` beside the running binary, so without it an
+    installed copy can introspect Rust and nothing else — the C# failure
+    the first outside user reported. The same script stages the portable
+    archive, so the two packages cannot diverge, and it *publishes* the
+    C# extractor rather than copying the project, because the install
+    directory is read-only and `dotnet run` would want to build there
+    (spec/l4-introspection.md).
 
 11. **Pack + install locally** (dev-signed; cert generate/install are
     once-per-machine, install needs an elevated prompt):
@@ -143,6 +154,10 @@ All from the repo root in PowerShell.
     - external-edit the YAML and confirm the watcher picks it up;
     - `blastradius validate <dir>` from a fresh terminal proves the
       execution alias;
+    - **`blastradius introspect <dir>` on a workspace with a C# mapping** —
+      the one check that exercises the read-only install directory, and the
+      one nobody ran for five releases. It must not say "no csharp extractor
+      found";
     - uninstall from Start menu → reinstall → still opens.
     - This packaged build is also the vehicle for the owed items from the
       roadmap: the ADR-0011 native-window verification pass and the

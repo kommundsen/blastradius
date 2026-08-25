@@ -11,6 +11,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Roslyn ships localized resources for fourteen languages. The
+         extractor's only output is JSON on stdout and English diagnostics on
+         stderr, and a release stages this published (tools/stage-extractors.mjs),
+         so they are pure package weight. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>

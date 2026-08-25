@@ -8,9 +8,11 @@
 //
 // Usage: node tools/stage-portable.mjs --out dist/<name> --version 0.5.0 --target windows-x64
 
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { stageExtractors } from './stage-extractors.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (name, fallback) => {
@@ -41,13 +43,9 @@ for (const bin of ['blastradius', 'blastradius-app']) {
 // binary first (`current_exe()/../extractors`), which is precisely the
 // installed layout this bundle is — without them, TypeScript and C#
 // introspection would fail on a machine that has no checkout. Rust is built
-// into core and needs nothing.
-for (const rel of ['extractors/typescript', 'extractors/dotnet']) {
-  cpSync(join(root, rel), join(out, rel), {
-    recursive: true,
-    filter: (src) => !/[\\/](node_modules|bin|obj|fixtures)([\\/]|$)/.test(src),
-  });
-}
+// into core and needs nothing. Shared with the MSIX packer so the two
+// installers cannot ship different payloads.
+stageExtractors(out);
 
 cpSync(join(root, 'LICENSE'), join(out, 'LICENSE'));
 
@@ -87,7 +85,8 @@ From the command line:
 
 The extractors/ folder next to these binaries is what lets code-level (L4)
 introspection work for TypeScript and C#; leave it where it is. TypeScript
-additionally needs Node, and C# needs a .NET SDK — only if you use them.
+additionally needs Node, and C# needs the .NET runtime — only if you use
+them. Rust needs neither; it is built in.
 
 Updates
 -------

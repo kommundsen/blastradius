@@ -877,23 +877,43 @@ fn default_command(language: &str, repo_root: &Path) -> Result<Vec<String>, Stri
         dirs.push(repo_root.join("extractors"));
         dirs
     };
-    let entry = match language {
-        "typescript" => "typescript/extract.mjs",
-        "csharp" => "dotnet",
+    // Each language lists its entries in preference order. C# ships published
+    // in a release (`dotnet <dll>`, runtime only, nothing to build) and lives
+    // as a project in a checkout (`dotnet run`, which writes bin/ and obj/ and
+    // so cannot work from a read-only install directory) — tools/stage-extractors.mjs.
+    let entries: &[&str] = match language {
+        "typescript" => &["typescript/extract.mjs"],
+        "csharp" => &["dotnet/BlastradiusExtract.dll", "dotnet/BlastradiusExtract.csproj"],
         other => return Err(format!("no extractor for language {other:?}")),
     };
     for dir in &candidates {
-        let path = dir.join(entry);
-        if path.exists() {
+        for entry in entries {
+            let path = dir.join(entry);
+            if !path.exists() {
+                continue;
+            }
             let p = path.to_string_lossy().into_owned();
-            return Ok(match language {
-                "typescript" => vec!["node".into(), p],
-                _ => vec!["dotnet".into(), "run".into(), "--project".into(), p, "-c".into(), "Release".into()],
+            return Ok(if language == "typescript" {
+                vec!["node".into(), p]
+            } else if entry.ends_with(".dll") {
+                vec!["dotnet".into(), p]
+            } else {
+                vec!["dotnet".into(), "run".into(), "--project".into(), p, "-c".into(), "Release".into()]
             });
         }
     }
+    // Reported as "no csharp extractor found" and nothing else for five
+    // releases, which told the first person to hit it nothing actionable.
+    let needs = match language {
+        "typescript" => "Node on PATH",
+        _ => "the .NET runtime on PATH (opt-in semantic mode additionally needs an SDK)",
+    };
     Err(format!(
-        "no {language} extractor found (looked for {entry:?} under {})",
+        "no {language} extractor found. {language} introspection runs out of process, from an \
+         `extractors/` directory beside the blastradius binary or at the repository root; looked \
+         for {} under {}. Rust needs no extractor — it is built in. Install a release that ships \
+         extractors/, or run from a checkout. Running it also needs {needs}.",
+        entries.join(" or "),
         candidates.iter().map(|d| d.display().to_string()).collect::<Vec<_>>().join(", ")
     ))
 }
@@ -903,7 +923,12 @@ fn default_command(language: &str, repo_root: &Path) -> Result<Vec<String>, Stri
 /// command is a bare override we cannot read a path out of.
 fn extractor_dir(prog: &str, args: &[String]) -> Option<PathBuf> {
     let entry = match prog {
-        "dotnet" => args.iter().position(|a| a == "--project").and_then(|i| args.get(i + 1)),
+        // `dotnet run --project <dir>`, or `dotnet <published dll>`.
+        "dotnet" => args
+            .iter()
+            .position(|a| a == "--project")
+            .and_then(|i| args.get(i + 1))
+            .or_else(|| args.first().filter(|a| a.ends_with(".dll"))),
         _ => args.first(),
     }?;
     let path = Path::new(entry);
@@ -1021,5 +1046,65 @@ fn strip_verbatim(p: PathBuf) -> PathBuf {
     match s.strip_prefix(r"\\?\") {
         Some(rest) => PathBuf::from(rest),
         None => p,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn temp(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("br-extractor-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn touch(root: &Path, rel: &str) {
+        let path = root.join(rel);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, "").unwrap();
+    }
+
+    /// A release ships the C# extractor published, so it runs on a machine
+    /// with only the .NET runtime and — crucially — from a read-only install
+    /// directory, where `dotnet run` cannot write bin/ and obj/.
+    #[test]
+    fn published_csharp_extractor_wins_over_the_project() {
+        let dir = temp("published");
+        touch(&dir, "extractors/dotnet/BlastradiusExtract.csproj");
+        touch(&dir, "extractors/dotnet/BlastradiusExtract.dll");
+        let argv = default_command("csharp", &dir).unwrap();
+        assert_eq!(argv[0], "dotnet");
+        assert!(argv[1].ends_with("BlastradiusExtract.dll"), "{argv:?}");
+        assert_eq!(argv.len(), 2, "a published build is run, never built: {argv:?}");
+        // And it still runs from its own directory, not the target repo.
+        let (prog, args) = argv.split_first().unwrap();
+        assert_eq!(extractor_dir(prog, args), Some(dir.join("extractors/dotnet")));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_checkout_falls_back_to_building_the_project() {
+        let dir = temp("checkout");
+        touch(&dir, "extractors/dotnet/BlastradiusExtract.csproj");
+        let argv = default_command("csharp", &dir).unwrap();
+        assert!(argv.contains(&"run".to_string()), "{argv:?}");
+        assert!(argv.contains(&"--project".to_string()), "{argv:?}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Reported as bare "no csharp extractor found" for five releases, which
+    /// told the first person to hit it nothing at all (docs/roadmap.md).
+    #[test]
+    fn a_missing_extractor_says_what_to_do_about_it() {
+        let dir = temp("missing");
+        let err = default_command("csharp", &dir).unwrap_err();
+        assert!(err.contains("BlastradiusExtract.dll"), "{err}");
+        assert!(err.contains(&dir.display().to_string()), "{err}");
+        assert!(err.contains("Rust needs no extractor"), "{err}");
+        assert!(err.contains(".NET runtime"), "{err}");
+        let _ = fs::remove_dir_all(&dir);
     }
 }

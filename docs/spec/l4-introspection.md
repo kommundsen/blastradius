@@ -192,12 +192,27 @@ monorepos with pinned toolchains):
 
 | language   | default command                                   |
 |------------|---------------------------------------------------|
-| typescript | `node <repo>/extractors/typescript/extract.mjs`   |
-| csharp     | `dotnet run --project <repo>/extractors/dotnet -c Release` |
+| typescript | `node <dir>/extractors/typescript/extract.mjs`    |
+| csharp     | `dotnet <dir>/extractors/dotnet/BlastradiusExtract.dll`, else `dotnet run --project <dir>/extractors/dotnet -c Release` |
 | rust       | built into core (`syn`) — no external process     |
 
 The defaults resolve against the Blastradius install dir first, then
 the repo, so users don't need the extractors vendored in their repo.
+
+**Installed layouts ship the C# extractor published, not as a project**
+(`tools/stage-extractors.mjs`, used by both the MSIX and the portable
+archive). `dotnet run` writes `bin/` and `obj/` beside the project, which
+an install directory does not allow — MSIX makes it read-only outright —
+and publishing also means the machine needs the .NET **runtime** only,
+with no first-run NuGet restore. A checkout has no published build and
+falls back to the project, which is what `test.sh` and development use.
+
+Every Store build from 0.1.0 to 0.5.0 packaged the two executables and
+nothing else, so no installed copy could introspect TypeScript or C# at
+all; only Rust worked, being built into core. Found by the first outside
+user (docs/roadmap.md). Two guards now: the packer fails if the staged
+tree has no extractor in it, and the release smoke test pipes a fixture
+through the staged extractor before the archive is published.
 
 ## TypeScript / JavaScript extractor
 
@@ -240,7 +255,9 @@ npm package (the compiler API; MIT; the same engine as tsserver).
 `extractors/dotnet/` — a small dotnet console project on
 `Microsoft.CodeAnalysis.CSharp`, **syntax-level only** in v1
 (ADR-0016): no MSBuild, no restore, works on any checkout regardless of
-whether the solution builds.
+whether the solution builds. Shipped published (see above), so a user
+needs the .NET runtime rather than an SDK; opt-in semantic mode is the
+one exception, since MSBuild has to load their solution.
 
 - Input: `**/*.cs` under `root`, minus `obj/`, `bin/`, generated files
   (`*.g.cs`, `*.Designer.cs`), and the mapping's excludes.

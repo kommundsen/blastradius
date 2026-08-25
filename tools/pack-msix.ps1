@@ -1,5 +1,6 @@
 # One-command Store pack (spec/msix-store-packaging.md): build fresh, stage
-# both exes, verify the binaries actually carry the manifest's version, pack.
+# both exes and the extractors, verify the binaries actually carry the
+# manifest's version, pack.
 #
 #   .\tools\pack-msix.ps1                # x64, unsigned, for Store upload
 #   .\tools\pack-msix.ps1 -Arch arm64    # arm64 cross-build (needs rustup
@@ -39,10 +40,19 @@ if ($Arch -eq 'arm64') {
 }
 if ($LASTEXITCODE -ne 0) { throw 'release build failed' }
 
-# stage exactly the payload
+# stage exactly the payload (-Recurse: the staged tree contains directories)
 New-Item -ItemType Directory -Force packaging\msix\dist | Out-Null
-Remove-Item packaging\msix\dist\* -Force
+Remove-Item packaging\msix\dist\* -Recurse -Force
 Copy-Item $bin\blastradius-app.exe, $bin\blastradius.exe packaging\msix\dist\
+
+# The out-of-process extractors, which core looks for beside the running
+# binary. Every Store build from 0.1.0 to 0.5.0 shipped without them, so C#
+# and TypeScript introspection could not work on an installed machine at all
+# (docs/roadmap.md, first-user findings). Staged by the same script the
+# portable archive uses, so the two packages cannot drift apart.
+node tools\stage-extractors.mjs --out packaging\msix\dist
+if ($LASTEXITCODE -ne 0) { throw 'staging extractors failed (is node on PATH?)' }
+if (-not (Test-Path packaging\msix\dist\extractors\dotnet\Program.cs)) { throw 'extractors did not stage' }
 
 # the built exe must self-report the manifest's version
 $fv = (Get-Item packaging\msix\dist\blastradius-app.exe).VersionInfo.ProductVersion
