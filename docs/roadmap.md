@@ -790,6 +790,19 @@ Everything above is covered by tests, but two of these bugs existed
   offer, and follow the prompt through to a model — the 5-minute-stranger
   run, which is now a much shorter path than it was.
 
+## 0.6.1 — released (2026-08-26): 0.6.0's onboarding, working
+
+**Cut 2026-08-26**, a fix release. 0.6.0's headline change — pointing the app
+at your own repository and being offered a model — failed on the first real
+repository it met, and would have failed on nearly all of them. A release that
+does not work on a normal repo is not much of a release, so this went out
+immediately rather than waiting for a theme.
+
+Details in the section below; the short version is one flaw in two surfaces
+(an existing file was fatal, and the starter set contains `README.md`), plus
+the two things the same session asked for: choosing which agent pieces to set
+up, and being asked where the workspace should go.
+
 ## Second-user findings (2026-08-26) — fixed the same day
 
 The owner installed 0.6.0 and pointed it at a real repository. The onboarding
