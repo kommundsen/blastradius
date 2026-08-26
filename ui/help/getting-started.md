@@ -25,9 +25,13 @@ and it works out what that is:
 - a repository root is searched, and the workspace inside opens — if it holds
   several, you choose;
 - a folder with no workspace is **offered one**: a small, commented starter
-  model, and optionally the coding-agent setup (skill files and the MCP
-  server) that lets you hand the modelling to an agent. You get the prompt to
-  paste, too. See [Coding agents (MCP)](agents.md).
+  model, plus the coding-agent setup that lets you hand the modelling to an
+  agent — you choose the pieces (MCP server, skills and instructions) and
+  which agents get them, the same choice `blastradius init` offers. You get a
+  prompt to paste, too. See [Coding agents (MCP)](agents.md).
+
+Nothing you already have is overwritten. Scaffolding into a repository that
+already has, say, a `README.md` keeps yours and says so.
 
 There is also **Try a demo workspace** — a throwaway model, useful for a look
 around before you point it at anything of your own.

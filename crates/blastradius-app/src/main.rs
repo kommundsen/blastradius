@@ -199,50 +199,54 @@ fn cli_command() -> Option<String> {
     cli.is_file().then(|| cli.display().to_string())
 }
 
-/// Scaffold `blastradius init` into a folder and open it. Never overwrites;
-/// a folder that already is a workspace is simply opened.
+/// Which agent integrations to write, mirroring `blastradius init --agents
+/// <names> --skills <names>`. Empty lists mean "none of that part".
+#[derive(serde::Deserialize, Default)]
+struct AgentSetup {
+    #[serde(default)]
+    mcp: Vec<String>,
+    #[serde(default)]
+    skills: Vec<String>,
+}
+
+/// Scaffold a starter workspace into a folder and open it. A folder that
+/// already is a workspace is simply opened.
+///
+/// Existing files are kept, never overwritten and never fatal — see
+/// `scaffold::scaffold_into`.
 ///
 /// `agents` additionally registers the MCP server and writes the skill files,
 /// which is what turns an empty workspace into one an agent can actually
 /// fill — the CLI has had `init --agents` since 0.2.0 and the app had no way
-/// to offer it. The action log comes back so the frontend can say what
+/// to offer it. What was written comes back so the frontend can say what
 /// happened rather than claiming success in the abstract.
 #[tauri::command]
 fn workspace_init(
     app: tauri::AppHandle,
     state: State<AppState>,
     path: String,
-    agents: Option<bool>,
+    agents: Option<AgentSetup>,
 ) -> Result<serde_json::Value, String> {
     let root = PathBuf::from(&path);
     let root = root.canonicalize().unwrap_or(root);
-    let mut scaffolded = false;
-    if !blastradius_core::discover::is_workspace_dir(&root) {
-        let name = root
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "My System".to_string());
-        for (rel, text) in blastradius_core::scaffold::starter_workspace(&name) {
-            let target = root.join(&rel);
-            if target.exists() {
-                return Err(format!("{rel}: exists — refusing to overwrite"));
-            }
-            if let Some(parent) = target.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-            }
-            std::fs::write(&target, text).map_err(|e| e.to_string())?;
-        }
-        scaffolded = true;
+    let mut created: Vec<String> = Vec::new();
+    let mut kept: Vec<String> = Vec::new();
+    let scaffolded = !blastradius_core::discover::is_workspace_dir(&root);
+    if scaffolded {
+        let name = blastradius_core::scaffold::name_for(&root);
+        let done = blastradius_core::scaffold::scaffold_into(&root, &name)?;
+        created = done.created;
+        kept = done.skipped;
     }
+    let agents = agents.unwrap_or_default();
     let mut log: Vec<String> = Vec::new();
-    if agents.unwrap_or(false) {
-        let all: Vec<String> = blastradius_core::onboard::AGENTS.iter().map(|s| s.to_string()).collect();
+    if !agents.mcp.is_empty() || !agents.skills.is_empty() {
         log = blastradius_core::onboard::setup(
             &root,
             &blastradius_core::onboard::SetupOptions {
                 git_init: false, // the user's repository is the user's to create
-                mcp: all.clone(),
-                skills: all,
+                mcp: agents.mcp,
+                skills: agents.skills,
                 command: cli_command(),
             },
         );
@@ -250,7 +254,9 @@ fn workspace_init(
     let prompt = blastradius_core::onboard::sample_prompt(&blastradius_core::onboard::workspace_rel(&root));
     let opened = open_root(&app, &state, root)?;
     Ok(serde_json::json!({
-        "opened": opened, "scaffolded": scaffolded, "log": log, "prompt": prompt,
+        "opened": opened, "scaffolded": scaffolded,
+        "created": created, "kept": kept,
+        "log": log, "prompt": prompt,
     }))
 }
 

@@ -122,9 +122,19 @@ or `{empty, git}` when it holds none. That last one used to be an error naming
 the folder the user had just picked, which — for someone pointing the app at
 their own repository for the first time — was the entire first-run experience
 (docs/roadmap.md, first-user findings). The frontend turns it into an offer to
-scaffold, with `agents: true` additionally registering the MCP server and
-writing the skill files through `core::onboard`, and returns the sample prompt
-to hand over afterwards. The app writes the *absolute path* of the CLI beside
+scaffold, with `agents: {mcp: [...], skills: [...]}` naming which integrations
+to write through `core::onboard` — the same choice `blastradius init` offers,
+per part and per agent — and returns the sample prompt to hand over
+afterwards.
+
+**Existing files are kept, never fatal** (`scaffold::scaffold_into`, shared
+with the CLI). 0.6.0 shipped with the opposite: any pre-existing file aborted
+the scaffold, and the starter set includes `README.md`, so the offer failed on
+every real repository. The app left its dialog open having written nothing and
+never reached the agent setup; `blastradius init .` wrote four files, printed
+"refusing to overwrite", exited 2, and skipped it too. Reported 2026-08-26 and
+fixed the same day; the response now carries `created` and `kept` so the UI
+can say which of the user's files it left alone. The app writes the *absolute path* of the CLI beside
 it as the server command: a Store install has an execution alias on PATH but a
 portable install has nothing, and a server that cannot start is
 indistinguishable from one that was never registered.

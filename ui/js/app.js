@@ -89,12 +89,19 @@ function mockSync(cmd, args) {
   if (cmd === 'workspace_init') {
     mockState.opened = true;
     mockState.initialised = true;
+    // Mirrors the real command: one log line per thing actually written, and
+    // the files that were already there are kept rather than being an error.
+    const mcp = args?.agents?.mcp ?? [];
+    const skills = args?.agents?.skills ?? [];
     return {
       opened: '(mock)',
       scaffolded: true,
-      log: args?.agents
-        ? ['wrote .mcp.json (Claude Code)', 'wrote .claude/skills/blastradius/SKILL.md (Claude Code)']
-        : [],
+      created: ['blastradius.yaml', 'model/context.yaml', 'views/containers.yaml'],
+      kept: location.search.includes('hasreadme') ? ['README.md'] : [],
+      log: [
+        ...mcp.map((a) => `wrote mcp config (${a})`),
+        ...skills.map((a) => `wrote skill (${a})`),
+      ],
       prompt: 'Read this repository and model its architecture in the Blastradius workspace at `docs`.',
     };
   }
@@ -910,36 +917,73 @@ async function openWorkspaceFlow() {
   }
 }
 
-/** No workspace in the picked folder: offer to start one, with the agent
- *  wiring that makes the next step possible. */
+/** The agents `blastradius init` knows how to wire up. Ids must match
+ *  core::onboard::AGENTS — ui/tests/onboarding.test.mjs asserts they do. */
+const AGENTS = [
+  { id: 'claude', label: 'Claude Code' },
+  { id: 'copilot', label: 'GitHub Copilot' },
+  { id: 'cursor', label: 'Cursor' },
+  { id: 'codex', label: 'Codex' },
+];
+
+/** No workspace in the picked folder: offer to start one, and let the user
+ *  pick the same pieces `blastradius init` offers — which parts, which
+ *  agents — rather than one all-or-nothing checkbox. */
 function initWorkspaceDialog(path) {
   const shown = path.length > 60 ? `…${path.slice(-59)}` : path;
+  const agentBoxes = AGENTS.map(
+    (a) => `<label class="dlg-check">
+      <input type="checkbox" class="dlg-agent" value="${a.id}" checked> ${esc(a.label)}
+    </label>`
+  ).join('');
   openDialog({
     title: 'Start a model here?',
     body: `<p class="text-muted">No Blastradius workspace in
         <span style="font-family:var(--font-mono)">${esc(shown)}</span>.
-        A starter model can be scaffolded there now — plain YAML, yours to edit
-        or delete.</p>
-      <label class="dlg-check">
-        <input type="checkbox" id="dlg-agents" checked>
-        Set up coding agents too (skill files and the MCP server)
-      </label>`,
+        A starter model will be scaffolded there — plain YAML, yours to edit or
+        delete. Files that already exist are left alone.</p>
+      <div class="dlg-group">
+        <span class="dlg-group-title">Set up for coding agents</span>
+        <label class="dlg-check">
+          <input type="checkbox" id="dlg-mcp" checked>
+          MCP server <span class="text-muted">— lets an agent query and edit the model</span>
+        </label>
+        <label class="dlg-check">
+          <input type="checkbox" id="dlg-skills" checked>
+          Skills and instructions <span class="text-muted">— teaches it the format and C4</span>
+        </label>
+      </div>
+      <div class="dlg-group">
+        <span class="dlg-group-title">For which agents</span>
+        <div class="dlg-agents">${agentBoxes}</div>
+      </div>
+      <p class="dlg-error" id="dlg-error" hidden></p>`,
     confirm: 'Create workspace',
     onConfirm: async () => {
+      const chosen = [...document.querySelectorAll('.dlg-agent:checked')].map((c) => c.value);
+      const want = (id) => (document.getElementById(id).checked ? chosen : []);
       try {
         const res = await invoke('workspace_init', {
           path,
-          agents: document.getElementById('dlg-agents').checked,
+          agents: { mcp: want('dlg-mcp'), skills: want('dlg-skills') },
         });
         await switchedWorkspace();
         if (res?.prompt && (res.log ?? []).length) {
           // openDialog closes the current dialog on a truthy confirm, which
           // would take this one with it — false leaves the replacement up.
-          startedDialog(res.prompt, res.log);
+          startedDialog(res.prompt, res.log, res.kept ?? []);
           return false;
         }
         return;
       } catch (e) {
+        // Inline, not only a toast: this dialog stays open on failure, and a
+        // dialog that stays open without saying why is what the 0.6.0 build
+        // did when the scaffold hit an existing README.
+        const err = document.getElementById('dlg-error');
+        if (err) {
+          err.textContent = String(e);
+          err.hidden = false;
+        }
         toast(String(e));
         return false;
       }
@@ -950,8 +994,9 @@ function initWorkspaceDialog(path) {
 /** The workspace exists and the agents are wired: hand over the prompt that
  *  turns it into a real model. "Initialised successfully" is not an answer to
  *  "now what?". */
-function startedDialog(prompt, log) {
+function startedDialog(prompt, log, kept = []) {
   const wrote = log.filter((l) => l.startsWith('wrote ')).map((l) => l.slice(6));
+  const failed = log.filter((l) => !l.startsWith('wrote ') && !l.includes('already'));
   openDialog({
     title: 'Ready — now ask your agent',
     body: `<p class="text-muted">Paste this into Claude Code, Copilot, Cursor or
@@ -959,7 +1004,10 @@ function startedDialog(prompt, log) {
       <textarea class="input dlg-prompt" id="dlg-prompt" rows="6" readonly>${esc(prompt)}</textarea>
       ${wrote.length ? `<p class="text-muted dlg-note">Wrote ${esc(wrote.join(', '))}.
         Your agent may need to be restarted, and Claude Code will ask you to
-        approve the project's MCP server the first time.</p>` : ''}`,
+        approve the project's MCP server the first time.</p>` : ''}
+      ${kept.length ? `<p class="text-muted dlg-note">Kept your existing
+        ${esc(kept.join(', '))} — untouched.</p>` : ''}
+      ${failed.length ? `<p class="dlg-error">${esc(failed.join('; '))}</p>` : ''}`,
     confirm: 'Copy prompt',
     cancel: 'Done',
     onConfirm: async () => {

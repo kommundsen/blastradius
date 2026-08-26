@@ -8,8 +8,9 @@ rotting.
 ## Setting it up
 
 Opening a folder that has no workspace offers this along with the starter
-model — tick the box and the server is registered and the skill files written
-for all four agents, then you are handed a prompt to paste.
+model. Pick the pieces you want — the **MCP server**, the **skills and
+instructions**, or both — and which of the four agents get them, then you are
+handed a prompt to paste. Everything is on by default.
 
 `blastradius init` does the same from the command line, for Claude Code,
 GitHub Copilot, Cursor, and Codex, in each one's native format. For an

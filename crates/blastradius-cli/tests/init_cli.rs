@@ -47,3 +47,30 @@ fn init_flags_drive_the_extras() {
     assert!(String::from_utf8_lossy(&out.stderr).contains("unknown agent"));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// `blastradius init` in a repository that already has a README used to write
+/// four files, print "refusing to overwrite", exit 2, and skip the agent
+/// setup — a half-initialised repo and a non-zero exit (reported 2026-08-26).
+#[test]
+fn init_keeps_existing_files_and_still_wires_agents() {
+    let dir = temp("existing");
+    let mine = "# Mine\n";
+    std::fs::write(dir.join("README.md"), mine).unwrap();
+
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_blastradius"))
+        .args(["init", dir.to_str().unwrap(), "--name", "Acme", "--no-git",
+               "--agents", "claude", "--skills", "claude"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "exited {:?}\n{stdout}\n{stderr}", out.status.code());
+
+    assert!(stdout.contains("kept README.md"), "no mention of the kept file:\n{stdout}");
+    assert_eq!(std::fs::read_to_string(dir.join("README.md")).unwrap(), mine);
+    assert!(dir.join("blastradius.yaml").is_file());
+    // The part that used to be unreachable.
+    assert!(dir.join(".mcp.json").is_file(), "agents skipped:\n{stdout}\n{stderr}");
+    assert!(dir.join(".claude/skills/blastradius/SKILL.md").is_file());
+    let _ = std::fs::remove_dir_all(&dir);
+}

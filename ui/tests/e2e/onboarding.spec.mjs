@@ -33,26 +33,63 @@ test('a folder with no workspace is an offer, not an error', async ({ page }) =>
   const dialog = page.locator('#app-dialog');
   await expect(dialog.locator('.dialog-title')).toHaveText(/start a model here/i);
   await expect(dialog.getByText('/home/dev/my-repo')).toBeVisible();
-  // The agent wiring is offered along with it, and on by default — it is what
-  // makes the next step possible.
-  await expect(page.locator('#dlg-agents')).toBeChecked();
+  // It says up front that nothing of yours gets overwritten — the 0.6.0 build
+  // treated an existing README as fatal instead.
+  await expect(dialog).toContainText(/already exist are left alone/i);
+
+  // The pieces are chosen, not all-or-nothing: which parts, which agents,
+  // the same choice `blastradius init` offers. All on by default.
+  await expect(page.locator('#dlg-mcp')).toBeChecked();
+  await expect(page.locator('#dlg-skills')).toBeChecked();
+  await expect(page.locator('.dlg-agent')).toHaveCount(4);
+  for (const id of ['claude', 'copilot', 'cursor', 'codex']) {
+    await expect(page.locator(`.dlg-agent[value="${id}"]`)).toBeChecked();
+  }
   await page.locator('#dlg-ok').click();
 
   // Scaffolded, opened, and then handed the thing to do next.
   await expect(page.locator('.welcome')).toHaveCount(0);
   await expect(page.locator('#app-dialog .dialog-title')).toHaveText(/now ask your agent/i);
   await expect(page.locator('#dlg-prompt')).toContainText('model its architecture');
-  await expect(page.locator('#app-dialog')).toContainText('.mcp.json');
+  await expect(page.locator('#app-dialog')).toContainText('mcp config (claude)');
 });
 
-test('declining the agent setup still creates the workspace', async ({ page }) => {
+test('the agent selection is honoured, not ignored', async ({ page }) => {
   await page.goto('/index.html?nogit&noworkspace&emptyfolder');
   await page.locator('#welcome-open').click();
-  await page.locator('#dlg-agents').uncheck();
+  // Skills only, and only for Cursor.
+  await page.locator('#dlg-mcp').uncheck();
+  for (const id of ['claude', 'copilot', 'codex']) {
+    await page.locator(`.dlg-agent[value="${id}"]`).uncheck();
+  }
   await page.locator('#dlg-ok').click();
-  // No agents wired, so no prompt to hand over — just the model.
+
+  const dialog = page.locator('#app-dialog');
+  await expect(dialog.locator('.dialog-title')).toHaveText(/now ask your agent/i);
+  await expect(dialog).toContainText('skill (cursor)');
+  await expect(dialog).not.toContainText('mcp config');
+  await expect(dialog).not.toContainText('(claude)');
+});
+
+test('declining everything still creates the workspace and closes', async ({ page }) => {
+  await page.goto('/index.html?nogit&noworkspace&emptyfolder');
+  await page.locator('#welcome-open').click();
+  await page.locator('#dlg-mcp').uncheck();
+  await page.locator('#dlg-skills').uncheck();
+  await page.locator('#dlg-ok').click();
+  // Nothing wired, so no prompt to hand over — just the model, and the dialog
+  // goes away rather than sitting there.
   await expect(page.locator('#app-dialog')).toHaveCount(0);
   await expect(page.locator('#nodes .node').first()).toBeVisible();
+});
+
+test('files that were already there are reported as kept', async ({ page }) => {
+  await page.goto('/index.html?nogit&noworkspace&emptyfolder&hasreadme');
+  await page.locator('#welcome-open').click();
+  await page.locator('#dlg-ok').click();
+  // The markup wraps, so match the two halves rather than one exact phrase.
+  await expect(page.locator('#app-dialog')).toContainText(/Kept your existing/i);
+  await expect(page.locator('#app-dialog')).toContainText(/README\.md — untouched/i);
 });
 
 test('a normal launch never shows the welcome screen', async ({ page }) => {

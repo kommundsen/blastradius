@@ -2,6 +2,56 @@
 //! the format by example. Every file it emits validates cleanly and carries
 //! the comments a newcomer needs to keep going without the docs open.
 
+use std::path::Path;
+
+/// What `scaffold_into` did, so a caller can say so precisely.
+pub struct Scaffolded {
+    pub created: Vec<String>,
+    /// Files that were already there. Left exactly as they were.
+    pub skipped: Vec<String>,
+}
+
+/// Write the starter workspace into `root`, **leaving any existing file
+/// untouched**.
+///
+/// An existing file is not a conflict, it is the user's file. Both surfaces
+/// used to treat one as fatal — and the starter set includes `README.md`,
+/// which essentially every repository already has, so "start a model here"
+/// failed on any real repo: the app left its dialog open having written
+/// nothing and skipped the agent setup entirely, and `blastradius init .`
+/// wrote four files, exited 2, and skipped it too (reported 2026-08-26).
+///
+/// The workspace is valid without whichever files were skipped — the README
+/// is a pointer, not part of the model — so partial scaffolding is a normal
+/// outcome, not a degraded one.
+pub fn scaffold_into(root: &Path, name: &str) -> Result<Scaffolded, String> {
+    let mut out = Scaffolded { created: Vec::new(), skipped: Vec::new() };
+    for (rel, text) in starter_workspace(name) {
+        let path = root.join(&rel);
+        if path.exists() {
+            out.skipped.push(rel);
+            continue;
+        }
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
+        }
+        std::fs::write(&path, text).map_err(|e| format!("cannot write {rel}: {e}"))?;
+        out.created.push(rel);
+    }
+    Ok(out)
+}
+
+/// The repo (or folder) name, as the starter model's system name.
+pub fn name_for(root: &Path) -> String {
+    root.canonicalize()
+        .ok()
+        .as_deref()
+        .and_then(Path::file_name)
+        .or_else(|| root.file_name())
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "My System".to_string())
+}
+
 /// Slug for ids and file names (ADR-0003 charset).
 pub fn slugify(name: &str) -> String {
     let s: String = name

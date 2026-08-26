@@ -790,6 +790,46 @@ Everything above is covered by tests, but two of these bugs existed
   offer, and follow the prompt through to a model — the 5-minute-stranger
   run, which is now a much shorter path than it was.
 
+## Second-user findings (2026-08-26) — fixed the same day
+
+The owner installed 0.6.0 and pointed it at a real repository. The onboarding
+offer — 0.6.0's headline fix — **failed on the first try**, and would have
+failed on essentially every repository.
+
+`scaffold::starter_workspace` includes a `README.md`, and both surfaces
+treated a pre-existing file as fatal. So: the app's "Start a model here"
+returned `README.md: exists — refusing to overwrite`, which left its dialog
+open having written nothing and, because the agent setup runs *after*
+scaffolding, silently skipped the MCP and skill files as well. `blastradius
+init .` had the same flaw and was worse — it wrote four files, printed the
+error, exited 2, and skipped the agents, leaving a half-initialised repo.
+
+An existing file is not a conflict; it is the user's file. Both surfaces now
+share `scaffold::scaffold_into`, which keeps what is there, creates the rest,
+and reports both. A skipped README costs nothing — it is a pointer, not part
+of the model, and the workspace validates without it.
+
+**Reproduced before fixing**, since the mock harness cannot see this: the app
+was driven over CDP (`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=
+--remote-debugging-port=9222`) against a throwaway repo, which reproduced the
+stuck dialog exactly, and then confirmed the fix on the same repo with the
+README byte-identical afterwards. Worth remembering as the technique for any
+Tauri-only bug: the e2e suite runs against the mock bridge and is blind to
+everything on the IPC boundary.
+
+Also delivered, owner request from the same run: the offer now lets you choose
+**which pieces and which agents** — MCP server, skills and instructions, per
+agent — instead of one all-or-nothing checkbox, matching what `blastradius
+init` has always offered. A drift test asserts the ids the dialog sends are
+the ones `core::onboard` knows how to write.
+
+**Still open from this round**: the workspace scaffolds into the folder you
+picked, so pointing at a repository root puts `blastradius.yaml`, `model/` and
+`views/` beside your source. That is what `blastradius init .` has always
+done and it is defensible, but a `docs/`-style subfolder — our own dogfood
+layout — may be the better default. Not changed unilaterally; wants a
+decision.
+
 ## 0.7.0 — candidate pool (2026-08-25)
 
 **The hold resolved itself.** This pool was 0.6.0's, held (2026-08-25)

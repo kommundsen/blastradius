@@ -437,26 +437,23 @@ fn init(args: &[String]) -> ExitCode {
 
     let fresh = !root.join("blastradius.yaml").is_file() && !root.join("workspace.yaml").is_file();
     if fresh {
-        let name = name.unwrap_or_else(|| {
-            root.canonicalize()
-                .ok()
-                .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
-                .unwrap_or_else(|| "My System".to_string())
-        });
-        for (rel, text) in blastradius_core::scaffold::starter_workspace(&name) {
-            let path = root.join(&rel);
-            if path.exists() {
-                eprintln!("{rel}: exists — refusing to overwrite");
-                return ExitCode::from(2);
-            }
-            if let Some(parent) = path.parent() {
-                let _ = std::fs::create_dir_all(parent);
-            }
-            if let Err(e) = std::fs::write(&path, text) {
-                eprintln!("cannot write {rel}: {e}");
+        let name = name.unwrap_or_else(|| blastradius_core::scaffold::name_for(root));
+        // Existing files are kept, not treated as a conflict: the starter set
+        // includes README.md, so bailing here failed on any repository that
+        // already had one — after writing four files and skipping the agent
+        // setup below (reported 2026-08-26).
+        let done = match blastradius_core::scaffold::scaffold_into(root, &name) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("{e}");
                 return ExitCode::FAILURE;
             }
+        };
+        for rel in &done.created {
             println!("  created {rel}");
+        }
+        for rel in &done.skipped {
+            println!("  kept {rel} (already there)");
         }
         let (ws, diags) = blastradius_core::load_workspace(root);
         if has_errors(&diags) {
