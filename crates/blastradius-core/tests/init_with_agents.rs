@@ -182,7 +182,9 @@ fn a_location_cannot_climb_out_of_the_project() {
     assert!(check_location("docs").is_ok());
     assert!(check_location("docs/architecture").is_ok());
 
-    for bad in ["..", "../evil", "docs/../..", "/etc", r"C:\Windows", ""] {
+    // Refused on *every* platform, not just the one that calls them absolute:
+    // a location is written into .mcp.json and read on other machines.
+    for bad in ["..", "../evil", "docs/../..", "/etc", r"C:\Windows", "c:/users", "", "   "] {
         assert!(check_location(bad).is_err(), "{bad:?} should be refused");
     }
 }

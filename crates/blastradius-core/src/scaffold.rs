@@ -77,7 +77,16 @@ pub fn check_location(location: &str) -> Result<(), String> {
         return Ok(());
     }
     let p = Path::new(t);
-    if p.is_absolute() || t.starts_with('/') || t.starts_with('\\') {
+    // The drive-letter check is explicit rather than left to `is_absolute`,
+    // which is platform-dependent: on Linux `C:\Windows` is neither absolute
+    // nor a parent reference, so it would sail through and create a directory
+    // with a very silly name. A location also ends up in `.mcp.json`, which is
+    // committed and read on other machines, so "valid here" is not the bar.
+    let drive_letter = {
+        let b = t.as_bytes();
+        b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':'
+    };
+    if p.is_absolute() || drive_letter || t.starts_with('/') || t.starts_with('\\') {
         return Err(format!("{t:?}: give a folder inside the project, not an absolute path"));
     }
     if p.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
