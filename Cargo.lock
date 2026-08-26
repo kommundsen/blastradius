@@ -307,7 +307,7 @@ dependencies = [
 
 [[package]]
 name = "blastradius-app"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "blastradius-core",
  "dirs",
@@ -322,7 +322,7 @@ dependencies = [
 
 [[package]]
 name = "blastradius-cli"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "blastradius-core",
  "git2",
@@ -331,7 +331,7 @@ dependencies = [
 
 [[package]]
 name = "blastradius-core"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "git2",
  "globset",

@@ -790,6 +790,15 @@ Everything above is covered by tests, but two of these bugs existed
   offer, and follow the prompt through to a model — the 5-minute-stranger
   run, which is now a much shorter path than it was.
 
+## 0.6.2 — released (2026-08-26): L4 works on an installed build
+
+**Cut 2026-08-26.** L4 introspection was unusable on every packaged build
+ever published — not degraded, unusable: the extractor could not be loaded
+from inside the package at all. Details below.
+
+Three fix releases in three days, all for things a checkout cannot see. That
+is the finding, more than any individual bug.
+
 ## L4 on a packaged install (2026-08-26) — three bugs, found by installing it
 
 The first run of `introspect` from a real Store install, on a real C# repo.
