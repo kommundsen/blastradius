@@ -165,6 +165,9 @@ fn workspace_open(
                 return Ok(serde_json::json!({
                     "empty": root.display().to_string(),
                     "git": blastradius_core::onboard::git_root(&root).is_some(),
+                    // Recommended, not imposed — the dialog offers it as an
+                    // editable default and `.` is a valid answer.
+                    "suggest": blastradius_core::scaffold::suggested_location(&root),
                 }));
             }
             [one] => {
@@ -225,15 +228,26 @@ fn workspace_init(
     app: tauri::AppHandle,
     state: State<AppState>,
     path: String,
+    location: Option<String>,
     agents: Option<AgentSetup>,
 ) -> Result<serde_json::Value, String> {
-    let root = PathBuf::from(&path);
+    let project = PathBuf::from(&path);
+    let project = project.canonicalize().unwrap_or(project);
+    // Where inside the project the workspace goes: the model is documentation
+    // and belongs with the docs, not scattered through a repository root.
+    let location = location.unwrap_or_else(|| ".".into());
+    let location = location.trim().to_string();
+    blastradius_core::scaffold::check_location(&location)?;
+    let root = if location == "." { project.clone() } else { project.join(&location) };
+    std::fs::create_dir_all(&root).map_err(|e| format!("cannot create {}: {e}", root.display()))?;
     let root = root.canonicalize().unwrap_or(root);
+
     let mut created: Vec<String> = Vec::new();
     let mut kept: Vec<String> = Vec::new();
     let scaffolded = !blastradius_core::discover::is_workspace_dir(&root);
     if scaffolded {
-        let name = blastradius_core::scaffold::name_for(&root);
+        // Named after the project, not after the docs folder it sits in.
+        let name = blastradius_core::scaffold::name_for(&project);
         let done = blastradius_core::scaffold::scaffold_into(&root, &name)?;
         created = done.created;
         kept = done.skipped;

@@ -30,15 +30,23 @@ and it works out what that is:
   which agents get them, the same choice `blastradius init` offers. You get a
   prompt to paste, too. See [Coding agents (MCP)](agents.md).
 
+You are asked **where** it should go, with `docs/` recommended: a repository
+root is for source, and the model is documentation. If your project already
+keeps documentation in `docs/` or `doc/`, that one is offered instead of a
+near-duplicate. It is only a recommendation — `.` puts the workspace at the
+project root.
+
 Nothing you already have is overwritten. Scaffolding into a repository that
 already has, say, a `README.md` keeps yours and says so.
 
 There is also **Try a demo workspace** — a throwaway model, useful for a look
 around before you point it at anything of your own.
 
-From the CLI, `blastradius init` does the same scaffolding (`--agents` for the
-agent setup), `blastradius validate .` checks a workspace without opening the
-app, and `blastradius format` prints the model format in full.
+From the CLI, `blastradius init` does the same scaffolding and asks the same
+questions, including where to put the workspace (`--into <subdir>` answers it
+without prompting, `--agents` the agent setup). `blastradius validate .`
+checks a workspace without opening the app, and `blastradius format` prints
+the model format in full.
 
 ## What you are looking at
 

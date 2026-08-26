@@ -74,3 +74,61 @@ fn init_keeps_existing_files_and_still_wires_agents() {
     assert!(dir.join(".claude/skills/blastradius/SKILL.md").is_file());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// `--into` puts the workspace in a subfolder, and the MCP registration that
+/// follows must point at *that* folder, not the project root.
+#[test]
+fn init_into_a_subfolder_registers_the_right_path() {
+    let dir = temp("into");
+    std::process::Command::new("git").arg("init").current_dir(&dir).output().unwrap();
+
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_blastradius"))
+        .args(["init", dir.to_str().unwrap(), "--into", "docs", "--no-git",
+               "--agents", "claude", "--skills", "none"])
+        .output()
+        .unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "{stdout}{}", String::from_utf8_lossy(&out.stderr));
+
+    assert!(dir.join("docs/blastradius.yaml").is_file(), "not in docs/:\n{stdout}");
+    assert!(!dir.join("blastradius.yaml").exists(), "leaked into the project root");
+
+    // Agent config lands at the git root, pointing into the workspace.
+    let mcp: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join(".mcp.json")).unwrap()).unwrap();
+    assert_eq!(mcp["mcpServers"]["blastradius"]["args"][1], "docs");
+
+    // And the model is named after the project, not after "docs".
+    let sys = std::fs::read_to_string(dir.join("docs/blastradius.yaml")).unwrap();
+    assert!(!sys.contains("name: Docs"), "the system got named after its folder:\n{sys}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Scripted runs without `--into` keep writing to the project folder itself:
+/// the recommendation is something the interactive prompt offers, not a
+/// silent relocation of everybody's existing scripts.
+#[test]
+fn without_into_a_scripted_init_is_unchanged() {
+    let dir = temp("noninteractive");
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_blastradius"))
+        .args(["init", dir.to_str().unwrap(), "--no-git", "--agents", "none", "--skills", "none"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    assert!(dir.join("blastradius.yaml").is_file());
+    assert!(!dir.join("docs").exists(), "created docs/ without being asked");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_location_outside_the_project_is_refused() {
+    let dir = temp("escape");
+    for bad in ["../evil", "/etc/blastradius"] {
+        let out = std::process::Command::new(env!("CARGO_BIN_EXE_blastradius"))
+            .args(["init", dir.to_str().unwrap(), "--into", bad, "--no-git"])
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(2), "{bad:?} was not refused");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

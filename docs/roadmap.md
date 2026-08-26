@@ -823,12 +823,16 @@ agent — instead of one all-or-nothing checkbox, matching what `blastradius
 init` has always offered. A drift test asserts the ids the dialog sends are
 the ones `core::onboard` knows how to write.
 
-**Still open from this round**: the workspace scaffolds into the folder you
-picked, so pointing at a repository root puts `blastradius.yaml`, `model/` and
-`views/` beside your source. That is what `blastradius init .` has always
-done and it is defensible, but a `docs/`-style subfolder — our own dogfood
-layout — may be the better default. Not changed unilaterally; wants a
-decision.
+**Decided the same day** (owner): both surfaces now **ask** where the
+workspace goes and **recommend `docs/`** — or whichever of `docs/` and `doc/`
+the project already keeps documentation in, so we never create a
+near-duplicate of a folder that is already there. A repository root is for
+source; the model is documentation, and this repository keeps its own in
+`docs/`. It stays a recommendation: `.` is always a valid answer, and the
+CLI's scripted path (`--into` absent, no TTY) still writes to the folder
+given, so nobody's existing automation silently relocates its workspace.
+Locations are validated — relative, no `..`, no absolute paths — and the
+starter model is named after the project rather than the folder it lands in.
 
 ## 0.7.0 — candidate pool (2026-08-25)
 

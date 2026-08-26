@@ -127,6 +127,17 @@ to write through `core::onboard` — the same choice `blastradius init` offers,
 per part and per agent — and returns the sample prompt to hand over
 afterwards.
 
+**Where the workspace goes is asked, not assumed** (`location`, validated by
+`scaffold::check_location`: relative, no `..`, no absolute paths).
+`scaffold::suggested_location` recommends `docs/`, or whichever of `docs/` and
+`doc/` the project already has, so we never create a near-duplicate of an
+existing documentation folder. A repository root is for source; the model is
+documentation, and this repository keeps its own in `docs/`. `.` remains a
+valid answer, and the CLI's non-interactive path still defaults to `.` unless
+`--into` says otherwise, so existing scripts do not silently relocate. The
+starter model is named after the *project*, not the folder it lands in —
+"Docs" is a poor name for a system.
+
 **Existing files are kept, never fatal** (`scaffold::scaffold_into`, shared
 with the CLI). 0.6.0 shipped with the opposite: any pre-existing file aborted
 the scaffold, and the starter set includes `README.md`, so the offer failed on

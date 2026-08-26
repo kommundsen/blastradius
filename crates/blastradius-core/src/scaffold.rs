@@ -41,6 +41,51 @@ pub fn scaffold_into(root: &Path, name: &str) -> Result<Scaffolded, String> {
     Ok(out)
 }
 
+/// Folder names a project might already keep its documentation in, most
+/// conventional first.
+const DOC_DIRS: [&str; 2] = ["docs", "doc"];
+
+/// Where a new workspace should go inside a project folder, relative to it.
+///
+/// A repository root is for source; the model is documentation and belongs
+/// with the documentation — scattering `blastradius.yaml`, `model/` and
+/// `views/` through someone's root is untidy, and it is not what this
+/// repository does with its own model either (`docs/`).
+///
+/// If the project already keeps docs somewhere — `docs/` or `doc/` — that is
+/// the recommendation, so we never create a near-duplicate of a folder that
+/// is already there. Otherwise `docs`.
+///
+/// Only ever a *recommendation*: both surfaces ask, and `.` is always a valid
+/// answer.
+pub fn suggested_location(root: &Path) -> String {
+    DOC_DIRS
+        .iter()
+        .find(|d| root.join(d).is_dir())
+        .unwrap_or(&DOC_DIRS[0])
+        .to_string()
+}
+
+/// Validate a location a user typed. Relative, inside the project, no
+/// climbing out — a workspace path is not a place to accept `..` or `C:\`.
+pub fn check_location(location: &str) -> Result<(), String> {
+    let t = location.trim();
+    if t.is_empty() {
+        return Err("no location given".into());
+    }
+    if t == "." {
+        return Ok(());
+    }
+    let p = Path::new(t);
+    if p.is_absolute() || t.starts_with('/') || t.starts_with('\\') {
+        return Err(format!("{t:?}: give a folder inside the project, not an absolute path"));
+    }
+    if p.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+        return Err(format!("{t:?}: cannot contain `..`"));
+    }
+    Ok(())
+}
+
 /// The repo (or folder) name, as the starter model's system name.
 pub fn name_for(root: &Path) -> String {
     root.canonicalize()

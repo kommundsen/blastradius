@@ -37,6 +37,10 @@ test('a folder with no workspace is an offer, not an error', async ({ page }) =>
   // treated an existing README as fatal instead.
   await expect(dialog).toContainText(/already exist are left alone/i);
 
+  // Where it goes is asked, with docs/ recommended: a repository root is for
+  // source, and the model is documentation.
+  await expect(page.locator('#dlg-location')).toHaveValue('docs');
+
   // The pieces are chosen, not all-or-nothing: which parts, which agents,
   // the same choice `blastradius init` offers. All on by default.
   await expect(page.locator('#dlg-mcp')).toBeChecked();
@@ -81,6 +85,23 @@ test('declining everything still creates the workspace and closes', async ({ pag
   // goes away rather than sitting there.
   await expect(page.locator('#app-dialog')).toHaveCount(0);
   await expect(page.locator('#nodes .node').first()).toBeVisible();
+});
+
+test('a project that already has a doc folder is offered that one', async ({ page }) => {
+  // Recommending `docs` next to an existing `doc/` would create a
+  // near-duplicate of a folder the project already keeps its docs in.
+  await page.goto('/index.html?nogit&noworkspace&emptyfolder&hasdoc');
+  await page.locator('#welcome-open').click();
+  await expect(page.locator('#dlg-location')).toHaveValue('doc');
+});
+
+test('the location is a recommendation, not a rule', async ({ page }) => {
+  await page.goto('/index.html?nogit&noworkspace&emptyfolder');
+  await page.locator('#welcome-open').click();
+  await page.locator('#dlg-location').fill('.');
+  await page.locator('#dlg-ok').click();
+  // Chose the project root: still scaffolds and opens.
+  await expect(page.locator('#app-dialog .dialog-title')).toHaveText(/now ask your agent/i);
 });
 
 test('files that were already there are reported as kept', async ({ page }) => {

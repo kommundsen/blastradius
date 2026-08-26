@@ -130,3 +130,59 @@ fn scaffolding_over_itself_creates_nothing_and_breaks_nothing() {
     assert_eq!(second.skipped.len(), first.created.len());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ---- where the workspace goes (owner decision, 2026-08-26) ----------------
+//
+// A repository root is for source. The model is documentation and belongs
+// with the documentation — this repository keeps its own in docs/. Both
+// surfaces ask; these cover what they recommend.
+
+#[test]
+fn a_project_with_no_docs_folder_is_recommended_docs() {
+    use blastradius_core::scaffold::suggested_location;
+    let dir = temp("suggest-none");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    assert_eq!(suggested_location(&dir), "docs");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_existing_docs_folder_is_used_rather_than_duplicated() {
+    use blastradius_core::scaffold::suggested_location;
+    let dir = temp("suggest-docs");
+    std::fs::create_dir_all(dir.join("docs")).unwrap();
+    assert_eq!(suggested_location(&dir), "docs");
+
+    // A project that spells it `doc` gets `doc` — creating docs/ beside an
+    // existing doc/ is exactly the mess this avoids.
+    let other = temp("suggest-doc");
+    std::fs::create_dir_all(other.join("doc")).unwrap();
+    assert_eq!(suggested_location(&other), "doc");
+
+    // Both present: the conventional one wins.
+    let both = temp("suggest-both");
+    std::fs::create_dir_all(both.join("doc")).unwrap();
+    std::fs::create_dir_all(both.join("docs")).unwrap();
+    assert_eq!(suggested_location(&both), "docs");
+
+    // A *file* called docs is not a docs folder.
+    let filey = temp("suggest-file");
+    std::fs::write(filey.join("docs"), "not a folder").unwrap();
+    assert_eq!(suggested_location(&filey), "docs");
+
+    for d in [dir, other, both, filey] {
+        let _ = std::fs::remove_dir_all(&d);
+    }
+}
+
+#[test]
+fn a_location_cannot_climb_out_of_the_project() {
+    use blastradius_core::scaffold::check_location;
+    assert!(check_location(".").is_ok());
+    assert!(check_location("docs").is_ok());
+    assert!(check_location("docs/architecture").is_ok());
+
+    for bad in ["..", "../evil", "docs/../..", "/etc", r"C:\Windows", ""] {
+        assert!(check_location(bad).is_err(), "{bad:?} should be refused");
+    }
+}

@@ -81,7 +81,14 @@ function mockSync(cmd, args) {
     // `?emptyfolder` plays the case that matters most on a first run: the
     // user picked their own repository and there is no workspace in it yet.
     if (location.search.includes('emptyfolder') && !mockState.initialised) {
-      return { empty: '/home/dev/my-repo', git: true };
+      // `?hasdoc` plays a project that already keeps documentation in doc/,
+      // where the recommendation follows what is there rather than making a
+      // near-duplicate.
+      return {
+        empty: '/home/dev/my-repo',
+        git: true,
+        suggest: location.search.includes('hasdoc') ? 'doc' : 'docs',
+      };
     }
     mockState.opened = true;
     return { opened: '(mock)' };
@@ -93,9 +100,11 @@ function mockSync(cmd, args) {
     // the files that were already there are kept rather than being an error.
     const mcp = args?.agents?.mcp ?? [];
     const skills = args?.agents?.skills ?? [];
+    mockState.location = args?.location ?? '.';
     return {
       opened: '(mock)',
       scaffolded: true,
+      location: mockState.location,
       created: ['blastradius.yaml', 'model/context.yaml', 'views/containers.yaml'],
       kept: location.search.includes('hasreadme') ? ['README.md'] : [],
       log: [
@@ -910,7 +919,7 @@ async function openWorkspaceFlow() {
     if (!path) return; // dialog cancelled
     const res = await invoke('workspace_open', { path });
     if (res?.candidates) return pickWorkspaceDialog(res.candidates);
-    if (res?.empty) return initWorkspaceDialog(res.empty);
+    if (res?.empty) return initWorkspaceDialog(res.empty, res.suggest ?? 'docs');
     await switchedWorkspace();
   } catch (e) {
     toast(String(e));
@@ -929,7 +938,7 @@ const AGENTS = [
 /** No workspace in the picked folder: offer to start one, and let the user
  *  pick the same pieces `blastradius init` offers — which parts, which
  *  agents — rather than one all-or-nothing checkbox. */
-function initWorkspaceDialog(path) {
+function initWorkspaceDialog(path, suggest = 'docs') {
   const shown = path.length > 60 ? `…${path.slice(-59)}` : path;
   const agentBoxes = AGENTS.map(
     (a) => `<label class="dlg-check">
@@ -940,8 +949,15 @@ function initWorkspaceDialog(path) {
     title: 'Start a model here?',
     body: `<p class="text-muted">No Blastradius workspace in
         <span style="font-family:var(--font-mono)">${esc(shown)}</span>.
-        A starter model will be scaffolded there — plain YAML, yours to edit or
+        A starter model will be scaffolded — plain YAML, yours to edit or
         delete. Files that already exist are left alone.</p>
+      <div class="dlg-field dlg-group">
+        <label for="dlg-location">Put the workspace in</label>
+        <input class="input" id="dlg-location" value="${esc(suggest)}" spellcheck="false">
+        <span class="dlg-id-preview">A folder inside the project — the model is
+          documentation and reads better beside it. Use <b>.</b> for the
+          project root.</span>
+      </div>
       <div class="dlg-group">
         <span class="dlg-group-title">Set up for coding agents</span>
         <label class="dlg-check">
@@ -965,6 +981,7 @@ function initWorkspaceDialog(path) {
       try {
         const res = await invoke('workspace_init', {
           path,
+          location: document.getElementById('dlg-location').value.trim() || '.',
           agents: { mcp: want('dlg-mcp'), skills: want('dlg-skills') },
         });
         await switchedWorkspace();

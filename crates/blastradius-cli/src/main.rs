@@ -76,7 +76,7 @@ fn resolving(dir: Option<&String>, run: impl FnOnce(&str) -> ExitCode) -> ExitCo
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage:\n  blastradius init [dir] [--name <name>]\n  blastradius format\n  blastradius validate [workspace-dir] [--strict-drift]\n  blastradius diff <base-dir> <current-dir>\n  blastradius gitdiff <dir> [base-ref] [cur-ref]\n  blastradius snapshot [workspace-dir]\n  blastradius export <dir> -o <file.html> [--with-doc-bodies]\n  blastradius introspect [dir] [component-id] [--check]\n  blastradius import <workspace.dsl> <out-dir>\n  blastradius mcp [workspace-dir]"
+        "usage:\n  blastradius init [dir] [--into <subdir>] [--name <name>]\n  blastradius format\n  blastradius validate [workspace-dir] [--strict-drift]\n  blastradius diff <base-dir> <current-dir>\n  blastradius gitdiff <dir> [base-ref] [cur-ref]\n  blastradius snapshot [workspace-dir]\n  blastradius export <dir> -o <file.html> [--with-doc-bodies]\n  blastradius introspect [dir] [component-id] [--check]\n  blastradius import <workspace.dsl> <out-dir>\n  blastradius mcp [workspace-dir]"
     );
     ExitCode::from(2)
 }
@@ -421,6 +421,7 @@ fn init(args: &[String]) -> ExitCode {
     let mut git_flag: Option<bool> = None;
     let mut agents_flag: Option<String> = None;
     let mut skills_flag: Option<String> = None;
+    let mut into_flag: Option<String> = None;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -429,15 +430,55 @@ fn init(args: &[String]) -> ExitCode {
             "--no-git" => git_flag = Some(false),
             "--agents" => agents_flag = Some(it.next().cloned().unwrap_or_default()),
             "--skills" => skills_flag = Some(it.next().cloned().unwrap_or_default()),
+            "--into" => into_flag = it.next().cloned(),
             other => dir = Some(other.to_string()),
         }
     }
     let dir = dir.unwrap_or_else(|| ".".to_string());
-    let root = Path::new(&dir);
+    let project = Path::new(&dir);
+
+    // Any flag means "scripted": prompt for nothing. Computed before the
+    // scaffold, because *where* is now one of the questions.
+    let interactive = git_flag.is_none()
+        && agents_flag.is_none()
+        && skills_flag.is_none()
+        && into_flag.is_none()
+        && std::io::stdin().is_terminal()
+        && std::io::stdout().is_terminal();
+
+    // A repository root is for source; the model belongs with the docs. Asked
+    // rather than imposed, and `.` is always a valid answer. Non-interactive
+    // runs keep the historical `.` unless --into says otherwise, so existing
+    // scripts do not silently move their workspace.
+    let suggestion = blastradius_core::scaffold::suggested_location(project);
+    let location = match into_flag {
+        Some(v) => v,
+        None if interactive => {
+            let a = ask_line(&format!(
+                "Where should the workspace live? (a folder in the project, or `.`) [{suggestion}] "
+            ));
+            let a = a.trim().to_string();
+            if a.is_empty() { suggestion } else { a }
+        }
+        None => ".".to_string(),
+    };
+    if let Err(e) = blastradius_core::scaffold::check_location(&location) {
+        eprintln!("{e}");
+        return ExitCode::from(2);
+    }
+    let root_buf = if location == "." { project.to_path_buf() } else { project.join(&location) };
+    let root = root_buf.as_path();
+    let shown = root.display().to_string();
+    if let Err(e) = std::fs::create_dir_all(root) {
+        eprintln!("cannot create {shown}: {e}");
+        return ExitCode::FAILURE;
+    }
 
     let fresh = !root.join("blastradius.yaml").is_file() && !root.join("workspace.yaml").is_file();
     if fresh {
-        let name = name.unwrap_or_else(|| blastradius_core::scaffold::name_for(root));
+        // Name the model after the project, not after the docs folder it
+        // happens to sit in — "docs" is a terrible name for a system.
+        let name = name.unwrap_or_else(|| blastradius_core::scaffold::name_for(project));
         // Existing files are kept, not treated as a conflict: the starter set
         // includes README.md, so bailing here failed on any repository that
         // already had one — after writing four files and skipping the agent
@@ -465,16 +506,10 @@ fn init(args: &[String]) -> ExitCode {
         }
         println!("{}: {} elements, {} views", ws.name, ws.elements.len(), ws.views.len());
     } else {
-        println!("{dir}: already a workspace — scaffold skipped");
+        println!("{shown}: already a workspace — scaffold skipped");
     }
 
     // ---- repo-level extras --------------------------------------------------
-    let interactive = git_flag.is_none()
-        && agents_flag.is_none()
-        && skills_flag.is_none()
-        && std::io::stdin().is_terminal()
-        && std::io::stdout().is_terminal();
-
     let in_repo = blastradius_cli::onboard::git_root(root).is_some();
     let git_init = if in_repo {
         false
@@ -526,7 +561,7 @@ fn init(args: &[String]) -> ExitCode {
             println!("  {line}");
         }
     }
-    println!("next:\n  blastradius-app {dir}    # open it in the app\n  blastradius validate {dir}");
+    println!("next:\n  blastradius-app {shown}    # open it in the app\n  blastradius validate {shown}");
     ExitCode::SUCCESS
 }
 

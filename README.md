@@ -146,9 +146,12 @@ axe-core WCAG AA audit of every surface).
 ## CLI
 
 ```
-blastradius init [dir] [--name <name>]      scaffold a starter workspace, offer
-     [--git|--no-git] [--agents <list>]     git init + agent MCP config + skills
-     [--skills <list>]                      (list: all | none | claude,copilot,cursor,codex)
+blastradius init [dir] [--into <subdir>]    scaffold a starter workspace, offer
+     [--name <name>] [--git|--no-git]       git init + agent MCP config + skills
+     [--agents <list>] [--skills <list>]    (list: all | none | claude,copilot,cursor,codex)
+                                            run bare, it asks — and recommends
+                                            docs/ (or an existing doc/) for the
+                                            workspace; --into skips the prompt
 blastradius validate [dir]                  parse + validate, file:line diagnostics
 blastradius diff <base-dir> <current-dir>   semantic model diff
 blastradius gitdiff <dir> [base] [cur]      semantic diff from git history
