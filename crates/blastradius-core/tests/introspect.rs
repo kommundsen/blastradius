@@ -290,3 +290,29 @@ fn staleness_probe_tracks_the_working_tree() {
     write(&t.dir, "src/new.rs", "pub struct New;\n");
     assert!(introspect::is_stale(&t.dir, &mapping(), &facts.source_digest));
 }
+
+/// A `source:` mapping written on a *container* used to vanish without a
+/// word: introspection is component-level, so the key was never read and YAML
+/// ignores what it does not know. Someone wrote one, watched nothing happen,
+/// and had to work out why (reported 2026-08-26).
+#[test]
+fn a_source_mapping_on_a_container_says_it_is_ignored() {
+    let t = temp("container-source");
+    let repo = &t.dir;
+    write(repo, "blastradius.yaml", "workspace:\n  name: T\n  version: 1\nmodel:\n  include: [model/*.yaml]\n");
+    write(
+        repo,
+        "model/shop.yaml",
+        "system: shop\nname: Shop\ncontainers:\n  backend:\n    name: Backend\n    source:\n      language: csharp\n      root: src\n    components:\n      billing: { name: Billing }\n",
+    );
+
+    let (_ws, diags) = blastradius_core::load_workspace(repo);
+    let msg = diags.iter().map(|d| d.to_string()).collect::<Vec<_>>().join("\n");
+    assert!(msg.contains("shop.backend"), "no diagnostic names the container:\n{msg}");
+    assert!(msg.contains("component-level"), "the diagnostic does not explain why:\n{msg}");
+    // A warning, not an error: the rest of the model is perfectly good.
+    assert!(
+        !blastradius_core::diagnostics::has_errors(&diags),
+        "an ignored mapping must not invalidate the workspace:\n{msg}"
+    );
+}

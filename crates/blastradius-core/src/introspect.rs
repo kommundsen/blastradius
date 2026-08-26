@@ -864,6 +864,83 @@ struct ExtractorInput<'a> {
     mode: Option<&'a str>,
 }
 
+/// True if we can create a file in `dir` — the proxy for "this install
+/// directory is an ordinary place from which things can run".
+fn writable(dir: &Path) -> bool {
+    let probe = dir.join(".blastradius-write-probe");
+    match std::fs::write(&probe, b"") {
+        Ok(()) => {
+            let _ = std::fs::remove_file(&probe);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+fn copy_tree(from: &Path, to: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let dest = to.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_tree(&entry.path(), &dest)?;
+        } else {
+            std::fs::copy(entry.path(), &dest)?;
+        }
+    }
+    Ok(())
+}
+
+/// Where a private copy of an extractor lives. Persistent per user where the
+/// OS gives us somewhere, else the temp dir (same fallback the journal uses).
+fn extractor_cache() -> PathBuf {
+    let base = std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    base.join("Blastradius").join(format!("extractors-{}", env!("CARGO_PKG_VERSION")))
+}
+
+/// Make an extractor directory runnable, copying it out of a restricted
+/// install location if it is not one already.
+///
+/// A Store install lives under `C:\Program Files\WindowsApps\...`, whose ACLs
+/// let an outside process *read* a file but not load it as an assembly. The
+/// C# extractor runs inside `dotnet.exe`, which is not part of our package, so
+/// the CLR refuses it outright:
+///
+/// ```text
+/// Could not load file or assembly '...\extractors\dotnet\BlastradiusExtract.dll'.
+/// Access is denied.
+/// ```
+///
+/// Publishing the extractor (0.6.1) was necessary but not sufficient — nothing
+/// can execute it from in there at all. Node reads and runs the TypeScript
+/// `.mjs` from the same directory happily, so this is specific to assembly
+/// loading and only the C# extractor needs it.
+///
+/// The copy happens once per version, on the first C# introspection, and is
+/// keyed by version because a package's contents are immutable per version.
+fn runnable_dir(dir: &Path) -> PathBuf {
+    if writable(dir) {
+        return dir.to_path_buf();
+    }
+    let leaf = dir.file_name().unwrap_or_default();
+    let staged = extractor_cache().join(leaf);
+    // Trust an existing copy: same version, same immutable package.
+    if staged.join(CSHARP_DLL).is_file() {
+        return staged;
+    }
+    match copy_tree(dir, &staged) {
+        Ok(()) => staged,
+        // Fall back to the original: it may still work (a read-only directory
+        // is not automatically a restricted one), and if it does not, the
+        // extractor's own error is more useful than one about the copy.
+        Err(_) => dir.to_path_buf(),
+    }
+}
+
+const CSHARP_DLL: &str = "BlastradiusExtract.dll";
+
 /// Locate the default extractor entry: beside the running binary first
 /// (installed layout), then in the repo (dev layout) — spec.
 fn default_command(language: &str, repo_root: &Path) -> Result<Vec<String>, String> {
@@ -892,14 +969,19 @@ fn default_command(language: &str, repo_root: &Path) -> Result<Vec<String>, Stri
             if !path.exists() {
                 continue;
             }
-            let p = path.to_string_lossy().into_owned();
-            return Ok(if language == "typescript" {
-                vec!["node".into(), p]
-            } else if entry.ends_with(".dll") {
-                vec!["dotnet".into(), p]
-            } else {
-                vec!["dotnet".into(), "run".into(), "--project".into(), p, "-c".into(), "Release".into()]
-            });
+            if language == "typescript" {
+                return Ok(vec!["node".into(), path.to_string_lossy().into_owned()]);
+            }
+            // The published DLL may be somewhere nothing can load it from
+            // (see runnable_dir) — resolve to a copy that works.
+            if entry.ends_with(".dll") {
+                let home = runnable_dir(&path.parent().expect("entry has a parent").to_path_buf());
+                return Ok(vec!["dotnet".into(), home.join(CSHARP_DLL).to_string_lossy().into_owned()]);
+            }
+            return Ok(vec![
+                "dotnet".into(), "run".into(), "--project".into(),
+                path.to_string_lossy().into_owned(), "-c".into(), "Release".into(),
+            ]);
         }
     }
     // Reported as "no csharp extractor found" and nothing else for five
@@ -948,7 +1030,15 @@ pub fn run_external(repo_root: &Path, component: &str, mapping: &SourceMapping) 
     // Absolute, because the child no longer runs from the repo root (below) —
     // extractors join `repoRoot` with `root`, so a relative one would resolve
     // against the wrong directory.
-    let abs_root = repo_root.canonicalize().unwrap_or_else(|_| repo_root.to_path_buf());
+    // strip_verbatim, not just canonicalize: on Windows canonicalize returns
+    // the `\\?\C:\...` verbatim form, which takes no separator normalization —
+    // the extractors join it with forward slashes and the result is rejected
+    // outright ("The filename, directory name, or volume label syntax is
+    // incorrect"). This never showed up in our own gates: the dogfood corpus
+    // has no C# mapping, and the fixture suite passes a *relative* repoRoot.
+    let abs_root = strip_verbatim(
+        repo_root.canonicalize().unwrap_or_else(|_| repo_root.to_path_buf()),
+    );
     let input = serde_json::to_string(&ExtractorInput {
         component,
         repo_root: &abs_root.to_string_lossy(),
@@ -1092,6 +1182,39 @@ mod tests {
         let argv = default_command("csharp", &dir).unwrap();
         assert!(argv.contains(&"run".to_string()), "{argv:?}");
         assert!(argv.contains(&"--project".to_string()), "{argv:?}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// An ordinary, writable extractor directory is used where it is — the
+    /// staging copy is for restricted install locations only.
+    #[test]
+    fn a_writable_extractor_directory_is_used_in_place() {
+        let dir = temp("writable");
+        let ext = dir.join("extractors/dotnet");
+        fs::create_dir_all(&ext).unwrap();
+        fs::write(ext.join(CSHARP_DLL), "").unwrap();
+        assert!(writable(&ext), "a temp dir must be writable");
+        assert_eq!(runnable_dir(&ext), ext, "no copy should have been made");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The copy that makes a packaged install work has to bring the whole
+    /// tree: Roslyn ships satellite folders beside the assembly.
+    #[test]
+    fn staging_copies_nested_directories() {
+        let dir = temp("copytree");
+        let from = dir.join("from");
+        fs::create_dir_all(from.join("runtimes/win/lib")).unwrap();
+        fs::write(from.join(CSHARP_DLL), "assembly").unwrap();
+        fs::write(from.join("runtimes/win/lib/native.dll"), "native").unwrap();
+
+        let to = dir.join("to");
+        copy_tree(&from, &to).unwrap();
+        assert_eq!(fs::read_to_string(to.join(CSHARP_DLL)).unwrap(), "assembly");
+        assert_eq!(
+            fs::read_to_string(to.join("runtimes/win/lib/native.dll")).unwrap(),
+            "native"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 

@@ -175,6 +175,19 @@ fn parse_system(map: &MarkedMappingNode, rel: &str, ws: &mut Workspace, diags: &
             );
 
             if let Node::Mapping(cmap) = cbody {
+                // Introspection is component-level (spec/l4-introspection.md):
+                // derived code hangs under a component's `.src.` segment, so a
+                // container has nowhere to put it. Saying so beats the silence
+                // that had someone write a mapping and watch nothing happen.
+                if cmap.get_node("source").is_some() {
+                    diags.push(Diagnostic::warning(
+                        rel,
+                        cline,
+                        format!(
+                            "`source:` on container {full:?} is ignored — introspection is component-level; move it to a component under `components:`"
+                        ),
+                    ));
+                }
                 // nested components (L3)
                 if let Some(Node::Mapping(comps)) = cmap.get_node("components") {
                     for (kkey, kbody) in comps.iter() {

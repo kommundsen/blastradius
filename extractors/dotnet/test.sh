@@ -20,7 +20,8 @@ actual="$(mktemp)"
 semantic="$(mktemp)"
 fallback="$(mktemp)"
 fallback_err="$(mktemp)"
-trap 'rm -f "$actual" "$semantic" "$fallback" "$fallback_err"' EXIT
+absolute="$(mktemp)"
+trap 'rm -f "$actual" "$semantic" "$fallback" "$fallback_err" "$absolute"' EXIT
 
 # ---- 1. syntax mode, byte-exact ---------------------------------------------
 echo '{"component":"shop.backend.billing","repoRoot":"fixtures","root":"src","include":[],"exclude":[]}' \
@@ -30,6 +31,32 @@ if diff -u fixtures/expected.l4.json "$actual"; then
   echo "csharp extractor: fixture facts byte-exact"
 else
   echo "csharp extractor: DRIFT — inspect the diff above; if intentional, refreeze fixtures/expected.l4.json" >&2
+  exit 1
+fi
+
+# ---- 1b. an absolute repoRoot, which is what core actually sends -------------
+# This gate only ever passed a *relative* repoRoot, and the dogfood corpus has
+# no C# mapping — so nothing exercised the path core really uses, and C#
+# introspection was broken on Windows for every absolute root: canonicalize()
+# yields the `\\?\C:\...` verbatim form, which takes no separator
+# normalization, and joining it with forward slashes is rejected outright
+# (found on a packaged install, 2026-08-26).
+abs_fixtures="$(cd fixtures && pwd)"
+# Under Git Bash, `pwd` is a POSIX path .NET cannot open. `cygpath -m` gives
+# the Windows form with forward slashes: valid for .NET and safe inside a JSON
+# string, where a backslash would be an escape sequence.
+if command -v cygpath > /dev/null 2>&1; then
+  abs_fixtures="$(cygpath -m "$abs_fixtures")"
+fi
+echo "{\"component\":\"shop.backend.billing\",\"repoRoot\":\"$abs_fixtures\",\"root\":\"src\",\"include\":[],\"exclude\":[]}" \
+  | dotnet run -c Release > "$absolute"
+
+# Same facts either way: the root is how files are *found*, never part of the
+# output — element paths stay repo-relative.
+if diff -u fixtures/expected.l4.json "$absolute"; then
+  echo "csharp extractor: absolute repoRoot gives the same facts"
+else
+  echo "csharp extractor: an absolute repoRoot changes the output — see the diff above" >&2
   exit 1
 fi
 

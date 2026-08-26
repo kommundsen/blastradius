@@ -790,6 +790,39 @@ Everything above is covered by tests, but two of these bugs existed
   offer, and follow the prompt through to a model — the 5-minute-stranger
   run, which is now a much shorter path than it was.
 
+## L4 on a packaged install (2026-08-26) — three bugs, found by installing it
+
+The first run of `introspect` from a real Store install, on a real C# repo.
+Nothing about it worked, and none of it was visible from a checkout.
+
+1. **The extractor could not be loaded at all.** `WindowsApps` ACLs let an
+   outside process read a file but not load it as an assembly, and the C#
+   extractor runs in `dotnet.exe`, which is not part of our package:
+   `Could not load file or assembly ... Access is denied.` Shipping it
+   *published* (0.6.1) was necessary and not sufficient. Core now keeps a
+   private copy under `%LOCALAPPDATA%` and runs that, once per version.
+2. **`repoRoot` was sent in verbatim form.** `canonicalize()` yields
+   `\\?\C:\...` on Windows, which takes no separator normalization; the
+   extractors join it with forward slashes and Windows rejects the result.
+   This means **C# introspection had never worked with an absolute root on
+   Windows** — hidden because the dogfood corpus has no C# mapping and the
+   fixture gate passed a relative root. The gate now runs both.
+3. **`source:` on a container vanished silently.** Introspection is
+   component-level; the key was simply never read, and YAML ignores what it
+   does not know. It is now a warning naming the container.
+
+Reported by the owner running the published build with an agent, which
+diagnosed (1) correctly and unaided, and declined to work around it by
+copying the DLL out — the right call.
+
+**The pattern is now unmistakable.** Three releases in a row have shipped a
+bug that only exists in an installed layout: extractors missing from the
+package (0.6.0), the scaffold refusing to touch a repo with a README
+(0.6.1), and these. CI builds the package and never installs it. Until
+something exercises an installed build against a real repository, this will
+keep happening — a candidate for 0.7.0 that outranks anything currently in
+the pool.
+
 ## 0.6.1 — released (2026-08-26): 0.6.0's onboarding, working
 
 **Cut 2026-08-26**, a fix release. 0.6.0's headline change — pointing the app

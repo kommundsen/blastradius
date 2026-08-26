@@ -37,6 +37,12 @@ components:
       mode: syntax                # optional: syntax (default) | semantic
 ```
 
+**Only on a component.** Derived elements hang under a component's reserved
+`.src.` segment, so a container has nowhere to put them. A `source:` written
+on a container is ignored — and now says so, as a warning naming the
+container: it used to vanish silently, because the key was never read and
+YAML ignores what it does not know (reported 2026-08-26).
+
 `root` is relative to the **repository root**, not the workspace
 directory — code lives beside the workspace, and ADR-0014's discovery
 already anchors every workspace inside a repo. Validation errors if the
@@ -198,6 +204,36 @@ monorepos with pinned toolchains):
 
 The defaults resolve against the Blastradius install dir first, then
 the repo, so users don't need the extractors vendored in their repo.
+
+**A packaged install cannot run the extractor from where it lives.**
+`C:\Program Files\WindowsApps\...` has ACLs that let an outside process
+*read* a file but not load it as an assembly, and the C# extractor runs
+inside `dotnet.exe`, which is not part of our package. The CLR refuses:
+
+```text
+Could not load file or assembly '...\extractors\dotnet\BlastradiusExtract.dll'.
+Access is denied.
+```
+
+So core keeps a private copy under `%LOCALAPPDATA%\Blastradius\extractors-<version>\`
+and runs that (`runnable_dir`), copying once per version on the first C#
+introspection. The trigger is "the extractor directory is not writable",
+which covers WindowsApps and any read-only install without special-casing
+a path shape. Node reads and runs the TypeScript `.mjs` from the same
+directory happily, so this is specific to assembly loading and only the C#
+extractor is staged.
+
+Publishing the extractor (0.6.1) was necessary but not sufficient: nothing
+could execute it from in there at all. Found on a real Store install
+(2026-08-26) — the class of bug no checkout can see.
+
+**`repoRoot` is sent stripped of the `\\?\` verbatim prefix.**
+`canonicalize()` returns the verbatim form on Windows, which takes no
+separator normalization — extractors join it with forward slashes and the
+result is rejected outright ("The filename, directory name, or volume label
+syntax is incorrect"). Nothing caught this: the dogfood corpus has no C#
+mapping, and the fixture gate passed a *relative* root. It now runs the
+suite a second time with an absolute one.
 
 **Installed layouts ship the C# extractor published, not as a project**
 (`tools/stage-extractors.mjs`, used by both the MSIX and the portable
