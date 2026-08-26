@@ -252,9 +252,16 @@ certification proceeds in Partner Center as usual.
 
 The workflow also has a manual **dry run** (Actions → release → Run
 workflow): the same build/bundle/submit path, but `--noCommit` leaves
-the submission as an uncommitted draft in Partner Center — inspect it
-there, then delete the draft. Use it to validate the pipeline before
-the first real tag.
+the submission as an uncommitted draft in Partner Center. Use it to
+validate the pipeline before a real tag — it earned its keep on 0.6.0,
+catching two packaging bugs that only exist in the pipeline.
+
+**The draft does not need deleting before the real tag.** The workflow
+always passes `-ReplacePending`, and the script deletes any pending
+submission before creating the new one; a draft the *API* created is one
+the API may delete. That is the whole distinction behind the failure
+below — a dashboard-created submission is the one the API cannot touch.
+Deleting a dry-run draft by hand is tidiness, not a prerequisite.
 
 ## Troubleshooting
 
