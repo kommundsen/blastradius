@@ -950,6 +950,51 @@ given, so nobody's existing automation silently relocates its workspace.
 Locations are validated — relative, no `..`, no absolute paths — and the
 starter model is named after the project rather than the folder it lands in.
 
+## 0.7.0 — in progress (2026-08-27)
+
+Picked from the pool below plus the structural finding above it, in that
+order: the install-shaped hole in CI first, because three consecutive releases
+went out through it, then the two things a user actually feels.
+
+### Layout: pins stop relocating the diagram, and long chains stop towering
+
+Two defects with the same root — layout rules that were fine when diagrams
+were small.
+
+**A pin was a divider, not a constraint.** Unpinned nodes were laid out as one
+block and offset to start *below* the pinned bounding box, so pinning a single
+node near the bottom of a diagram shoved every other node underneath it. It
+now takes the least displacement that clears the pinned boxes — leave it where
+ELK put it, or push below, right, above or left — with "below" kept as the
+guaranteed fallback, which is what the old rule was. Deterministic: fixed
+candidate order, tie-break on displacement. On this repository's own L2 view
+the diagram is 138px shorter for it, because the auto block no longer has to
+start under the pins.
+
+**Sixteen chained components rendered as a 2400px column.** Correct and
+unreadable at once. ELK's `wrapping.strategy` snakes a long chain into shorter
+columns; it now runs as a second pass, taken only when the first result comes
+back more than 2.5× taller than wide with at least eight nodes, and kept only
+if it is actually squarer. Small diagrams still read straight down, which is
+the C4 convention and worth keeping — none of this repository's own views
+changes. The 16-node chain goes from 162×2428 to 735×561.
+
+### Finding things in the model
+
+The pool ranked this first "on a hunch, not on evidence". The evidence turned
+up on the way: a 16-component container is a scroll before it is anything
+else, and an agent has had `find_elements` since 0.5.0 while a human in the
+app had the sidebar tree and nothing else.
+
+`Ctrl`/`Cmd`+`K`, or the **Find** button. It searches elements (name, id,
+description), **relations** (label or either end — an edge has no row in the
+tree, so this is the only way to look one up), documents, and derived L4 code
+elements, ranked exact → name-prefix → id-prefix → substring, with a fixed
+tie-break so the same query always lists the same order. Enter flies the
+camera to whatever altitude the result lives at. Ranking is a pure module
+(`ui/js/search.js`) tested in node; the palette itself is pinned by a WebKit
+suite.
+
 ## 0.7.0 — candidate pool (2026-08-25)
 
 **The hold resolved itself.** This pool was 0.6.0's, held (2026-08-25)

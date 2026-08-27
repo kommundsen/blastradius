@@ -31,6 +31,23 @@ L4 is enabled only when the model has source-mapped components
 Diving stops where there is nothing below: a component with no source mapping,
 or a container instance, will not open.
 
+## Finding things
+
+**`Ctrl`/`Cmd` `+K`** — or the **Find** button — opens a search over the whole
+model at once, and it is usually faster than navigating to something you can
+already name. It covers more than the tree does:
+
+- every element, by name, id, or words in its description;
+- **relations**, by their label or either end — an edge has no row in the tree,
+  so this is the only way to look one up;
+- **documents**, by title or id;
+- **code-level detail**, so a module or type derived by
+  [introspection](code-level.md) is reachable without diving to L4 first.
+
+`↑` `↓` move through the results, `Enter` opens the highlighted one, `Esc`
+closes. Opening an element flies the camera to whichever altitude it lives at,
+so you never have to work out where something is before going there.
+
 ## Camera
 
 - **Scroll** to zoom about the pointer; **drag empty canvas** to pan.

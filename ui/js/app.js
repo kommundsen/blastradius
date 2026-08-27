@@ -6,6 +6,7 @@ import { layoutView, GRID, groupDivs, fitGroupBoxes, nodeSize } from './layout.j
 import { viewSvg, kicker, childCount } from './svg.js';
 import { edgeLabelLines } from './labels.js';
 import { HELP_PAGES, helpBody, helpLinkTarget } from './help.js';
+import { searchModel } from './search.js';
 
 // ---- shell bridge -----------------------------------------------------------
 // Real IPC under Tauri; mock (fetch of a committed snapshot) in a plain
@@ -200,6 +201,7 @@ const state = {
   connectFrom: null,  // relation-draw mode: source element id
   selectedRel: null,  // selected relation {from,to,label}
   dialog: null,
+  palette: false,   // the find-anything overlay is open
 };
 
 const $ = (id) => document.getElementById(id);
@@ -212,7 +214,7 @@ const els = {
   hint: $('hint'), themeBtn: $('theme-btn'),
   gitChips: $('git-chips'), diffBtn: $('diff-btn'), historyBtn: $('history-btn'),
   undoBtn: $('undo-btn'), redoBtn: $('redo-btn'), addBtn: $('add-btn'),
-  sideMode: $('side-mode'), srcStatus: $('src-status'),
+  sideMode: $('side-mode'), srcStatus: $('src-status'), findBtn: $('find-btn'),
 };
 
 let elk = null;
@@ -777,6 +779,7 @@ function wireChrome() {
   $('zoom-out').addEventListener('click', () => { state.zoom /= 1.2; applyCamera(); });
   $('zoom-reset').addEventListener('click', () => { state.zoom = 1; state.pan = { x: 0, y: 0 }; applyCamera(); });
   els.helpBtn.addEventListener('click', () => openHelp(state.help === null ? '' : null));
+  els.findBtn.addEventListener('click', () => openPalette());
   // '?' opens help. Guarded like the editing handler — the Ctrl+O handler
   // below is not, and typing "?" into a field must not hijack the panel.
   window.addEventListener('keydown', (ev) => {
@@ -851,11 +854,117 @@ function wireChrome() {
     zoomAt({ x: ev.clientX - rect.left, y: ev.clientY - rect.top }, Math.exp(-delta * 0.0015));
   }, { passive: false });
   window.addEventListener('keydown', (ev) => {
-    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'o') {
+    if (!(ev.ctrlKey || ev.metaKey)) return;
+    const key = ev.key.toLowerCase();
+    if (key === 'o') {
       ev.preventDefault();
       openWorkspaceFlow('open');
+    } else if (key === 'k') {
+      // Deliberately not guarded on the focused element: Ctrl+K is how you
+      // get *out* of wherever you are and into something else.
+      ev.preventDefault();
+      if (state.palette) closePalette(); else openPalette();
     }
   });
+}
+
+// ---- find anything (0.7.0) --------------------------------------------------
+// The tree lists the authored model in model order, which is the right shape
+// for reading and the wrong one for looking something up. This is the other
+// half: type a few letters, get elements, code-level detail, documents and
+// relations ranked together, press Enter, land on it.
+
+function openPalette() {
+  closePalette();
+  state.palette = true;
+  const wrap = document.createElement('div');
+  wrap.className = 'dialog-backdrop palette-backdrop';
+  wrap.id = 'app-palette';
+  wrap.innerHTML = `<div class="palette blueprint" role="dialog" aria-modal="true" aria-label="Find in the model">
+    <input class="input palette-input" id="palette-q" type="text" autocomplete="off" spellcheck="false"
+      placeholder="Find an element, document or relation…" aria-controls="palette-list"
+      role="combobox" aria-expanded="true" aria-autocomplete="list">
+    <div class="palette-list" id="palette-list" role="listbox"></div>
+    <div class="palette-foot text-muted">↑↓ to move · Enter to open · Esc to close</div>
+  </div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click', (ev) => { if (ev.target === wrap) closePalette(); });
+
+  const input = document.getElementById('palette-q');
+  const list = document.getElementById('palette-list');
+  let results = [];
+  let active = 0;
+
+  const paint = () => {
+    results = searchModel(effectiveSnapshot(), input.value);
+    active = 0;
+    list.innerHTML = results.length
+      ? results
+          .map(
+            (r, i) =>
+              `<button class="palette-row${i === 0 ? ' is-active' : ''}" role="option"` +
+              ` aria-selected="${i === 0}" data-i="${i}">` +
+              `<span class="palette-tag">${esc(r.tag)}</span>` +
+              `<span class="palette-title">${esc(r.title)}</span>` +
+              `<span class="palette-sub text-muted">${esc(r.subtitle ?? '')}</span></button>`
+          )
+          .join('')
+      : `<div class="palette-empty text-muted">Nothing matches “${esc(input.value)}”.</div>`;
+    for (const row of list.querySelectorAll('[data-i]')) {
+      row.addEventListener('click', () => choose(Number(row.dataset.i)));
+    }
+  };
+
+  const highlight = () => {
+    for (const row of list.querySelectorAll('[data-i]')) {
+      const on = Number(row.dataset.i) === active;
+      row.classList.toggle('is-active', on);
+      row.setAttribute('aria-selected', String(on));
+      if (on) row.scrollIntoView({ block: 'nearest' });
+    }
+  };
+
+  const choose = async (i) => {
+    const r = results[i];
+    if (!r) return;
+    closePalette();
+    if (r.kind === 'relation') {
+      selectRelation(r.relation);
+    } else if (r.kind === 'doc') {
+      state.help = null;
+      state.doc = r.id;
+      renderSide();
+    } else {
+      await focusElement(r.id);
+    }
+  };
+
+  input.addEventListener('input', paint);
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'ArrowDown') {
+      ev.preventDefault();
+      active = results.length ? (active + 1) % results.length : 0;
+      highlight();
+    } else if (ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      active = results.length ? (active - 1 + results.length) % results.length : 0;
+      highlight();
+    } else if (ev.key === 'Enter') {
+      ev.preventDefault();
+      choose(active);
+    } else if (ev.key === 'Escape') {
+      ev.preventDefault();
+      closePalette();
+    }
+  });
+
+  paint();
+  input.focus();
+}
+
+function closePalette() {
+  document.getElementById('app-palette')?.remove();
+  state.palette = false;
 }
 
 // ---- panel resize (design-system contract: JS writes --panel-*-w) -----------

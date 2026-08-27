@@ -20,10 +20,14 @@ Selection wraps around at either end of the list.
 
 | Key | Action |
 | --- | --- |
+| `Ctrl`/`Cmd` `+K` | Find any element, relation or document |
 | `?` / `F1` | Open or close this help |
 | `Ctrl`/`Cmd` `+O` | Open a workspace folder |
 | `Ctrl`/`Cmd` `+Z` | Undo |
 | `Ctrl`/`Cmd` `+Y` or `Ctrl`/`Cmd` `+Shift` `+Z` | Redo |
+
+In the find palette, `↑` and `↓` move through the results, `Enter` opens the
+highlighted one, and `Esc` closes it.
 
 ## Editing
 
