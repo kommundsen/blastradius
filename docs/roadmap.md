@@ -828,9 +828,20 @@ there is nothing to read, so it interviews properly. The topics asked are the
 ones named — scope, level of detail, documents and ADRs, `source:` mappings for
 code-level detail, deployment.
 
-Only Claude Code has all three surfaces. Cursor, Copilot and Codex get the one
-self-contained primer, which is the reason the reference is not split across
-files.
+**Corrected within the hour, after the owner pushed back**: the first cut of
+this claimed only Claude Code had a command or subagent surface. That was
+wrong for all three others, and asserted from memory rather than checked.
+Copilot has prompt files (`.github/prompts/*.prompt.md`) and custom agents
+(`.github/agents/*.agent.md`); Cursor and Codex both discover
+`.agents/skills/*/SKILL.md` and invoke a skill by name. Cursor and Copilot
+even read `.claude/` directly. Every agent now gets the workflows in its own
+format, with the paths and frontmatter keys taken from each vendor's
+documentation — a file at the wrong path with the wrong extension does
+nothing and says nothing about it, which is the same silent-failure class as
+the packaging bugs above.
+
+What stays one document is the *reference*: it is what an agent reads before
+doing anything, and splitting it only makes half of it easy to miss.
 
 ## 0.6.2 — released (2026-08-26): L4 works on an installed build
 

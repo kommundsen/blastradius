@@ -277,79 +277,64 @@ fn write_new(path: &Path, text: &str) -> Result<(), String> {
 }
 
 
+/// The reference document, plus whatever workflow surfaces the agent has.
+///
+/// Reference and workflow are different shapes: reference loads on its own
+/// when architecture comes up, which is exactly why it must not interview.
+/// Workflows are invoked deliberately, and every one of these agents has a
+/// surface for that — see crate::workflows for the per-agent paths, verified
+/// against each vendor's docs.
 fn write_skill(agent: &str, root: &Path, rel: &str) -> Result<String, String> {
+    let mut parts = vec![write_reference(agent, root, rel)?];
+
+    let (mut wrote, mut present) = (0usize, 0usize);
+    for (rel_path, text) in crate::workflows::files_for(agent, rel) {
+        let path = root.join(&rel_path);
+        if path.exists() {
+            present += 1;
+            continue;
+        }
+        write_new(&path, &text)?;
+        wrote += 1;
+    }
+    if wrote > 0 {
+        parts.push(format!("wrote {wrote} workflow file(s)"));
+    } else if present > 0 {
+        parts.push(format!("{present} workflow file(s) already present"));
+    }
+    Ok(parts.join("; "))
+}
+
+/// The primer, in the agent's own format. One self-contained document: it is
+/// what an agent reads before it does anything, and splitting it across files
+/// only makes it easier to miss half.
+fn write_reference(agent: &str, root: &Path, rel: &str) -> Result<String, String> {
     match agent {
-        // Claude Code gets three surfaces, because the jobs are different
-        // shapes (see crates/blastradius-core/src/workflows.rs): a *skill* is
-        // reference and fires on its own, *commands* are user-initiated and so
-        // may interview, and a *subagent* gets its own context window for
-        // reading a whole repository. Every other agent gets the primer alone,
-        // which is why the primer stays self-contained.
         "claude" => {
-            let mut wrote: Vec<String> = Vec::new();
-            let mut present = 0usize;
-
-            let skill = root.join(".claude/skills/blastradius/SKILL.md");
-            if skill.exists() {
-                present += 1;
-            } else {
-                let text = format!(
-                    "---\nname: blastradius\ndescription: Query and edit this repo's Blastradius C4 architecture model (YAML workspace). Use when working with the architecture model, ADRs, or when a change affects modelled components.\n---\n\n# Working with the Blastradius model\n\nWorkflows live in slash commands rather than in here, because a skill fires\non its own and an interview should not: `/blastradius:model` builds a model\nby asking first, `/blastradius:sync` brings it back in step with the code,\nand `/blastradius:review` judges it. This file is the reference they lean on.\n\n{}",
-                    primer(rel)
-                );
-                write_new(&skill, &text)?;
-                wrote.push("skill".to_string());
+            let path = root.join(".claude/skills/blastradius/SKILL.md");
+            if path.exists() {
+                return Ok(".claude/skills/blastradius: already present".into());
             }
-
-            let mut extras = crate::workflows::claude_commands(rel);
-            extras.push(crate::workflows::claude_agent());
-            let (mut cmds, mut agents) = (0usize, 0usize);
-            for (rel_path, text) in &extras {
-                let path = root.join(rel_path);
-                if path.exists() {
-                    present += 1;
-                    continue;
-                }
-                write_new(&path, text)?;
-                if rel_path.contains("/agents/") {
-                    agents += 1;
-                } else {
-                    cmds += 1;
-                }
-            }
-            if cmds > 0 {
-                wrote.push(format!("{cmds} commands"));
-            }
-            if agents > 0 {
-                wrote.push(format!("{agents} agent"));
-            }
-
-            if wrote.is_empty() {
-                return Ok(format!(".claude/: already present ({present} files)"));
-            }
-            Ok(format!("wrote .claude/ — {} (Claude Code)", wrote.join(", ")))
+            let text = format!(
+                "---\nname: blastradius\ndescription: Query and edit this repo's Blastradius C4 architecture model (YAML workspace). Use when working with the architecture model, ADRs, or when a change affects modelled components.\n---\n\n# Working with the Blastradius model\n\nWorkflows live in slash commands rather than in here, because a skill loads\non its own and an interview should not: `/blastradius:model` builds a model\nby asking first, `/blastradius:sync` brings it back in step with the code,\nand `/blastradius:review` judges it. This file is the reference they lean on.\n\n{}",
+                primer(rel)
+            );
+            write_new(&path, &text)?;
+            Ok("wrote .claude/skills/blastradius/SKILL.md (Claude Code)".into())
         }
         "cursor" => {
             let path = root.join(".cursor/rules/blastradius.mdc");
             if path.exists() {
                 return Ok(".cursor/rules/blastradius.mdc: already present".into());
             }
-            std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
             let text = format!(
-                "---\n\
-                 description: Blastradius C4 architecture model in this repo\n\
-                 alwaysApply: false\n\
-                 ---\n\n{}",
+                "---\ndescription: Blastradius C4 architecture model in this repo\nalwaysApply: false\n---\n\nThe modelling workflows are skills you can invoke by name:\n`blastradius-model` builds a model by interviewing you first,\n`blastradius-sync` brings it back in step with the code, and\n`blastradius-review` judges it.\n\n{}",
                 primer(rel)
             );
-            std::fs::write(&path, text).map_err(|e| e.to_string())?;
+            write_new(&path, &text)?;
             Ok("wrote .cursor/rules/blastradius.mdc (Cursor)".into())
         }
-        "codex" => append_instructions(
-            &root.join("AGENTS.md"),
-            "AGENTS.md (Codex)",
-            rel,
-        ),
+        "codex" => append_instructions(&root.join("AGENTS.md"), "AGENTS.md (Codex)", rel),
         "copilot" => append_instructions(
             &root.join(".github/copilot-instructions.md"),
             ".github/copilot-instructions.md (Copilot)",

@@ -64,32 +64,41 @@ your own git; the commit stays yours.
 in `find_elements`, `element`, and `blast_radius` marked `derived: true`, so an
 agent asking for the blast radius of a module gets real code-level fan-in.
 
-## Workflows, for Claude Code
+## Workflows
 
 Reference and workflow are different shapes, so they ship as different things.
-The **skill** is reference — it loads on its own when architecture comes up,
-which is exactly why it must not start asking questions. The **commands** are
-yours to invoke, so they can:
+The **reference** loads on its own when architecture comes up — which is
+exactly why it must not start asking questions. The **workflows** you invoke
+deliberately, so they can:
 
-- **`/blastradius:model`** — builds or extends the model by interviewing you
-  first: scope, how much detail, whether to attach ADRs and other docs,
-  whether components should point at their source for code-level detail, and
-  whether there is a deployment story worth drawing. On a repository that
-  already has code it surveys first and brings you a proposal to correct;
-  on an empty one it has nothing to read, so it asks properly.
-- **`/blastradius:sync`** — finds where the model has drifted from the code
-  since a given commit and proposes the fixes.
-- **`/blastradius:review`** — judges the model against the repository and
-  reports, without changing anything.
+- **model** — builds or extends the model by interviewing you first: scope, how
+  much detail, whether to attach ADRs and other docs, whether components should
+  point at their source for code-level detail, and whether there is a
+  deployment story worth drawing. On a repository that already has code it
+  surveys first and brings you a proposal to correct; on an empty one it has
+  nothing to read, so it asks properly.
+- **sync** — finds where the model has drifted from the code since a given
+  commit and proposes the fixes.
+- **review** — judges the model against the repository and reports, without
+  changing anything.
 
-There is also a **`blastradius-surveyor`** subagent, read-only, which reads a
-whole repository and proposes a C4 structure with the evidence for each
-candidate. `/blastradius:model` launches it for you; it gets its own context
-window so that reading the repository does not crowd out the conversation.
+Each agent gets these in its own format, because each one looks somewhere
+different:
 
-Cursor, Copilot and Codex have no equivalent surfaces, so they get one
-self-contained instructions file instead — the same reference, without the
-workflows.
+| Agent | Workflows | Survey subagent |
+| --- | --- | --- |
+| Claude Code | `/blastradius:model`, `:sync`, `:review` | `blastradius-surveyor` |
+| GitHub Copilot | `/blastradius-model` and friends, from `.github/prompts/` | `blastradius-surveyor` |
+| Cursor | skills, invoked by name | — |
+| Codex | skills, invoked by name | — |
+
+Cursor and Codex both read `.agents/skills/`, so one set of files serves both.
+Where an agent has no subagent surface, the model workflow surveys the
+repository itself rather than delegating.
+
+The **survey subagent** is read-only: it reads a whole repository and proposes
+a C4 structure with the evidence for each candidate, in its own context window
+so that reading does not crowd out the conversation.
 
 ## The rules the agent is told
 

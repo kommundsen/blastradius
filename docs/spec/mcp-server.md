@@ -59,15 +59,25 @@ what an agent with no other reference will imitate.
 
 ## Registration
 
-**Claude Code gets three surfaces, the others get one** (0.6.3,
-`core::workflows`). A *skill* is reference and auto-triggers, so it must not
-interview; *commands* (`/blastradius:model`, `:sync`, `:review`) are
-user-initiated and therefore may; and a read-only *subagent*
-(`blastradius-surveyor`) gets its own context window for the
-read-the-whole-repository pass. Cursor, Copilot and Codex have no command or
-subagent surface, which is why the primer stays one self-contained document
-rather than being split across files. Nothing is ever overwritten: each file
-is written only if absent.
+**Reference and workflow ship separately** (0.6.3, `core::workflows`).
+Reference loads on its own when architecture comes up, so it must not
+interview; workflows are invoked deliberately and therefore may. Every agent
+has a surface for them, in its own format — `.claude/commands/`,
+`.github/prompts/*.prompt.md`, and `.agents/skills/*/SKILL.md`, which Cursor
+and Codex both discover. Claude Code and Copilot additionally take a read-only
+*subagent* (`blastradius-surveyor`) for the read-the-whole-repository pass;
+where there is none, the model workflow surveys inline.
+
+The per-agent paths and frontmatter keys are **checked against each vendor's
+documentation, not remembered** — this first shipped asserting that only
+Claude Code had a command surface, which was wrong for all three others. A
+file at the wrong path with the wrong extension does nothing and reports
+nothing, so the table in `core::workflows` is the contract and the tests pin
+the frontmatter each vendor requires.
+
+The reference itself stays one self-contained document per agent: it is what
+gets read before anything happens, and splitting it only makes half of it easy
+to miss. Nothing is ever overwritten — each file is written only if absent.
 
 `blastradius init` offers to write project-scoped registration during
 onboarding — `.mcp.json` (Claude Code), `.vscode/mcp.json` (Copilot/VS
