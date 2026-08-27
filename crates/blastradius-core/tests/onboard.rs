@@ -136,3 +136,80 @@ fn the_primer_tells_an_agent_where_the_schema_is() {
     assert!(agents_md.contains("model_format"), "{agents_md}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Claude Code gets three surfaces because the jobs are different shapes: a
+/// skill is reference and fires on its own, commands are user-initiated and so
+/// may interview, and a subagent gets its own context window. The interview
+/// the owner asked for is a *command* — a skill that started interrogating you
+/// because it auto-triggered would be obnoxious (2026-08-26).
+#[test]
+fn claude_gets_a_skill_commands_and_a_survey_agent() {
+    let dir = temp("surfaces");
+    let log = setup(
+        &dir,
+        &SetupOptions { skills: vec!["claude".into()], ..Default::default() },
+    );
+
+    for rel in [
+        ".claude/skills/blastradius/SKILL.md",
+        ".claude/commands/blastradius/model.md",
+        ".claude/commands/blastradius/sync.md",
+        ".claude/commands/blastradius/review.md",
+        ".claude/agents/blastradius-surveyor.md",
+    ] {
+        assert!(dir.join(rel).is_file(), "{rel} missing; log = {log:#?}");
+    }
+
+    // The model command must actually interview, and cover the topics asked
+    // for: level of detail, documents, introspection, deployment.
+    let model = std::fs::read_to_string(dir.join(".claude/commands/blastradius/model.md")).unwrap();
+    assert!(model.starts_with("---\ndescription:"), "commands need frontmatter:\n{model}");
+    assert!(model.contains("Interview before you build"), "{model}");
+    for topic in ["Level of detail", "Documents", "Code-level detail", "Deployment", "Scope"] {
+        assert!(model.contains(topic), "the interview never asks about {topic}");
+    }
+    // An existing codebase is surveyed first; a blank repo is questioned.
+    assert!(model.contains("blastradius-surveyor"), "existing code should be surveyed:\n{model}");
+    assert!(model.contains("empty or nearly so"), "a clean repo needs its own branch:\n{model}");
+
+    // The agent is read-only: it proposes, it does not model.
+    let agent = std::fs::read_to_string(dir.join(".claude/agents/blastradius-surveyor.md")).unwrap();
+    assert!(agent.contains("name: blastradius-surveyor"), "{agent}");
+    assert!(agent.contains("tools: Read, Grep, Glob"), "the surveyor must not be able to write");
+
+    // The skill points at the commands rather than duplicating them.
+    let skill = std::fs::read_to_string(dir.join(".claude/skills/blastradius/SKILL.md")).unwrap();
+    assert!(skill.contains("/blastradius:model"), "the skill should name the workflows:\n{skill}");
+
+    // Idempotent, and nothing is overwritten.
+    std::fs::write(dir.join(".claude/commands/blastradius/sync.md"), "mine").unwrap();
+    let again = setup(&dir, &SetupOptions { skills: vec!["claude".into()], ..Default::default() });
+    assert!(again.iter().all(|l| l.contains("already")), "{again:#?}");
+    assert_eq!(
+        std::fs::read_to_string(dir.join(".claude/commands/blastradius/sync.md")).unwrap(),
+        "mine",
+        "an edited command was overwritten"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The other agents have no command or subagent surface, so their primer has
+/// to stay self-contained — that is why the reference is not split up.
+#[test]
+fn the_other_agents_still_get_one_self_contained_primer() {
+    let dir = temp("portable");
+    setup(
+        &dir,
+        &SetupOptions {
+            skills: vec!["cursor".into(), "copilot".into(), "codex".into()],
+            ..Default::default()
+        },
+    );
+    for rel in [".cursor/rules/blastradius.mdc", ".github/copilot-instructions.md", "AGENTS.md"] {
+        let text = std::fs::read_to_string(dir.join(rel)).unwrap();
+        assert!(text.contains("model_format"), "{rel} lost the schema pointer");
+        assert!(text.contains("dependency, not a data flow"), "{rel} lost the C4 guidance");
+    }
+    assert!(!dir.join(".claude").exists(), "only Claude Code gets .claude/");
+    let _ = std::fs::remove_dir_all(&dir);
+}

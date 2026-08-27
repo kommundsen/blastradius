@@ -28,6 +28,7 @@ pub mod sync;
 pub mod validate;
 pub mod vfs;
 pub mod views;
+pub mod workflows;
 mod yaml;
 
 use std::path::Path;

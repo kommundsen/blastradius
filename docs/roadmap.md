@@ -811,9 +811,26 @@ translation, so what reaches the YAML stays in model coordinates. This is the
 "infinite canvas" ask: the canvas already fits and centres content, so the
 constraint was the clamp rather than any extent.
 
-Still open from the same round: the agent skill wants restructuring into a
-workflow that interviews the user (level of detail, ADRs, introspection,
-deployment) rather than a single reference primer — see the note below.
+**The agent surfaces were split** (owner asked whether to; the answer was yes,
+but not into three equal parts). Reference and workflow are different shapes:
+a *skill* auto-triggers when architecture comes up, which is exactly why it
+must not interview — that is why the primer never asked anything. So the
+workflows became **commands**, which are user-initiated and may therefore ask:
+`/blastradius:model` (interview, then build), `/blastradius:sync`,
+`/blastradius:review`. A read-only **subagent**, `blastradius-surveyor`, takes
+the read-the-whole-repository pass, where a separate context window genuinely
+pays.
+
+`/blastradius:model` branches on what it finds, per the owner's point that the
+two cases differ: with code present it surveys first and brings a *proposal* to
+correct, because corrections are cheaper than answers; on an empty repository
+there is nothing to read, so it interviews properly. The topics asked are the
+ones named — scope, level of detail, documents and ADRs, `source:` mappings for
+code-level detail, deployment.
+
+Only Claude Code has all three surfaces. Cursor, Copilot and Codex get the one
+self-contained primer, which is the reason the reference is not split across
+files.
 
 ## 0.6.2 — released (2026-08-26): L4 works on an installed build
 

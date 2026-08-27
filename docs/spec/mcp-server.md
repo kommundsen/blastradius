@@ -59,6 +59,16 @@ what an agent with no other reference will imitate.
 
 ## Registration
 
+**Claude Code gets three surfaces, the others get one** (0.6.3,
+`core::workflows`). A *skill* is reference and auto-triggers, so it must not
+interview; *commands* (`/blastradius:model`, `:sync`, `:review`) are
+user-initiated and therefore may; and a read-only *subagent*
+(`blastradius-surveyor`) gets its own context window for the
+read-the-whole-repository pass. Cursor, Copilot and Codex have no command or
+subagent surface, which is why the primer stays one self-contained document
+rather than being split across files. Nothing is ever overwritten: each file
+is written only if absent.
+
 `blastradius init` offers to write project-scoped registration during
 onboarding — `.mcp.json` (Claude Code), `.vscode/mcp.json` (Copilot/VS
 Code), `.cursor/mcp.json` (Cursor), `.codex/config.toml` (Codex; loads only
