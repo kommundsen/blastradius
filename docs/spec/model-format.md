@@ -211,6 +211,24 @@ environments:
 - `nodes:` and `instances:` may both appear on a node. `name`, `tech`,
   `description` behave as everywhere else; an instance's `name` defaults
   to the referenced container's name.
+- `replicas: 3` on a node or an instance says how many of it actually
+  run. A **field, not repeated elements**: three identical app servers
+  are one box marked `×3`, and giving them three ids would put three of
+  everything in every relation that touches them while telling the
+  reader nothing the count does not. It shows on the node's meta line
+  and in the inspector; `1` is the default and is never drawn.
+  `replicas: 0` is an error — an element that runs none of itself is one
+  you should delete, and a zero is far likelier to be a mistake than a
+  statement.
+- **Imported from Structurizr** since 0.7.0: `deploymentEnvironment`,
+  `deploymentNode` (nested to any depth), `infrastructureNode`, and
+  `containerInstance` all map, and a node's trailing instance count
+  becomes `replicas`. An infrastructure node arrives as an ordinary
+  deployment node — it is a thing other things run on, and adding a
+  fourth kind for a naming difference would be a schema change with no
+  reader benefit. `softwareSystemInstance` is the honest gap: we
+  instance containers, not systems, so it is reported in the import
+  report rather than folded into something it is not.
 - `relations:` may appear on an environment (endpoints relative to it)
   and works like system relations. Deployment and logical elements are
   in one id space, so a relation may cross between them.

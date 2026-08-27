@@ -81,6 +81,11 @@ pub struct Element {
     /// The container a `container-instance` instantiates, as written
     /// (ADR-0018). Resolved and checked in cross-validation.
     pub instance_of: Option<String>,
+    /// How many of this thing actually run (ADR-0018 follow-up). A field, not
+    /// repeated elements: three identical app servers are one box saying x3,
+    /// and modelling them as three ids would put three of everything in every
+    /// relation. Deployment nodes and container instances only.
+    pub replicas: Option<u32>,
     /// Free-text visual grouping (spec §3c). Presentation only: siblings
     /// sharing a group draw inside one boundary. Never part of the id, never
     /// a nesting level.

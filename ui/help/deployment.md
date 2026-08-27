@@ -61,6 +61,24 @@ An instance shows the name of the container it runs, so the deployment view
 speaks the same language as the rest of the model. Give it its own `name:` when
 you need to distinguish two instances of the same thing.
 
+## Counting, not copying
+
+Three identical app servers are **one box marked `×3`**, not three elements:
+
+```yaml
+app-server:
+  name: App Server
+  replicas: 3
+  instances:
+    api: { container: shop.api }
+```
+
+`replicas:` works on a node or an instance. Giving each copy its own id would
+put three of everything in every relation that touches them and tell you
+nothing the count does not. The number shows under the node's name and in the
+inspector; `1` is the default and is never drawn, and `0` is an error — an
+element that runs none of itself is one to delete.
+
 ## Everything else works as usual
 
 Deployment elements are ordinary elements. They take relations (including to

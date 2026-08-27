@@ -42,6 +42,18 @@ export function kicker(el) {
 }
 
 /**
+ * Instance multiplicity (ADR-0018 follow-up): `x3` for three of the same
+ * thing. A field rather than repeated elements, so it is a suffix on one box
+ * rather than three boxes and three copies of every relation.
+ *
+ * Returns null when there is nothing to say — one of something is the
+ * default, and writing `x1` on it is noise.
+ */
+export function multiplicity(el) {
+  return el.replicas && el.replicas > 1 ? `×${el.replicas}` : null;
+}
+
+/**
  * A relation's label, as the lines a diagram draws: the label, then the
  * technology in brackets beneath it.
  *

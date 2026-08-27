@@ -6,9 +6,16 @@
 // ADR-0005 tradition.
 
 import { GRID } from './layout.js';
-import { edgeLabelLines, kicker } from './labels.js';
+import { edgeLabelLines, kicker, multiplicity } from './labels.js';
 
 export { kicker };
+
+/** The line under a node's name: how many children it has, and how many of
+ * *it* there are (ADR-0018 `replicas`). One helper so the canvas, the SVG
+ * export and the standalone viewer cannot disagree about it. */
+export function metaLine(el, elements) {
+  return [childCount(el, elements), multiplicity(el)].filter(Boolean).join(' · ') || null;
+}
 
 export function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -89,7 +96,7 @@ export function viewSvg({ layout, elements, colors, fontCss = '', footer = true 
     const kick = (kicker(el) || '').toUpperCase();
     out += `<text class="k" x="${n.x + 10}" y="${n.y + 18}">${esc(kick)}</text>\n`;
     out += `<text class="t" x="${n.x + 10}" y="${n.y + 36}">${esc(el.name.toUpperCase())}</text>\n`;
-    const meta = childCount(el, elements);
+    const meta = metaLine(el, elements);
     if (meta) out += `<text class="m" x="${n.x + 10}" y="${n.y + 52}">${esc(meta)}</text>\n`;
   }
   out += '</g>\n';

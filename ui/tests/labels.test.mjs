@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-import { kicker, edgeLabelLines, edgeLabelText } from '../js/labels.js';
+import { kicker, edgeLabelLines, edgeLabelText, multiplicity } from '../js/labels.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -60,4 +60,20 @@ test('every surface draws these strings from this module', () => {
       `${rel} still joins label and protocol with a separator`
     );
   }
+});
+
+test('multiplicity says how many run, and says nothing about one', () => {
+  assert.equal(multiplicity({ replicas: 3 }), '×3');
+  // One of something is the default; writing x1 on it is noise.
+  assert.equal(multiplicity({ replicas: 1 }), null);
+  assert.equal(multiplicity({}), null);
+});
+
+test('the meta line carries children and multiplicity together', async () => {
+  const { metaLine } = await import('../js/svg.js');
+  const node = { id: 'p.app', kind: 'deployment-node', replicas: 3 };
+  const children = [{ id: 'p.app.api', parent: 'p.app', kind: 'container-instance' }];
+  assert.equal(metaLine(node, children), '1 instance · ×3');
+  assert.equal(metaLine({ id: 'p.solo', kind: 'deployment-node', replicas: 2 }, []), '×2');
+  assert.equal(metaLine({ id: 'p.plain', kind: 'deployment-node' }, []), null);
 });

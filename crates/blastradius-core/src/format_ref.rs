@@ -255,6 +255,7 @@ nesting level, no id change, no new parent. Rendered only where a view says
               app:
                 name: ECS service
                 tech: Fargate
+                replicas: 3
                 instances:
                   api: { container: shop.api }
         relations:
@@ -264,6 +265,11 @@ nesting level, no id change, no new parent. Rendered only where a view says
 
 `instances:` entries reference a `container` element; a dangling reference is
 an error, which is the point of modelling deployment here rather than in prose.
+
+`replicas:` on a node or an instance says how many of it run. Use the field,
+never repeated elements: three identical app servers are one box marked x3,
+and three ids would put three of everything in every relation touching them.
+1 is the default; 0 is an error.
 
 ## Views
 

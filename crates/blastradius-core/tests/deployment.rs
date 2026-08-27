@@ -273,3 +273,71 @@ fn ld_is_a_valid_view_level_and_junk_is_not() {
     assert!(has_errors(&diags));
     assert!(ws.views.is_empty(), "an unrenderable view should not reach the snapshot");
 }
+
+// ---- replicas (ADR-0018 follow-up) -----------------------------------------
+// Three identical app servers are one box saying x3, not three ids: modelling
+// them as three elements would put three of everything in every relation
+// touching them, and the reader learns nothing from the copies.
+
+const REPLICATED: &str = "\
+environments:
+  production:
+    name: Production
+    nodes:
+      app-server:
+        name: App Server
+        replicas: 3
+        instances:
+          api:
+            container: shop.api
+            replicas: 2
+          web: { container: shop.web }
+";
+
+#[test]
+fn replicas_are_read_on_nodes_and_on_instances() {
+    let (_t, ws, diags) = workspace("replicas", REPLICATED);
+    assert!(!has_errors(&diags), "{diags:?}");
+    let el = |id: &str| ws.elements.get(id).unwrap_or_else(|| panic!("missing {id}"));
+    assert_eq!(el("production.app-server").replicas, Some(3));
+    assert_eq!(el("production.app-server.api").replicas, Some(2));
+    // One of something is the default; nothing to record.
+    assert_eq!(el("production.app-server.web").replicas, None);
+    assert_eq!(el("production").replicas, None);
+}
+
+#[test]
+fn replicas_reach_the_snapshot_the_renderers_read() {
+    let (t, ws, diags) = workspace("replicas-snap", REPLICATED);
+    let snap = blastradius_core::snapshot::snapshot(
+        &blastradius_core::vfs::DiskVfs::new(&t.dir),
+        &ws,
+        &diags,
+    );
+    let by_id = |id: &str| snap.elements.iter().find(|e| e.id == id).unwrap();
+    assert_eq!(by_id("production.app-server").replicas, Some(3));
+    assert_eq!(by_id("production.app-server.web").replicas, None);
+}
+
+#[test]
+fn replicas_zero_is_refused_rather_than_quietly_accepted() {
+    let (_t, _ws, diags) = workspace(
+        "replicas-zero",
+        "environments:\n  production:\n    name: Production\n    nodes:\n      app:\n        name: App\n        replicas: 0\n",
+    );
+    assert!(
+        errors(&diags).iter().any(|d| d.message.contains("replicas: 0")),
+        "an element that runs none of itself should be deleted, not modelled: {diags:?}"
+    );
+}
+
+#[test]
+fn a_non_numeric_replicas_is_an_error_with_a_line() {
+    let (_t, _ws, diags) = workspace(
+        "replicas-bad",
+        "environments:\n  production:\n    name: Production\n    nodes:\n      app:\n        name: App\n        replicas: many\n",
+    );
+    let e = errors(&diags);
+    assert!(e.iter().any(|d| d.message.contains("not a whole number")), "{diags:?}");
+    assert!(e.iter().all(|d| d.line > 0), "diagnostics must carry a line: {e:?}");
+}

@@ -73,6 +73,9 @@ pub struct SnapElement {
     /// Visual grouping label (spec §3c) — omitted when absent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
+    /// How many of this run (ADR-0018) — deployment only, omitted when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replicas: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -151,6 +154,7 @@ pub fn snap_element(e: &crate::model::Element) -> SnapElement {
         description: e.description.clone(),
         external: e.external || e.kind == ElementKind::External,
         group: e.group.clone(),
+        replicas: e.replicas,
     }
 }
 

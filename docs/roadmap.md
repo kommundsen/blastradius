@@ -1101,6 +1101,37 @@ at all, and name matching resolves the reference to the in-corpus
 `Beta.Widget`, which is the wrong `Widget`. Extractor bumped to 0.4.0 and the
 syntax fixture refrozen; syntax-mode facts are otherwise byte-identical.
 
+### The deployment follow-ups (ADR-0018)
+
+**`replicas`, a field rather than repeated elements.** Three identical app
+servers are one box marked ×3. Giving each copy an id would put three of
+everything in every relation touching them and tell the reader nothing the
+count does not. It reads on nodes and on instances, shows on the node's meta
+line and in the inspector, and is drawn by all three renderers from one helper
+in `labels.js` so they cannot disagree. `1` is the default and never drawn;
+`0` is an error, because an element that runs none of itself is one to delete
+and a zero is far likelier to be a mistake than a statement. Deliberately
+**not** added to this repository's own deployment model: nothing here is
+replicated, and dogfooding a fact that is not true would be worse than not
+dogfooding it — it is covered by fixtures instead.
+
+**Structurizr deployment import.** `deploymentEnvironment` and
+`deploymentNode` were tokenised and thrown away through 0.6.x: a DSL that says
+where its containers run is telling you something the logical model cannot,
+and dropping it silently was the worst of both. Environments, nodes nested to
+any depth, `infrastructureNode`, `containerInstance` and the relations between
+them now all land in `model/deployment.yaml`, with Structurizr's trailing
+instance count becoming `replicas`. An infrastructure node imports as an
+ordinary deployment node — it is a thing other things run on, and a fourth
+kind for a naming difference would be a schema change with no reader benefit.
+`softwareSystemInstance` stays the honest gap and is reported, not folded.
+
+Caught by the corpus on the way: the deployment skip arm was reusing the model
+block's "skip an unknown keyword and its bare-word argument" rule, which in a
+deployment block swallowed the `deploymentNode` that follows a `tags` line.
+`aws-s3-upload.dsl` went red; the corpus is back at 10/10, and a test now
+asserts every corpus DSL declaring an environment produces a deployment file.
+
 ## 0.7.0 — candidate pool (2026-08-25)
 
 **The hold resolved itself.** This pool was 0.6.0's, held (2026-08-25)

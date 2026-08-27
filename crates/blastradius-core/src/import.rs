@@ -163,6 +163,12 @@ enum Kind {
     System,
     Container,
     Component,
+    // Deployment (ADR-0018). Parsed rather than skipped since 0.7.0: a DSL
+    // that says where its containers run is telling you something the logical
+    // model cannot, and discarding it silently was the worst of both.
+    Environment,
+    DeploymentNode,
+    ContainerInstance,
 }
 
 #[derive(Debug)]
@@ -175,6 +181,12 @@ struct Element {
     external: bool,
     /// Enclosing Structurizr `group` — presentation only (spec §3c).
     group: Option<String>,
+    /// For a container instance: the DSL identifier of the container it runs,
+    /// resolved to a dotted id in `build_output`.
+    instance_of: Option<String>,
+    /// Structurizr's trailing instance count on a deployment node (ADR-0018
+    /// `replicas`).
+    replicas: Option<u32>,
 }
 
 #[derive(Debug)]
@@ -215,9 +227,9 @@ struct Parser {
 }
 
 const SKIP_BLOCKS: &[&str] = &[
-    "views", "styles", "themes", "branding", "configuration", "deploymentenvironment",
-    "deploymentnode", "docs", "adrs", "properties", "perspectives", "users", "terminology",
-    "enterprise", "healthcheck", "infrastructurenode", "archetypes",
+    "views", "styles", "themes", "branding", "configuration",
+    "docs", "adrs", "properties", "perspectives", "users", "terminology",
+    "enterprise", "healthcheck", "archetypes",
 ];
 
 impl Parser {
@@ -387,6 +399,8 @@ impl Parser {
             technology,
             external,
             group: self.current_group.clone(),
+            instance_of: None,
+            replicas: None,
         });
         *self.fidelity.mapped.entry(kind_name(kind)).or_default() += 1;
 
@@ -395,6 +409,228 @@ impl Parser {
             self.parse_element_body(&id, kind)?;
         }
         Ok(id)
+    }
+
+    // ---- deployment (ADR-0018) --------------------------------------------
+    // Structurizr nests deployment nodes the way our own file does, so the
+    // shapes line up. What does not carry over is `softwareSystemInstance`:
+    // we instance containers, not systems, and that is reported rather than
+    // silently dropped.
+
+    fn parse_environment(&mut self, ident: Option<String>, line: u64) -> Result<(), String> {
+        let strings = self.take_strings(2);
+        let name = strings
+            .first()
+            .cloned()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| format!("line {line}: deploymentEnvironment needs a name"))?;
+        let id = self.fresh_id(&name, None);
+        if let Some(ident) = ident {
+            self.ident_map.insert(ident, id.clone());
+        }
+        self.elements.push(Element {
+            id: id.clone(),
+            kind: Kind::Environment,
+            name,
+            description: strings.get(1).cloned().filter(|s| !s.is_empty()),
+            technology: None,
+            external: false,
+            group: None,
+            instance_of: None,
+            replicas: None,
+        });
+        *self.fidelity.mapped.entry("deploymentEnvironment").or_default() += 1;
+        if matches!(self.peek().map(|t| &t.tok), Some(Tok::Open)) {
+            self.pos += 1;
+            self.parse_deployment_body(&id)?;
+        }
+        Ok(())
+    }
+
+    /// Structurizr's trailing instance count, quoted or not:
+    /// `deploymentNode "Web Server" "" "" "" 3`. Anything that is not a whole
+    /// number is left where it is for the caller to deal with.
+    fn take_instance_count(&mut self, quoted: Option<&String>) -> Option<u32> {
+        if let Some(n) = quoted.and_then(|s| s.trim().parse::<u32>().ok()) {
+            return Some(n);
+        }
+        if let Some(Token { tok: Tok::Word(w), .. }) = self.peek() {
+            if let Ok(n) = w.parse::<u32>() {
+                self.pos += 1;
+                return Some(n);
+            }
+        }
+        None
+    }
+
+    fn parse_deployment_node(
+        &mut self,
+        ident: Option<String>,
+        parent: &str,
+        line: u64,
+        infrastructure: bool,
+    ) -> Result<(), String> {
+        let strings = self.take_strings(5);
+        let name = strings
+            .first()
+            .cloned()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| format!("line {line}: deploymentNode needs a name"))?;
+        let replicas = self.take_instance_count(strings.get(4));
+        let local = self.fresh_id(&name, Some(parent));
+        let id = format!("{parent}.{local}");
+        if let Some(ident) = ident {
+            self.ident_map.insert(ident, id.clone());
+        }
+        self.elements.push(Element {
+            id: id.clone(),
+            kind: Kind::DeploymentNode,
+            name,
+            description: strings.get(1).cloned().filter(|s| !s.is_empty()),
+            technology: strings.get(2).cloned().filter(|s| !s.is_empty()),
+            external: false,
+            group: None,
+            instance_of: None,
+            // One of something is the default and is never written out.
+            replicas: replicas.filter(|n| *n > 1),
+        });
+        // An infrastructure node is a deployment node that hosts no instances
+        // — a load balancer, a DNS zone. We have no separate kind, and adding
+        // one would be a schema change for a naming difference.
+        *self
+            .fidelity
+            .mapped
+            .entry(if infrastructure { "infrastructureNode" } else { "deploymentNode" })
+            .or_default() += 1;
+        if matches!(self.peek().map(|t| &t.tok), Some(Tok::Open)) {
+            self.pos += 1;
+            self.parse_deployment_body(&id)?;
+        }
+        Ok(())
+    }
+
+    fn parse_container_instance(
+        &mut self,
+        ident: Option<String>,
+        parent: &str,
+        line: u64,
+    ) -> Result<(), String> {
+        let target = match self.next() {
+            Some(Token { tok: Tok::Word(w), .. }) => w,
+            other => {
+                return Err(format!(
+                    "line {line}: containerInstance needs a container identifier, got {other:?}"
+                ))
+            }
+        };
+        self.take_strings(3); // tags, deploymentGroups, healthCheck url
+        let local = self.fresh_id(&target, Some(parent));
+        let id = format!("{parent}.{local}");
+        if let Some(ident) = ident {
+            self.ident_map.insert(ident, id.clone());
+        }
+        self.elements.push(Element {
+            id: id.clone(),
+            kind: Kind::ContainerInstance,
+            // Left empty: an instance takes the name of the container it runs
+            // (spec §3b), which cannot be resolved until every identifier is.
+            name: String::new(),
+            description: None,
+            technology: None,
+            external: false,
+            group: None,
+            instance_of: Some(target),
+            replicas: None,
+        });
+        *self.fidelity.mapped.entry("containerInstance").or_default() += 1;
+        if matches!(self.peek().map(|t| &t.tok), Some(Tok::Open)) {
+            self.pos += 1;
+            self.parse_deployment_body(&id)?;
+        }
+        Ok(())
+    }
+
+    fn parse_deployment_body(&mut self, owner: &str) -> Result<(), String> {
+        loop {
+            let Some(t) = self.next() else {
+                return Err("unexpected end of file in deployment block".into());
+            };
+            match t.tok {
+                Tok::Close => return Ok(()),
+                Tok::Arrow => self.push_relation(owner.to_string(), t.line)?,
+                Tok::Word(w) => {
+                    let (kw, ident) = if matches!(self.peek().map(|x| &x.tok), Some(Tok::Equals)) {
+                        self.pos += 1;
+                        match self.next() {
+                            Some(Token { tok: Tok::Word(k), .. }) => (k.to_lowercase(), Some(w)),
+                            other => {
+                                return Err(format!(
+                                    "line {}: expected keyword after =, got {other:?}",
+                                    t.line
+                                ))
+                            }
+                        }
+                    } else {
+                        if matches!(self.peek().map(|x| &x.tok), Some(Tok::Arrow)) {
+                            self.pos += 1;
+                            self.push_relation(w, t.line)?;
+                            continue;
+                        }
+                        (w.to_lowercase(), None)
+                    };
+                    match kw.as_str() {
+                        "deploymentnode" => {
+                            self.parse_deployment_node(ident, owner, t.line, false)?
+                        }
+                        "infrastructurenode" => {
+                            self.parse_deployment_node(ident, owner, t.line, true)?
+                        }
+                        "containerinstance" => {
+                            self.parse_container_instance(ident, owner, t.line)?
+                        }
+                        "description" => {
+                            if let Some(d) = self.take_strings(1).pop() {
+                                if let Some(el) = self.elements.iter_mut().find(|e| e.id == owner) {
+                                    el.description = Some(d);
+                                }
+                            }
+                        }
+                        "technology" => {
+                            if let Some(d) = self.take_strings(1).pop() {
+                                if let Some(el) = self.elements.iter_mut().find(|e| e.id == owner) {
+                                    el.technology = Some(d);
+                                }
+                            }
+                        }
+                        "instances" => {
+                            let quoted = self.take_strings(1);
+                            if let Some(n) = self.take_instance_count(quoted.first()) {
+                                if let Some(el) = self.elements.iter_mut().find(|e| e.id == owner) {
+                                    el.replicas = (n > 1).then_some(n);
+                                }
+                            }
+                        }
+                        // `tags`, `url`, `properties`, `healthCheck`: strings
+                        // and/or a block, never a bare word — so unlike the
+                        // model block this must NOT consume the next
+                        // identifier, which would swallow the deploymentNode
+                        // that follows a `tags` line.
+                        other => {
+                            self.take_strings(8);
+                            self.skip_optional_block();
+                            self.fidelity.skipped.push((
+                                t.line,
+                                other.to_string(),
+                                "not modelled inside a deployment node".into(),
+                            ));
+                        }
+                    }
+                }
+                other => {
+                    return Err(format!("line {}: unexpected {other:?} in deployment", t.line))
+                }
+            }
+        }
     }
 
     fn parse_element_body(&mut self, owner: &str, owner_kind: Kind) -> Result<(), String> {
@@ -536,6 +772,9 @@ impl Parser {
                             "softwaresystem" => {
                                 self.parse_element(Kind::System, Some(w), None, t.line)?;
                             }
+                            "deploymentenvironment" => {
+                                self.parse_environment(Some(w), t.line)?;
+                            }
                             "group" => {
                                 let previous = self.enter_group(t.line);
                                 if matches!(self.peek().map(|x| &x.tok), Some(Tok::Open)) {
@@ -567,6 +806,9 @@ impl Parser {
                         }
                         "softwaresystem" => {
                             self.parse_element(Kind::System, None, None, t.line)?;
+                        }
+                        "deploymentenvironment" => {
+                            self.parse_environment(None, t.line)?;
                         }
                         "group" => {
                             let previous = self.enter_group(t.line);
@@ -614,12 +856,80 @@ impl Parser {
     }
 }
 
+/// Write the `nodes:`/`instances:` under one deployment parent, recursively.
+/// `depth` is the current indentation step (the environment sits at 2), so the
+/// arbitrary nesting the DSL allows comes out as the arbitrary nesting our own
+/// file allows (spec §3b).
+fn write_deployment_children(
+    s: &mut String,
+    elements: &[Element],
+    parent: &str,
+    depth: usize,
+    resolve: &dyn Fn(&str) -> Option<String>,
+    lift_external: &dyn Fn(String) -> String,
+) {
+    let yaml = crate::splice::yaml_scalar;
+    let pad = "  ".repeat(depth);
+    let child_of = |kind: Kind| -> Vec<&Element> {
+        elements
+            .iter()
+            .filter(|e| {
+                e.kind == kind
+                    && e.id.starts_with(&format!("{parent}."))
+                    && e.id[parent.len() + 1..].split('.').count() == 1
+            })
+            .collect()
+    };
+
+    let nodes = child_of(Kind::DeploymentNode);
+    if !nodes.is_empty() {
+        let _ = writeln!(s, "{pad}nodes:");
+        for n in &nodes {
+            let local = n.id.rsplit('.').next().unwrap();
+            let _ = writeln!(s, "{pad}  {local}:");
+            let _ = writeln!(s, "{pad}    name: {}", yaml(&n.name));
+            if let Some(t) = &n.technology {
+                let _ = writeln!(s, "{pad}    tech: {}", yaml(t));
+            }
+            if let Some(d) = &n.description {
+                let _ = writeln!(s, "{pad}    description: {}", yaml(d));
+            }
+            if let Some(r) = n.replicas {
+                let _ = writeln!(s, "{pad}    replicas: {r}");
+            }
+            write_deployment_children(s, elements, &n.id, depth + 2, resolve, lift_external);
+        }
+    }
+
+    let instances = child_of(Kind::ContainerInstance);
+    if !instances.is_empty() {
+        let _ = writeln!(s, "{pad}instances:");
+        for i in &instances {
+            let local = i.id.rsplit('.').next().unwrap();
+            // An instance with no resolvable container would fail validation,
+            // which is the point of the reference — but writing a dangling one
+            // is more useful than dropping the instance silently, since the
+            // error names the file and line.
+            let target = i
+                .instance_of
+                .as_deref()
+                .and_then(resolve)
+                .map(&lift_external)
+                .unwrap_or_else(|| i.instance_of.clone().unwrap_or_default());
+            let _ = writeln!(s, "{pad}  {local}: {{ container: {target} }}");
+        }
+    }
+}
+
 fn kind_name(k: Kind) -> &'static str {
     match k {
         Kind::Person => "person",
         Kind::System => "softwareSystem",
         Kind::Container => "container",
         Kind::Component => "component",
+        Kind::Environment => "deploymentEnvironment",
+        Kind::DeploymentNode => "deploymentNode",
+        Kind::ContainerInstance => "containerInstance",
     }
 }
 
@@ -860,12 +1170,70 @@ fn build_output(p: Parser) -> Result<Import, String> {
         files.insert(format!("model/{}.yaml", sys.id), s);
     }
 
+    // ---- deployment file (ADR-0018) ---------------------------------------
+    // One file, every environment, mirroring the tree the DSL wrote. Its
+    // relations live inside their environment, endpoints relative to it
+    // (spec §3b), so they are written here rather than through the
+    // system-relation homing below.
+    let environments: Vec<&Element> =
+        elements.iter().filter(|e| e.kind == Kind::Environment).collect();
+    let env_of = |id: &str| -> Option<String> {
+        let root = id.split('.').next().unwrap().to_string();
+        environments.iter().find(|e| e.id == root).map(|e| e.id.clone())
+    };
+    if !environments.is_empty() {
+        let mut s =
+            String::from("# Imported from Structurizr DSL — see import-report.md\nenvironments:\n");
+        for env in &environments {
+            let _ = writeln!(s, "  {}:", env.id);
+            let _ = writeln!(s, "    name: {}", yaml(&env.name));
+            if let Some(d) = &env.description {
+                let _ = writeln!(s, "    description: {}", yaml(d));
+            }
+            write_deployment_children(&mut s, &elements, &env.id, 2, &resolve, &lift_external);
+
+            let mine: Vec<_> = resolved
+                .iter()
+                .filter(|(f, t, _, _)| {
+                    env_of(f).as_deref() == Some(env.id.as_str())
+                        || env_of(t).as_deref() == Some(env.id.as_str())
+                })
+                .collect();
+            if !mine.is_empty() {
+                s.push_str("    relations:\n");
+                for (f, t, label, tech) in mine {
+                    // Relative inside this environment, absolute when it
+                    // points somewhere else — the same rule the hand-written
+                    // deployment files use.
+                    let rel = |id: &String| -> String {
+                        id.strip_prefix(&format!("{}.", env.id))
+                            .map(str::to_string)
+                            .unwrap_or_else(|| id.clone())
+                    };
+                    let _ = writeln!(s, "      - from: {}", rel(f));
+                    let _ = writeln!(s, "        to: {}", rel(t));
+                    if let Some(l) = label {
+                        let _ = writeln!(s, "        label: {}", yaml(l));
+                    }
+                    if let Some(tech) = tech {
+                        let _ = writeln!(s, "        protocol: {}", yaml(tech));
+                    }
+                }
+            }
+        }
+        files.insert("model/deployment.yaml".into(), s);
+    }
+
     let system_of = |id: &str| -> Option<String> {
         let root = id.split('.').next().unwrap().to_string();
         systems.iter().find(|s| s.id == root).map(|s| s.id.clone())
     };
     let mut rel_lines: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (from, to, label, tech) in &resolved {
+        // Already written inside their environment, above.
+        if env_of(from).is_some() || env_of(to).is_some() {
+            continue;
+        }
         let home = system_of(from)
             .or_else(|| system_of(to))
             .map(|sysid| format!("model/{sysid}.yaml"))

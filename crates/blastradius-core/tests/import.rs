@@ -197,3 +197,109 @@ workspace "Shop" {
     );
     import_and_validate(dsl).unwrap();
 }
+
+// ---- deployment (ADR-0018 follow-up) ---------------------------------------
+// `deploymentEnvironment` and `deploymentNode` were parsed and discarded
+// through 0.6.x: a DSL that says where its containers run is telling you
+// something the logical model cannot, and dropping it silently was the worst
+// of both.
+
+const DEPLOYED: &str = r#"
+workspace "Shop" {
+  model {
+    api = softwareSystem "Shop" {
+      web = container "Web" "" "React"
+      svc = container "Service" "" "Go"
+    }
+    prod = deploymentEnvironment "Production" {
+      aws = deploymentNode "AWS" "the account" "us-east-1" {
+        lb = infrastructureNode "Load Balancer" "" "ALB"
+        app = deploymentNode "App Server" "" "EC2" "" 3 {
+          containerInstance svc
+        }
+        edge = deploymentNode "CDN" {
+          containerInstance web
+        }
+      }
+      lb -> app "routes to"
+    }
+  }
+}
+"#;
+
+#[test]
+fn a_deployment_environment_becomes_a_deployment_file() {
+    let imported = import_dsl(DEPLOYED).expect("import");
+    let file = imported
+        .files
+        .get("model/deployment.yaml")
+        .expect("no deployment file was written");
+
+    assert!(file.contains("environments:"), "{file}");
+    assert!(file.contains("  production:"), "{file}");
+    // Nodes nest the way the DSL nested them.
+    assert!(file.contains("      aws:"), "{file}");
+    assert!(file.contains("          app-server:"), "{file}");
+    // Structurizr's trailing instance count is our `replicas`.
+    assert!(file.contains("replicas: 3"), "{file}");
+    // An instance points at the container it runs, by resolved id.
+    assert!(file.contains("container: shop.service"), "{file}");
+    assert!(file.contains("container: shop.web"), "{file}");
+    // An infrastructure node has no kind of its own here; it is a node.
+    assert!(file.contains("load-balancer:"), "{file}");
+    // Relations inside an environment stay inside it, relative to it.
+    assert!(file.contains("    relations:"), "{file}");
+    assert!(file.contains("routes to"), "{file}");
+}
+
+#[test]
+fn the_imported_deployment_actually_loads() {
+    let (elements, errors) = import_and_validate(DEPLOYED).expect("import");
+    assert_eq!(errors, 0, "the imported workspace does not validate");
+    // 1 system + 2 containers + 1 environment + 3 nodes + 1 infra node
+    // + 2 instances.
+    assert!(elements >= 10, "only {elements} elements survived");
+}
+
+#[test]
+fn deployment_is_counted_as_mapped_rather_than_skipped() {
+    let imported = import_dsl(DEPLOYED).expect("import");
+    let m = &imported.fidelity.mapped;
+    assert_eq!(m.get("deploymentEnvironment"), Some(&1));
+    assert_eq!(m.get("deploymentNode"), Some(&3));
+    assert_eq!(m.get("infrastructureNode"), Some(&1));
+    assert_eq!(m.get("containerInstance"), Some(&2));
+    assert!(
+        !imported.fidelity.skipped.iter().any(|(_, what, _)| what.contains("deployment")),
+        "{:?}",
+        imported.fidelity.skipped
+    );
+}
+
+/// Not just the hand-written case: the real-world corpus contains DSLs with
+/// deployment blocks, and those blocks are where a `tags` line sits between
+/// two `deploymentNode`s. Skipping an unknown keyword there must not swallow
+/// the keyword after it.
+#[test]
+fn real_world_deployment_blocks_import() {
+    let mut with_deployment = 0;
+    for entry in fs::read_dir(corpus_dir()).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().and_then(|e| e.to_str()) != Some("dsl") {
+            continue;
+        }
+        let src = fs::read_to_string(&path).unwrap();
+        if !src.contains("deploymentEnvironment") {
+            continue;
+        }
+        with_deployment += 1;
+        let imported = import_dsl(&src)
+            .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        assert!(
+            imported.files.contains_key("model/deployment.yaml"),
+            "{} declares a deployment environment but produced no deployment file",
+            path.display()
+        );
+    }
+    assert!(with_deployment >= 2, "the corpus lost its deployment examples");
+}

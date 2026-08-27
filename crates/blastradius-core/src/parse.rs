@@ -121,7 +121,7 @@ fn parse_context_section(
         let (name, tech, description) = fields(body, &id);
         register(
             ws,
-            Element { id, kind, name, tech, description, external: kind == ElementKind::External, source: None, instance_of: None, group: group_of(body), file: rel.to_string(), line },
+            Element { id, kind, name, tech, description, external: kind == ElementKind::External, source: None, instance_of: None, replicas: None, group: group_of(body), file: rel.to_string(), line },
             diags,
         );
     }
@@ -148,7 +148,7 @@ fn parse_system(map: &MarkedMappingNode, rel: &str, ws: &mut Workspace, diags: &
             description: yaml::get_str(map, "description").map(str::to_string),
             external,
             source: None,
-            instance_of: None,
+            instance_of: None, replicas: None,
                     group: None,
             file: rel.to_string(),
             line: sys_line,
@@ -170,7 +170,7 @@ fn parse_system(map: &MarkedMappingNode, rel: &str, ws: &mut Workspace, diags: &
             let (name, tech, description) = fields(cbody, &cid);
             register(
                 ws,
-                Element { id: full.clone(), kind: ElementKind::Container, name, tech, description, external: false, source: None, instance_of: None, group: group_of(cbody), file: rel.to_string(), line: cline },
+                Element { id: full.clone(), kind: ElementKind::Container, name, tech, description, external: false, source: None, instance_of: None, replicas: None, group: group_of(cbody), file: rel.to_string(), line: cline },
                 diags,
             );
 
@@ -201,7 +201,7 @@ fn parse_system(map: &MarkedMappingNode, rel: &str, ws: &mut Workspace, diags: &
                         let source = parse_source(kbody, rel, diags);
                         register(
                             ws,
-                            Element { id: format!("{full}.{kid}"), kind: ElementKind::Component, name, tech, description, external: false, source, instance_of: None, group: group_of(kbody), file: rel.to_string(), line: kline },
+                            Element { id: format!("{full}.{kid}"), kind: ElementKind::Component, name, tech, description, external: false, source, instance_of: None, replicas: None, group: group_of(kbody), file: rel.to_string(), line: kline },
                             diags,
                         );
                     }
@@ -248,7 +248,7 @@ fn parse_environments(node: &Node, rel: &str, ws: &mut Workspace, diags: &mut Ve
                 description,
                 external: false,
                 source: None,
-                instance_of: None,
+                instance_of: None, replicas: None,
                 group: group_of(body),
                 file: rel.to_string(),
                 line,
@@ -283,6 +283,7 @@ fn parse_deployment_children(
             }
             let full = format!("{parent}.{id}");
             let (name, tech, description) = fields(body, &id);
+            let replicas = replicas_of(body, rel, line, &full, diags);
             register(
                 ws,
                 Element {
@@ -294,6 +295,7 @@ fn parse_deployment_children(
                     external: false,
                     source: None,
                     instance_of: None,
+                    replicas,
                     group: group_of(body),
                     file: rel.to_string(),
                     line,
@@ -329,6 +331,7 @@ fn parse_deployment_children(
             // An unnamed instance takes the container's name (spec §3b), which
             // cannot be resolved until every file is parsed — left empty here
             // and filled by `name_instances` before validation.
+            let replicas = replicas_of(body, rel, line, &format!("{parent}.{id}"), diags);
             let named = matches!(body, Node::Mapping(m) if yaml::get_str(m, "name").is_some());
             let (name, tech, description) = fields(body, &id);
             let name = if named { name } else { String::new() };
@@ -343,12 +346,47 @@ fn parse_deployment_children(
                     external: false,
                     source: None,
                     instance_of: container,
+                    replicas,
                     group: group_of(body),
                     file: rel.to_string(),
                     line,
                 },
                 diags,
             );
+        }
+    }
+}
+
+/// `replicas: 3` on a deployment node or a container instance (ADR-0018
+/// follow-up). Zero is refused rather than silently accepted: an element that
+/// does not run is an element you should delete, and `0` is far more likely to
+/// be a mistake than a statement.
+fn replicas_of(
+    body: &Node,
+    rel: &str,
+    line: u64,
+    id: &str,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<u32> {
+    let Node::Mapping(map) = body else { return None };
+    let raw = yaml::get_str(map, "replicas")?;
+    match raw.trim().parse::<u32>() {
+        Ok(0) => {
+            diags.push(Diagnostic::error(
+                rel,
+                line,
+                format!("{id}: `replicas: 0` — delete the element instead of running none of it"),
+            ));
+            None
+        }
+        Ok(n) => Some(n),
+        Err(_) => {
+            diags.push(Diagnostic::error(
+                rel,
+                line,
+                format!("{id}: `replicas: {raw}` is not a whole number"),
+            ));
+            None
         }
     }
 }

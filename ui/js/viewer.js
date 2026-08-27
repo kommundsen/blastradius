@@ -9,7 +9,8 @@
 
 /* global SNAPSHOT, INCLUDE_DOC_BODIES, ELK, marked,
    computeView, findViewDef, resolvePins, docsFor, treeModel, rootOf, depthOf, liftTo,
-   derivedGraphFor, layoutView, groupDivs, fitGroupBoxes, GRID, kicker, edgeLabelLines */
+   derivedGraphFor, layoutView, groupDivs, fitGroupBoxes, GRID, kicker, multiplicity,
+   edgeLabelLines */
 
 (() => {
   const state = {
@@ -62,6 +63,11 @@
     return `${kids} ${noun}${kids > 1 ? 's' : ''}`;
   }
 
+  /** Children plus multiplicity, the same line the canvas and the SVG draw. */
+  function metaLine(el) {
+    return [childCount(el), multiplicity(el)].filter(Boolean).join(' · ') || null;
+  }
+
   function nodeClass(el) {
     // Same classes the app uses, so one stylesheet dresses both.
     if (el.derived) {
@@ -109,7 +115,7 @@
       div.innerHTML =
         `<span class="node-kicker">${esc(kicker(el))}</span>` +
         `<span class="node-title">${esc(el.name)}</span>` +
-        (childCount(el) ? `<span class="node-meta">${childCount(el)}</span>` : '');
+        (metaLine(el) ? `<span class="node-meta">${metaLine(el)}</span>` : '');
       div.addEventListener('click', () => select(n.id));
       div.addEventListener('dblclick', () => dive(n.id));
       nodes.appendChild(div);
@@ -385,6 +391,8 @@
     let html = `<div class="insp"><span class="insp-kicker">${esc(kicker(el))}</span>` +
       `<span class="insp-title">${esc(el.name)}</span>` +
       `<span class="text-muted" style="font-family:var(--font-mono);font-size:var(--text-2xs)">${esc(el.id)}</span>`;
+    const many = multiplicity(el);
+    if (many) html += `<p class="insp-desc text-muted">${esc(many)} — ${el.replicas} of these run.</p>`;
     if (el.description) html += `<p class="insp-desc">${esc(el.description)}</p>`;
     if (rels.length) {
       html += `<div class="insp-section">Relations</div>`;

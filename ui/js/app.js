@@ -3,8 +3,8 @@
 
 import { computeView, findViewDef, docsFor, treeModel, rootOf, depthOf, liftTo, resolvePins, derivedGraphFor, environments } from './data.js';
 import { layoutView, GRID, groupDivs, fitGroupBoxes, nodeSize } from './layout.js';
-import { viewSvg, kicker, childCount } from './svg.js';
-import { edgeLabelLines } from './labels.js';
+import { viewSvg, kicker, metaLine } from './svg.js';
+import { edgeLabelLines, multiplicity } from './labels.js';
 import { HELP_PAGES, helpBody, helpLinkTarget } from './help.js';
 import { searchModel } from './search.js';
 
@@ -381,7 +381,7 @@ async function renderCanvas({ animate = true } = {}) {
     div.setAttribute('role', 'button');
     div.dataset.id = n.id;
     if (state.selected === n.id) div.classList.add('is-active');
-    const kids = childCount(el, childListFor(el));
+    const kids = metaLine(el, childListFor(el));
     div.innerHTML =
       `<span class="node-kicker">${esc(kicker(el))}</span>` +
       `<span class="node-title">${esc(el.name)}</span>` +
@@ -481,7 +481,7 @@ function measureNodes(view, elById, childListFor) {
     // Width comes from the estimate and is authoritative — it is what the
     // renderer sets. Only height is left to the content.
     d.style.cssText = `width:${nodeSize(el).width}px;position:absolute`;
-    const kids = childCount(el, childListFor(el));
+    const kids = metaLine(el, childListFor(el));
     d.innerHTML =
       `<span class="node-kicker">${esc(kicker(el))}</span>` +
       `<span class="node-title">${esc(el.name)}</span>` +
@@ -1401,6 +1401,12 @@ function renderSide() {
     html += `<span class="insp-title">${esc(el.name)}</span>`;
   }
   html += `<span class="mono text-muted" style="font-family:var(--font-mono);font-size:var(--text-2xs)">${esc(el.id)}</span>`;
+  // Multiplicity is a fact about the element, not decoration on the box
+  // (ADR-0018 `replicas`) — say it here too, in words.
+  const many = multiplicity(el);
+  if (many) {
+    html += `<p class="insp-desc text-muted">${esc(many)} — ${el.replicas} of these run.</p>`;
+  }
   if (el.description) html += `<p class="insp-desc">${esc(el.description)}</p>`;
 
   if (rels.length) {
