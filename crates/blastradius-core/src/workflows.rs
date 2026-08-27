@@ -16,13 +16,15 @@
 //! | claude  | `.claude/skills/blastradius/SKILL.md`        | `.claude/commands/**/*.md`    | `.claude/agents/*.md`       |
 //! | copilot | `.github/instructions/*.instructions.md`     | `.github/prompts/*.prompt.md` | `.github/agents/*.agent.md` |
 //! | cursor  | `.cursor/rules/*.mdc`                        | `.agents/skills/*/SKILL.md`   | —                           |
-//! | codex   | `AGENTS.md` (appended)                       | `.agents/skills/*/SKILL.md`   | —                           |
+//! | codex   | `.agents/blastradius.md` + AGENTS.md pointer | `.agents/skills/*/SKILL.md`   | —                           |
 //!
-//! Every reference but Codex's is a file of our own, so nothing of the
-//! project's is modified to make room for it — Copilot moved off an append
-//! into `copilot-instructions.md` for exactly that reason. Codex has no
-//! per-repo instructions file other than `AGENTS.md`, so that one still
-//! appends (merge-only, never clobbering).
+//! Every reference is a file of our own, so nothing of the project's is
+//! rewritten to make room for it — Copilot moved off an append into
+//! `copilot-instructions.md` for exactly that reason. Codex has no per-repo
+//! instructions file other than `AGENTS.md`, which is the project's, so it
+//! gets the one thing that has to auto-load: a delimited five-line pointer at
+//! `.agents/blastradius.md`, where the reference itself lives. A repo set up
+//! by 0.6.x has the old pasted-in primer and is left exactly as it is.
 //!
 //! `.agents/skills/` is the shared convention Cursor and Codex both discover,
 //! so one set of files serves both; whichever is selected second finds them

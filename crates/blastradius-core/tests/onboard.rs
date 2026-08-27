@@ -84,9 +84,19 @@ fn skills_and_instructions_written_and_appended() {
     assert!(dir.join(".cursor/rules/blastradius.mdc").is_file());
     // Copilot now gets its own file rather than an append into the shared one.
     assert!(dir.join(".github/instructions/blastradius.instructions.md").is_file());
+    // Codex's reference is our own file; AGENTS.md, which belongs to the
+    // project, gets a delimited pointer at it and nothing else.
+    assert!(dir.join(".agents/blastradius.md").is_file(), "{log:?}");
     let agents_md = std::fs::read_to_string(dir.join("AGENTS.md")).unwrap();
     assert!(agents_md.contains("Keep me."), "existing content preserved");
-    assert!(agents_md.contains("## Blastradius architecture model"));
+    assert!(agents_md.contains("<!-- blastradius:begin -->"));
+    assert!(agents_md.contains("<!-- blastradius:end -->"));
+    assert!(agents_md.contains(".agents/blastradius.md"), "the pointer names the reference");
+    assert!(
+        agents_md.lines().count() < 20,
+        "the whole primer is back in somebody else's file:
+{agents_md}"
+    );
     let skill = std::fs::read_to_string(dir.join(".claude/skills/blastradius/SKILL.md")).unwrap();
     assert!(skill.starts_with("---\nname: blastradius\n"), "{skill}");
     assert!(skill.contains("blast_radius"), "{skill}");
@@ -133,8 +143,8 @@ fn the_primer_tells_an_agent_where_the_schema_is() {
     assert!(skill.contains("not available"), "{skill}");
 
     // Every agent gets the same primer, so one check covers the others.
-    let agents_md = std::fs::read_to_string(dir.join("AGENTS.md")).unwrap();
-    assert!(agents_md.contains("model_format"), "{agents_md}");
+    let codex = std::fs::read_to_string(dir.join(".agents/blastradius.md")).unwrap();
+    assert!(codex.contains("model_format"), "{codex}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -165,6 +175,7 @@ fn every_agent_gets_the_workflows_in_its_own_format() {
         ".github/agents/blastradius-surveyor.agent.md",
         // Cursor and Codex share the .agents/skills convention.
         ".cursor/rules/blastradius.mdc",
+        ".agents/blastradius.md",
         "AGENTS.md",
         ".agents/skills/blastradius-model/SKILL.md",
         ".agents/skills/blastradius-sync/SKILL.md",
@@ -263,7 +274,7 @@ fn every_reference_still_carries_the_schema_pointer_and_the_c4_rules() {
         ".claude/skills/blastradius/SKILL.md",
         ".cursor/rules/blastradius.mdc",
         ".github/instructions/blastradius.instructions.md",
-        "AGENTS.md",
+        ".agents/blastradius.md",
     ] {
         let text = std::fs::read_to_string(dir.join(rel)).unwrap();
         assert!(text.contains("model_format"), "{rel} lost the schema pointer");
@@ -328,5 +339,29 @@ older setup
     );
     // The workflows are new either way, so those still land.
     assert!(dir.join(".github/prompts/blastradius-model.prompt.md").is_file(), "{log:#?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Codex has no per-repo instructions file but `AGENTS.md`, which belongs to
+/// the project — so the reference is our own file and `AGENTS.md` gets a
+/// delimited pointer at it. A repository set up by 0.6.x has the whole primer
+/// pasted in, unmarked: leave it. Rewriting somebody's AGENTS.md to tidy our
+/// own history is not our call, and it still says the right things.
+#[test]
+fn a_legacy_agents_md_is_left_exactly_as_it_is() {
+    let dir = temp("codex-legacy");
+    let theirs = "# House rules\n\n## Blastradius architecture model\n\nThe old pasted-in primer.\n";
+    std::fs::write(dir.join("AGENTS.md"), theirs).unwrap();
+
+    let log = setup(&dir, &SetupOptions { skills: all(), ..Default::default() });
+    assert_eq!(
+        std::fs::read_to_string(dir.join("AGENTS.md")).unwrap(),
+        theirs,
+        "AGENTS.md was rewritten"
+    );
+    assert!(
+        log.iter().any(|l| l.contains("already mentions blastradius")),
+        "{log:#?}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

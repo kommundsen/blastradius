@@ -334,7 +334,22 @@ fn write_reference(agent: &str, root: &Path, rel: &str) -> Result<String, String
             write_new(&path, &text)?;
             Ok("wrote .cursor/rules/blastradius.mdc (Cursor)".into())
         }
-        "codex" => append_instructions(&root.join("AGENTS.md"), "AGENTS.md (Codex)", rel),
+        // Codex has no per-repo instructions file but `AGENTS.md`, which
+        // belongs to the project. So the reference itself is our own file and
+        // `AGENTS.md` gets a pointer to it — five lines between markers
+        // instead of the whole primer, removable by deleting the block.
+        "codex" => {
+            let path = root.join(".agents/blastradius.md");
+            let mut notes = Vec::new();
+            if path.exists() {
+                notes.push(".agents/blastradius.md: already present".to_string());
+            } else {
+                write_new(&path, &primer(rel))?;
+                notes.push("wrote .agents/blastradius.md".to_string());
+            }
+            notes.push(point_at_reference(&root.join("AGENTS.md"), "AGENTS.md (Codex)")?);
+            Ok(notes.join("; "))
+        }
         // Our own file rather than an append into `copilot-instructions.md`,
         // which belongs to the project: a `.instructions.md` is removable on
         // its own and never mixes our content into someone's house rules.
@@ -376,12 +391,41 @@ with the code, and `/blastradius-review` judges it.
     }
 }
 
-fn append_instructions(path: &Path, label: &str, rel: &str) -> Result<String, String> {
+/// The pointer Codex reads. Delimited, so a second run updates the block
+/// rather than adding another, and a person removing us deletes between the
+/// markers instead of guessing where our text ended.
+const POINTER_BEGIN: &str = "<!-- blastradius:begin -->";
+const POINTER_END: &str = "<!-- blastradius:end -->";
+
+fn pointer_block() -> String {
+    format!(
+"{POINTER_BEGIN}
+## Blastradius architecture model
+
+This repository carries a C4 architecture model in a Blastradius workspace.
+**Read `.agents/blastradius.md` before reading or changing it** — the format,
+the rules, and how to edit it without breaking it.
+
+The modelling workflows are skills you invoke by name: `blastradius-model`
+builds a model by interviewing you first, `blastradius-sync` brings it back in
+step with the code, and `blastradius-review` judges it.
+{POINTER_END}
+"
+    )
+}
+
+fn point_at_reference(path: &Path, label: &str) -> Result<String, String> {
     let existing = if path.is_file() {
         std::fs::read_to_string(path).map_err(|e| e.to_string())?
     } else {
         String::new()
     };
+    if existing.contains(POINTER_BEGIN) {
+        return Ok(format!("{label}: already points at the reference"));
+    }
+    // A repo set up by 0.6.x has the whole primer pasted in, unmarked. Leave
+    // it: it still says the right things, and rewriting somebody's AGENTS.md
+    // to tidy our own history is not our call.
     if existing.to_lowercase().contains("blastradius") {
         return Ok(format!("{label}: already mentions blastradius"));
     }
@@ -392,7 +436,7 @@ fn append_instructions(path: &Path, label: &str, rel: &str) -> Result<String, St
     if !text.is_empty() {
         text.push('\n');
     }
-    text.push_str(&format!("## Blastradius architecture model\n\n{}", primer(rel)));
+    text.push_str(&pointer_block());
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }

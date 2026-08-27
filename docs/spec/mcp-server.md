@@ -77,14 +77,16 @@ the frontmatter each vendor requires.
 
 The reference itself stays one self-contained document per agent: it is what
 gets read before anything happens, and splitting it only makes half of it easy
-to miss. It is also *our* file wherever the agent allows one —
+to miss. It is also *our* file, always —
 `.github/instructions/blastradius.instructions.md` for Copilot rather than an
-append into `copilot-instructions.md`, which belongs to the project. Only
-Codex still appends, to `AGENTS.md`, having no other per-repo instructions
-file. Nothing is ever overwritten: each file is written only if absent, and a
-repo set up by an earlier version (our text already inside
-`copilot-instructions.md`) is left alone rather than told the same thing
-twice.
+append into `copilot-instructions.md`, which belongs to the project, and
+`.agents/blastradius.md` for Codex. Codex has no per-repo instructions file
+but `AGENTS.md`, so that one takes the only part which has to auto-load: a
+five-line pointer between `<!-- blastradius:begin -->` markers, removable by
+deleting the block. Nothing is ever overwritten: each file is written only if
+absent, and a repo set up by an earlier version — our text already inside
+`copilot-instructions.md`, or the whole primer pasted into `AGENTS.md` — is
+left exactly as it is rather than told the same thing twice.
 
 `blastradius init` offers to write project-scoped registration during
 onboarding — `.mcp.json` (Claude Code), `.vscode/mcp.json` (Copilot/VS

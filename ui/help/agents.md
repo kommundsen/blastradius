@@ -99,8 +99,10 @@ repository itself rather than delegating.
 Everything written is a file of Blastradius's own — Copilot gets
 `.github/instructions/blastradius.instructions.md` rather than an append into
 your `copilot-instructions.md` — so removing it later is deleting our files,
-not editing yours. Codex is the exception: `AGENTS.md` is its only per-repo
-instructions file, so that one is appended to, never overwritten.
+not editing yours. Codex has no per-repo instructions file but `AGENTS.md`,
+which is yours, so it gets a five-line pointer between
+`<!-- blastradius:begin -->` markers and the reference itself lives in
+`.agents/blastradius.md`. Delete the block and the file to undo it.
 
 The **survey subagent** is read-only: it reads a whole repository and proposes
 a C4 structure with the evidence for each candidate, in its own context window

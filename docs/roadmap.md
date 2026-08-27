@@ -1056,6 +1056,27 @@ never opened it. `ui/tests/export/` now opens `architecture.html` from
 already builds the file. Deployment, checked at the same time, turned out to
 have been working all along.
 
+### Codex stops being the exception
+
+The last file we wrote into that was not ours. Every other agent got its own
+removable file in 0.6.3; Codex kept an 80-line append into `AGENTS.md`,
+because `AGENTS.md` is the only per-repo instructions file it reads and the
+reference has to auto-load.
+
+Split the two jobs. The reference lives in `.agents/blastradius.md`, ours to
+write and ours to delete, beside the `.agents/skills/` the workflows already
+use. `AGENTS.md` gets the part that genuinely must auto-load: eleven lines
+between `<!-- blastradius:begin -->` markers, saying what the model is and
+which file to read. Delimited so a re-run updates the block rather than
+stacking another, and so removing us is deleting between two markers rather
+than guessing where our text ended.
+
+A repository set up by 0.6.x has the whole primer pasted in unmarked, and is
+**left exactly as it is** — it still says the right things, and rewriting
+somebody's `AGENTS.md` to tidy our own history is not our call. Pinned by a
+test. This repository's own `AGENTS.md` is converted by hand, since it is the
+one repo where the old shape was ours to change.
+
 ## 0.7.0 — candidate pool (2026-08-25)
 
 **The hold resolved itself.** This pool was 0.6.0's, held (2026-08-25)
