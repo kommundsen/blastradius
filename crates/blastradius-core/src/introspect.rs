@@ -1131,7 +1131,7 @@ pub fn find_repo_root(workspace_dir: &Path) -> Option<PathBuf> {
 
 /// Windows canonicalize() yields `\\?\C:\...` verbatim paths, which Node (and
 /// humans reading output) reject — strip the prefix.
-fn strip_verbatim(p: PathBuf) -> PathBuf {
+pub fn strip_verbatim(p: PathBuf) -> PathBuf {
     let s = p.to_string_lossy();
     match s.strip_prefix(r"\\?\") {
         Some(rest) => PathBuf::from(rest),

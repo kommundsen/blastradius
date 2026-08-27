@@ -100,6 +100,37 @@ lying in `target\release`), and verifies the staged exe self-reports the
 manifest's version before packing. The manual steps below document what
 it does.
 
+### The install-layout smoke (0.7.0)
+
+```powershell
+.\tools\smoke-install.ps1 -Cli packaging\msix\dist\blastradius.exe
+.\tools\smoke-install.ps1 -Cli packaging\msix\dist\blastradius.exe -ReadOnly
+.\tools\smoke-install.ps1 -Cli blastradius.exe -Installed   # after Add-AppxPackage
+```
+
+**Three consecutive releases shipped a bug that exists only in an installed
+layout** - extractors missing from the package (0.6.0), the scaffold refusing
+a repository that already had a README (0.6.1), the C# extractor unloadable
+from WindowsApps (0.6.2). CI built the package every time and never ran
+anything out of it, so a checkout could not see any of them.
+
+The script takes a finished CLI and runs the flow a new user takes on a
+repository it has never seen: the binary runs, the extractors shipped beside
+it, `init` on a repository that already has files keeps them, what it wrote
+validates, and both out-of-process extractors run - the C# one with an
+absolute repository root, which is the pair of faults 0.6.2 fixed.
+
+`-ReadOnly` denies write on the bundle first. That is what makes core stage
+the C# extractor into `%LOCALAPPDATA%` instead of running it in place, and it
+reaches the WindowsApps failure mode without needing an MSIX at all: a package
+directory permits *reading* the DLL but not loading it as an assembly. The run
+then asserts the staged copy exists, so the path is proved rather than merely
+traversed.
+
+CI runs both passes on every push (the `installed` job, over a bundle staged
+from a release CLI build); the release workflow runs them again on the real
+staged archive before it is published.
+
 All from the repo root in PowerShell.
 
 9. **Build both binaries** (release; the exe embeds the `ui/` assets):

@@ -132,3 +132,37 @@ fn a_location_outside_the_project_is_refused() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// `init --help` used to scaffold a workspace into a folder literally called
+/// `--help`, and any mistyped flag scaffolded one named after the typo. This
+/// command creates files: an unrecognised flag must stop it, not name it.
+#[test]
+fn an_unknown_flag_is_refused_rather_than_treated_as_a_directory() {
+    let dir = temp("cli-badflag");
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_blastradius"))
+        .current_dir(&dir)
+        .args(["init", "--bogus"])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2), "an unknown option must fail");
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("unknown option"),
+        "the error must name the problem"
+    );
+    assert!(!dir.join("--bogus").exists(), "it scaffolded a folder named after the flag");
+    assert!(!dir.join("blastradius.yaml").exists(), "it scaffolded into the cwd anyway");
+}
+
+/// ...and asking for help gets help: stdout, exit 0, nothing written.
+#[test]
+fn init_help_prints_usage_and_writes_nothing() {
+    let dir = temp("cli-help");
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_blastradius"))
+        .current_dir(&dir)
+        .args(["init", "--help"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("blastradius init"));
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0, "help wrote files");
+}

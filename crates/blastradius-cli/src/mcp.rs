@@ -32,7 +32,13 @@ pub fn resolve_root(arg: Option<&str>) -> Result<PathBuf, String> {
     let base = PathBuf::from(arg.unwrap_or("."));
     let hits = blastradius_core::discover::discover_workspaces(&base);
     match hits.as_slice() {
-        [one] => Ok(one.canonicalize().unwrap_or_else(|_| one.clone())),
+        // strip_verbatim: canonicalize() yields a `\?\` verbatim path on
+        // Windows, which then leaks into every message built from it and
+        // every extractor argument derived from it. The extractors learned
+        // that the hard way in 0.6.2; no reason for the rest to.
+        [one] => Ok(blastradius_core::introspect::strip_verbatim(
+            one.canonicalize().unwrap_or_else(|_| one.clone()),
+        )),
         [] => Err(format!(
             "{}: no blastradius.yaml here or below — pass a workspace folder (or run `blastradius init`)",
             base.display()

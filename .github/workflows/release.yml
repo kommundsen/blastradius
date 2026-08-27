@@ -146,6 +146,18 @@ jobs:
           echo "name=$name" >> $GITHUB_OUTPUT
         id: stage
 
+      # Windows gets the full install-layout smoke (tools/smoke-install.ps1,
+      # the same script CI runs on every push) against the *real* staged
+      # bundle, including the read-only pass that forces the C# extractor to
+      # stage itself out of an unwritable install directory.
+      - name: Install-layout smoke (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          npm ci
+          ./tools/smoke-install.ps1 -Cli "dist/${{ steps.stage.outputs.name }}/blastradius.exe"
+          ./tools/smoke-install.ps1 -Cli "dist/${{ steps.stage.outputs.name }}/blastradius.exe" -ReadOnly
+
       - name: Smoke-test the staged bundle
         shell: bash
         # Run the staged CLI against this repo's own workspace, from the
@@ -193,7 +205,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v8
         with:
           pattern: portable-*
           merge-multiple: true

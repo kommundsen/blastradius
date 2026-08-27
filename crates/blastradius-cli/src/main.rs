@@ -51,6 +51,7 @@ fn main() -> ExitCode {
             (Some(dsl), Some(out)) => import(dsl, out),
             _ => usage(),
         },
+        Some("--help") | Some("-h") | Some("help") => help(),
         _ => usage(),
     }
 }
@@ -74,11 +75,18 @@ fn resolving(dir: Option<&String>, run: impl FnOnce(&str) -> ExitCode) -> ExitCo
     }
 }
 
+const USAGE: &str = "usage:\n  blastradius init [dir] [--into <subdir>] [--name <name>]\n  blastradius format\n  blastradius validate [workspace-dir] [--strict-drift]\n  blastradius diff <base-dir> <current-dir>\n  blastradius gitdiff <dir> [base-ref] [cur-ref]\n  blastradius snapshot [workspace-dir]\n  blastradius export <dir> -o <file.html> [--with-doc-bodies]\n  blastradius introspect [dir] [component-id] [--check]\n  blastradius import <workspace.dsl> <out-dir>\n  blastradius mcp [workspace-dir]";
+
 fn usage() -> ExitCode {
-    eprintln!(
-        "usage:\n  blastradius init [dir] [--into <subdir>] [--name <name>]\n  blastradius format\n  blastradius validate [workspace-dir] [--strict-drift]\n  blastradius diff <base-dir> <current-dir>\n  blastradius gitdiff <dir> [base-ref] [cur-ref]\n  blastradius snapshot [workspace-dir]\n  blastradius export <dir> -o <file.html> [--with-doc-bodies]\n  blastradius introspect [dir] [component-id] [--check]\n  blastradius import <workspace.dsl> <out-dir>\n  blastradius mcp [workspace-dir]"
-    );
+    eprintln!("{USAGE}");
     ExitCode::from(2)
+}
+
+/// `--help` asked for on purpose: stdout, exit 0. Distinct from `usage()`,
+/// which is a complaint.
+fn help() -> ExitCode {
+    println!("{USAGE}");
+    ExitCode::SUCCESS
 }
 
 /// Extract L4 facts for opted-in components (spec/l4-introspection.md).
@@ -431,6 +439,15 @@ fn init(args: &[String]) -> ExitCode {
             "--agents" => agents_flag = Some(it.next().cloned().unwrap_or_default()),
             "--skills" => skills_flag = Some(it.next().cloned().unwrap_or_default()),
             "--into" => into_flag = it.next().cloned(),
+            "--help" | "-h" => return help(),
+            // An unrecognised flag is not a directory name. `init --help`
+            // used to scaffold a folder literally called `--help`, and any
+            // mistyped flag scaffolded one named after the typo. This command
+            // creates files; guessing is the wrong default for that.
+            other if other.starts_with('-') => {
+                eprintln!("unknown option: {other}");
+                return usage();
+            }
             other => dir = Some(other.to_string()),
         }
     }

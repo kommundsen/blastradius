@@ -956,6 +956,43 @@ Picked from the pool below plus the structural finding above it, in that
 order: the install-shaped hole in CI first, because three consecutive releases
 went out through it, then the two things a user actually feels.
 
+### Something finally exercises an installed build
+
+The structural finding of the week, and it outranked everything in the pool.
+Three releases in a row shipped a bug that exists **only** in an installed
+layout — extractors missing from the package (0.6.0), the scaffold refusing a
+repository that already had a README (0.6.1), the C# extractor unloadable from
+WindowsApps (0.6.2). CI built the package every time and never ran anything
+out of it, so no checkout could see any of them.
+
+`tools/smoke-install.ps1` takes a finished CLI — a staged bundle, or the
+MSIX's execution alias via `-Installed` — and runs the flow a new user takes
+on a repository it has never seen: the binary runs, the extractors shipped
+beside it, `init` on a repository that already has files keeps them, what it
+wrote validates, and both out-of-process extractors run, the C# one with an
+absolute repository root. That is one assertion per shipped bug.
+
+`-ReadOnly` denies write on the bundle first, which is what makes core stage
+the C# extractor into `%LOCALAPPDATA%` rather than run it in place — the
+0.6.2 path, reachable without an MSIX at all, since what WindowsApps actually
+does is permit reading the DLL while refusing to load it as an assembly. The
+run asserts the staged copy exists afterwards, so the path is proved rather
+than merely traversed. Checked negatively too: hiding the extractor from the
+bundle fails the gate at step 2 with the 0.6.0 message.
+
+A new `installed` job runs both passes on every push, and the release workflow
+runs them on the real staged archive before it is published, replacing an
+inline smoke that only checked the C# extractor.
+
+**Found while writing it**: `blastradius init --help` scaffolded a workspace
+into a folder literally called `--help`, and any mistyped flag scaffolded one
+named after the typo — the argument loop treated every unrecognised token as a
+directory name. For a command that creates files that is the wrong default.
+An unknown option is now an error, `--help` prints usage and writes nothing.
+Also: `resolve_root` handed back Windows verbatim paths (`\\?\C:\...`), which
+leaked into error messages and into everything derived from them. The
+extractors learned that in 0.6.2; the rest now strips it at the boundary.
+
 ### Layout: pins stop relocating the diagram, and long chains stop towering
 
 Two defects with the same root — layout rules that were fine when diagrams
