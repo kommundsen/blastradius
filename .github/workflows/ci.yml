@@ -59,7 +59,7 @@ jobs:
           npm ci
           npx playwright install --with-deps webkit
       - name: WebKit rendering gate (ADR-0011)
-        run: npx playwright test
+        run: npx playwright test --project=webkit
       - name: Render SVG/PNG views (spec/export.md headless path)
         # ui/mock/snapshot.json is the committed live model — regenerated on
         # every model change (the e2e suites pin against it, so drift fails CI)
@@ -89,6 +89,19 @@ jobs:
         run: cargo test -p blastradius-core --test import
       - name: Build architecture.html (Phase 4 exit criterion)
         run: cargo run -p blastradius-cli -- export docs -o architecture.html
+      # The exported file is a different artifact from the app — the same
+      # modules concatenated into one classic script, no imports, no IPC — and
+      # nothing exercised it, which is how it shipped without code level (L4)
+      # at all. It runs here rather than in `frontend` because only this job
+      # has the Rust toolchain that produces the file.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Exported-viewer gate (WebKit, from file://)
+        run: |
+          npm ci
+          npx playwright install --with-deps webkit
+          npx playwright test --project=export
       - name: Upload model artifact
         uses: actions/upload-artifact@v7
         with:

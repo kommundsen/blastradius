@@ -441,13 +441,20 @@ import path (ADR-0016 option 3).
   refuse them as above. A `introspect` MCP tool mirrors the CLI
   command so agents can refresh facts.
 - **Exports**: derived elements ride along in snapshots and HTML/PNG/SVG
-  export automatically (they're ordinary elements by render time).
-  **Recorded gap**: the standalone exported viewer (`ui/js/viewer.js`)
-  has no derived handling of its own — its kind labels and node classes
-  know only authored kinds, so an exported page cannot browse L4 the way
-  the app does. Not a regression from dependency rollups (nothing L4
-  rendered there before); worth closing when the viewer next gets
-  attention.
+  export automatically (they're ordinary elements by render time). The
+  standalone exported viewer browses them too, **since 0.7.0**: same node
+  classes and kind labels as the app, the same dive/rise through modules
+  to types, derived rows in the tree, and an inspector that names the
+  file and line without offering to open it — an export has no machine
+  to open it on. The L4 segment is live only when the exported snapshot
+  carries derived facts, the same rule the deployment segment already
+  followed.
+
+  This was a recorded gap for four releases, and it survived because
+  nothing tested the exported file at all: the whole e2e suite runs the
+  *app* against the mock bridge. `ui/tests/export/` now opens
+  `architecture.html` from `file://` in WebKit and walks L4 and
+  deployment through it, in the CI job that already builds the file.
 
 ## Exit criteria (0.3.0 theme 1)
 

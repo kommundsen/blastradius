@@ -133,6 +133,12 @@ pub fn export_html(
     let has_deployment = ws.elements.values().any(|e| e.kind == crate::model::ElementKind::Environment);
     let (deployment_disabled, deployment_attr) =
         if has_deployment { ("", "") } else { (" is-disabled", " disabled") };
+    // Same for code level: an export of a model with no source mappings has
+    // nothing to show at L4. It used to be disabled unconditionally, which
+    // meant an export silently dropped a whole altitude
+    // (spec/l4-introspection.md carried it as a debt).
+    let has_derived = snap.derived.iter().any(|g| !g.elements.is_empty());
+    let (l4_disabled, l4_attr) = if has_derived { ("", "") } else { (" is-disabled", " disabled") };
     Ok(format!(
         r##"<!DOCTYPE html>
 <html lang="en">
@@ -151,7 +157,7 @@ pub fn export_html(
       <label class="seg-opt"><input type="radio" name="lvl" value="L1">L1</label>
       <label class="seg-opt"><input type="radio" name="lvl" value="L2">L2</label>
       <label class="seg-opt"><input type="radio" name="lvl" value="L3">L3</label>
-      <label class="seg-opt is-disabled"><input type="radio" name="lvl" value="L4" disabled>L4</label>
+      <label class="seg-opt{l4_disabled}"><input type="radio" name="lvl" value="L4"{l4_attr}>L4</label>
       <label class="seg-opt{deployment_disabled}"><input type="radio" name="lvl" value="LD"{deployment_attr}>D</label>
     </span>
     <span class="app-bar-spacer"></span>
@@ -214,6 +220,8 @@ const INCLUDE_DOC_BODIES = {bodies};
         viewer = VIEWER_JS,
         deployment_disabled = deployment_disabled,
         deployment_attr = deployment_attr,
+        l4_disabled = l4_disabled,
+        l4_attr = l4_attr,
     ))
 }
 

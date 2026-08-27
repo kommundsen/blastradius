@@ -995,6 +995,30 @@ camera to whatever altitude the result lives at. Ranking is a pure module
 (`ui/js/search.js`) tested in node; the palette itself is pinned by a WebKit
 suite.
 
+### The exported viewer can browse code level, and is finally tested at all
+
+`ui/js/viewer.js` had no derived handling: its node classes and kind labels
+knew only authored kinds, so an exported page silently dropped a whole
+altitude. Recorded as a debt in spec/l4-introspection.md when introspection
+shipped in 0.3.0, and carried for four releases.
+
+It now mirrors the app: same node classes, dive from a component into its
+modules and from a module into its types, derived rows in the tree, breadcrumb
+trail walked through `parent` rather than by splitting ids (a derived id may
+itself contain dots), and an inspector that names the file and line but
+offers nothing to click — an export has no machine to open a file on. The L4
+segment is live only when the snapshot carries derived facts, the rule the
+deployment segment already followed.
+
+**Why it survived four releases is the more useful finding.** Nothing tested
+the exported file. The whole e2e suite runs the *app* against the mock bridge;
+the export is a different artifact — the same modules concatenated into one
+classic script with no imports and no IPC — and CI built it, uploaded it, and
+never opened it. `ui/tests/export/` now opens `architecture.html` from
+`file://` in WebKit and walks L4 and deployment through it, in the job that
+already builds the file. Deployment, checked at the same time, turned out to
+have been working all along.
+
 ## 0.7.0 — candidate pool (2026-08-25)
 
 **The hold resolved itself.** This pool was 0.6.0's, held (2026-08-25)

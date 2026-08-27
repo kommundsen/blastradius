@@ -14,7 +14,9 @@ HTML; menu = PNG, SVG.
 
 One file, zero network requests, works from `file://`:
 
-- **Content**: the full model (all levels L1→L3, all views), both themes
+- **Content**: the full model — every altitude the app has, including code
+  level (L4, from committed facts) and deployment (LD), each segment live only
+  when the exported snapshot carries the facts for it — both themes
   (following the viewer's OS, with a manual toggle), zoom/pan navigation with
   the same camera motion tokens, element inspector with descriptions and doc
   *summaries* (title, type, status — bodies are included only when the
@@ -30,6 +32,10 @@ One file, zero network requests, works from `file://`:
   renderer bundle being Tauri-independent is a build-time constraint on the UI
   container (enforced by building the export bundle in CI).
 - Free tier: "made with Blastradius" footer, per PRD pricing hypothesis.
+- **Tested as the artifact it is** (0.7.0): `ui/tests/export/` opens the built
+  `architecture.html` from `file://` in WebKit and walks it. Until then nothing
+  did — the rest of the suite runs the *app* against the mock bridge — and the
+  viewer had silently lacked L4 since introspection shipped.
 
 ## PNG / SVG
 

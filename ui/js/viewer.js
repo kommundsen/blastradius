@@ -9,7 +9,7 @@
 
 /* global SNAPSHOT, INCLUDE_DOC_BODIES, ELK, marked,
    computeView, findViewDef, resolvePins, docsFor, treeModel, rootOf, depthOf, liftTo,
-   layoutView, groupDivs, fitGroupBoxes, GRID, kicker, edgeLabelLines */
+   derivedGraphFor, layoutView, groupDivs, fitGroupBoxes, GRID, kicker, edgeLabelLines */
 
 (() => {
   const state = {
@@ -32,7 +32,23 @@
   // this file (export.rs). The viewer used to carry its own copy of kicker
   // and it had already drifted from the app's.
 
+  /** An element by id, authored or derived (L4). The viewer used to know only
+   * the authored half, which is why code-level detail was missing from an
+   * export entirely — spec/l4-introspection.md carried it as a debt. */
+  function anyElement(id) {
+    const el = snap.elements.find((e) => e.id === id);
+    if (el) return el;
+    const graph = derivedGraphFor(snap, id);
+    const d = graph?.elements.find((e) => e.id === id);
+    return d ? { ...d, derived: true, stale: graph.stale } : null;
+  }
+
   function childCount(el) {
+    if (el.derived) {
+      const graph = derivedGraphFor(snap, el.id);
+      const kids = (graph?.elements ?? []).filter((e) => e.parent === el.id).length;
+      return kids ? `${kids} member${kids > 1 ? 's' : ''}` : null;
+    }
     const children = snap.elements.filter((e) => e.parent === el.id);
     const kids = children.length;
     if (!kids) return null;
@@ -47,6 +63,13 @@
   }
 
   function nodeClass(el) {
+    // Same classes the app uses, so one stylesheet dresses both.
+    if (el.derived) {
+      let cls = 'node is-component is-derived';
+      if (el.kind === 'dependency') cls += ' is-dependency';
+      if (el.stale) cls += ' is-stale';
+      return cls;
+    }
     const map = {
       person: 'is-person',
       system: 'is-system',
@@ -73,7 +96,9 @@
     const nodes = $('nodes');
     nodes.textContent = '';
     for (const box of groupDivs(layout, document)) nodes.appendChild(box);
-    const elById = new Map(snap.elements.map((e) => [e.id, e]));
+    // view.nodes carries the derived elements at L4; they are not in
+    // snap.elements, so the map has to take both.
+    const elById = new Map([...snap.elements, ...view.nodes].map((e) => [e.id, e]));
     for (const n of layout.nodes) {
       const el = elById.get(n.id);
       const div = document.createElement('div');
@@ -154,15 +179,34 @@
     $('zoom-reset').textContent = Math.round(scale * 100) + '%';
   }
 
+  /** The authored ancestors of a dotted id, outermost first. */
+  function authoredCrumbs(id) {
+    const out = [];
+    for (let i = 1; i <= depthOf(id); i++) {
+      const el = snap.elements.find((e) => e.id === liftTo(id, i));
+      if (el) out.push(el.name);
+    }
+    return out;
+  }
+
   function renderCrumb() {
     const parts = [esc(snap.name)];
-    if (state.scope) {
-      for (let i = 1; i <= depthOf(state.scope); i++) {
-        const el = snap.elements.find((e) => e.id === liftTo(state.scope, i));
-        if (el) parts.push(`<b>${esc(el.name)}</b>`);
+    if (state.level === 'L4' && state.scope) {
+      // Derived ids may themselves contain dots, so the trail below the
+      // component is walked through `parent`, never by splitting the id.
+      const graph = derivedGraphFor(snap, state.scope);
+      const component = graph?.component ?? state.scope;
+      const names = authoredCrumbs(component);
+      const byId = new Map((graph?.elements ?? []).map((e) => [e.id, e]));
+      const chain = [];
+      for (let cur = byId.get(state.scope); cur; cur = cur.parent ? byId.get(cur.parent) : null) {
+        chain.unshift(cur.name);
       }
+      for (const n of [...names, ...chain]) parts.push(`<b>${esc(n)}</b>`);
+    } else if (state.scope) {
+      for (const n of authoredCrumbs(state.scope)) parts.push(`<b>${esc(n)}</b>`);
     }
-    parts.push({ L1: 'Context', L2: 'Containers', L3: 'Components', LD: 'Deployment' }[state.level]);
+    parts.push({ L1: 'Context', L2: 'Containers', L3: 'Components', L4: 'Code', LD: 'Deployment' }[state.level]);
     $('breadcrumb').innerHTML = parts.join(' / ');
   }
 
@@ -185,13 +229,19 @@
   }
 
   async function dive(id) {
-    const el = snap.elements.find((e) => e.id === id);
+    const el = anyElement(id);
     if (!el) return;
+    const graph = derivedGraphFor(snap, id);
     if (el.kind === 'system' && !el.external && state.level === 'L1') {
       state.level = 'L2'; state.scope = id;
     } else if (el.kind === 'container' && state.level === 'L2') {
       if (!snap.elements.some((e) => e.parent === id)) return;
       state.level = 'L3'; state.scope = id;
+    } else if (el.kind === 'component' && state.level === 'L3' && graph?.elements.length) {
+      // Below L3 lies the code (spec/l4-introspection.md).
+      state.level = 'L4'; state.scope = id;
+    } else if (el.derived && graph?.elements.some((e) => e.parent === id)) {
+      state.level = 'L4'; state.scope = id;
     } else if (el.kind === 'environment' || el.kind === 'deployment-node') {
       // The deployment tree dives like the logical one (ADR-0018).
       if (!snap.elements.some((e) => e.parent === id)) return;
@@ -203,7 +253,17 @@
   }
 
   async function rise() {
-    if (state.level === 'L3') {
+    if (state.level === 'L4') {
+      state.selected = state.scope;
+      const graph = derivedGraphFor(snap, state.scope);
+      if (!graph || state.scope === graph.component) {
+        state.scope = liftTo(state.scope, depthOf(state.scope) - 1);
+        state.level = 'L3';
+      } else {
+        const el = graph.elements.find((e) => e.id === state.scope);
+        state.scope = el?.parent ?? graph.component;
+      }
+    } else if (state.level === 'L3') {
       state.selected = state.scope;
       state.scope = liftTo(state.scope, depthOf(state.scope) - 1);
       state.level = 'L2';
@@ -223,8 +283,8 @@
   function renderTree() {
     const t = treeModel(snap);
     const rows = [`<span class="tree-label">Model</span>`];
-    const row = (el, depth, glyph) =>
-      `<button class="tree-row${state.selected === el.id ? ' is-active' : ''}" data-id="${esc(el.id)}"` +
+    const row = (el, depth, glyph, extra = '') =>
+      `<button class="tree-row${state.selected === el.id ? ' is-active' : ''}${extra}" data-id="${esc(el.id)}"` +
       (depth ? ` style="padding-left:${14 + depth * 14}px"` : '') +
       `><span class="glyph">${glyph}</span>${esc(el.name)}</button>`;
     for (const c of t.context) rows.push(row(c, 0, '◦'));
@@ -232,7 +292,18 @@
       rows.push(row(s.el, 0, '▸'));
       for (const c of s.containers) {
         rows.push(row(c.el, 1, ''));
-        for (const k of c.components) rows.push(row(k, 2, ''));
+        for (const k of c.components) {
+          rows.push(row(k, 2, ''));
+          // Introspected code (L4) nests under its component, visibly code —
+          // modules first, their types one step deeper. Same shape as the app.
+          const graph = (snap.derived ?? []).find((g) => g.component === k.id);
+          for (const m of graph?.elements.filter((e) => !e.parent) ?? []) {
+            rows.push(row(m, 3, '', ' is-derived'));
+            for (const ty of graph.elements.filter((e) => e.parent === m.id)) {
+              rows.push(row(ty, 4, '', ' is-derived'));
+            }
+          }
+        }
       }
     }
     $('tree').innerHTML = rows.join('');
@@ -243,7 +314,24 @@
 
   async function focusElement(id) {
     const el = snap.elements.find((e) => e.id === id);
-    if (!el) return;
+    if (!el) {
+      // A derived (L4) row: fly to its code altitude.
+      const graph = derivedGraphFor(snap, id);
+      const d = graph?.elements.find((e) => e.id === id);
+      if (!d) return;
+      if (!state.layout?.nodes.some((n) => n.id === id)) {
+        state.level = 'L4';
+        state.scope = d.parent ?? graph.component;
+        state.zoom = 1; state.pan = { x: 0, y: 0 };
+        state.selected = id;
+        await renderCanvas();
+        renderSide();
+        renderTree();
+        return;
+      }
+      select(id);
+      return;
+    }
     if (!state.layout?.nodes.some((n) => n.id === id)) {
       const d = depthOf(id);
       if (el.kind === 'person' || el.kind === 'external' || (el.kind === 'system')) {
@@ -285,7 +373,12 @@
       body.innerHTML = `<p class="side-empty text-muted">Select an element to inspect it.</p>`;
       return;
     }
-    const el = snap.elements.find((e) => e.id === state.selected);
+    const el = anyElement(state.selected);
+    if (!el) {
+      body.innerHTML = `<p class="side-empty text-muted">Select an element to inspect it.</p>`;
+      return;
+    }
+    if (el.derived) return renderDerivedSide(body, el);
     const rels = snap.relations.filter((r) => r.from === el.id || r.to === el.id);
     const docs = docsFor(snap, el.id);
     const nameOf = (eid) => snap.elements.find((e) => e.id === eid)?.name ?? eid;
@@ -314,6 +407,33 @@
     }
   }
 
+  /** Code-level detail, read-only. The app offers to open the file in an
+   * editor; an export has no machine to open it on, so it states the location
+   * and stops there. */
+  function renderDerivedSide(body, el) {
+    const graph = derivedGraphFor(snap, el.id);
+    const loc = el.line ? `${el.path}:${el.line}` : el.path;
+    let html = `<div class="insp"><span class="insp-kicker">${esc(kicker(el))}</span>` +
+      // Code identity is case-sensitive: `CommitInfo` must not read COMMITINFO.
+      `<span class="insp-title is-code">${esc(el.name)}</span>` +
+      `<span class="text-muted" style="font-family:var(--font-mono);font-size:var(--text-2xs)">${esc(el.id)}</span>`;
+    if (el.path) {
+      html += `<div class="insp-section">Source</div>` +
+        `<div class="insp-rel"><span class="tag tag-outline">${esc(graph?.language ?? 'code')}</span> ` +
+        `<span style="font-family:var(--font-mono);font-size:var(--text-2xs)">${esc(loc)}</span></div>`;
+    } else {
+      // Dependency rollups and namespaces own no single file
+      // (spec/l4-introspection.md).
+      html += `<div class="insp-section">External</div>` +
+        `<p class="text-muted" style="font-size:var(--text-sm)">Resolved from imports — not part of the mapped source tree.</p>`;
+    }
+    if (el.stale) {
+      html += `<p class="text-muted" style="font-size:var(--text-sm)">⚠ These facts lagged the source tree when this was exported.</p>`;
+    }
+    html += `</div>`;
+    body.innerHTML = html;
+  }
+
   function wire() {
     $('level-seg').addEventListener('change', async (ev) => {
       if (ev.target.name !== 'lvl') return;
@@ -327,6 +447,12 @@
         const c = snap.elements.find((e) => e.kind === 'container');
         if (!c) return;
         state.scope = c.id; state.level = 'L3';
+      } else if (level === 'L4') {
+        // The first introspected component — the segment is live only when
+        // the export carries derived facts at all.
+        const graph = (snap.derived ?? []).find((g) => g.elements.length);
+        if (!graph) return;
+        state.scope = graph.component; state.level = 'L4';
       } else if (level === 'LD') {
         // The overview lists every environment; no scope needed (ADR-0018).
         if (!snap.elements.some((e) => e.kind === 'environment')) return;
