@@ -4,7 +4,7 @@
   "extractor": "blastradius-extract-ts 0.2.0",
   "component": "blastradius.ui.canvas",
   "root": "ui/js",
-  "sourceDigest": "sha256:56c34a62094d3794b84056ce04d2405fae9c32d17484dda3c797f588ac84b3e0",
+  "sourceDigest": "sha256:b01a6b5d158a5d0edc355771af1e58fa208468060da2728e659aae6a52731a0a",
   "elements": [
     {
       "id": "app",
@@ -35,6 +35,12 @@
       "kind": "module",
       "name": "layout.js",
       "path": "ui/js/layout.js"
+    },
+    {
+      "id": "search",
+      "kind": "module",
+      "name": "search.js",
+      "path": "ui/js/search.js"
     },
     {
       "id": "svg",
@@ -72,12 +78,22 @@
     },
     {
       "from": "app",
+      "to": "search",
+      "kind": "imports"
+    },
+    {
+      "from": "app",
       "to": "svg",
       "kind": "imports"
     },
     {
       "from": "layout",
       "to": "labels",
+      "kind": "imports"
+    },
+    {
+      "from": "search",
+      "to": "data",
       "kind": "imports"
     },
     {
