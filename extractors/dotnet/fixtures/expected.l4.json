@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "language": "csharp",
-  "extractor": "blastradius-extract-cs 0.3.0 (syntax)",
+  "extractor": "blastradius-extract-cs 0.4.0 (syntax)",
   "component": "shop.backend.billing",
   "root": "src",
   "sourceDigest": "sha256:0b7d505bc842bddf91e5593338e36c458d0a30277cdc39ec370389d6f25f544b",

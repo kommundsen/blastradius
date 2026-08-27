@@ -1077,6 +1077,30 @@ somebody's `AGENTS.md` to tidy our own history is not our call. Pinned by a
 test. This repository's own `AGENTS.md` is converted by hand, since it is the
 one repo where the old shape was ours to change.
 
+### C# semantic mode names dependencies by assembly
+
+A recorded follow-up since 0.4.0. Dependency rollups came from the
+using-directive scan in both modes, so `using Newtonsoft.Json` produced
+`dep.Newtonsoft` — a namespace-root proxy for a package name — and the edge
+was owned by the file's namespace rather than the type, because a using is
+file-scoped and per-type attribution would have invented precision.
+
+Semantic mode has resolved symbols, so neither compromise is needed: a
+dependency is a **cross-assembly** reference to something outside the corpus,
+named by the assembly (`dep.Newtonsoft.Json`) and attributed to the type that
+actually makes it. A reference into the same assembly is your own code that
+the mapping does not cover, and calling that a dependency would be a lie. The
+using-directive scan now runs only when semantic mode did not, since both
+would report one dependency twice under two ids.
+
+Gated without adding a NuGet package: check 2b maps only `Beta/` of the
+existing semantic fixture, which puts `Alpha` outside the corpus while leaving
+it a real separate assembly. Syntax mode gets that case wrong twice — the
+global using sits in a file declaring no types, so no dependency is recorded
+at all, and name matching resolves the reference to the in-corpus
+`Beta.Widget`, which is the wrong `Widget`. Extractor bumped to 0.4.0 and the
+syntax fixture refrozen; syntax-mode facts are otherwise byte-identical.
+
 ## 0.7.0 — candidate pool (2026-08-25)
 
 **The hold resolved itself.** This pool was 0.6.0's, held (2026-08-25)

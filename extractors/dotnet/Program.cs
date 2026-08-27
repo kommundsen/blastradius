@@ -277,7 +277,10 @@ else
 {
     SyntaxEdges();
 }
-DependencyRollups();
+// Syntax rollups read using directives; semantic mode resolved real symbols
+// and named the assemblies instead, so running both would report the same
+// dependency twice under two different ids.
+if (effectiveMode != "semantic") DependencyRollups();
 
 // Symbol-resolved edges, or null with a reason. Never throws.
 SortedSet<string>? TrySemanticEdges(out string why)
@@ -375,7 +378,8 @@ SortedSet<string>? SemanticEdgesCore(out string why)
                 {
                     if (model.GetSymbolInfo(b.Type).Symbol is not INamedTypeSymbol target) continue;
                     var id = FactIdOf(target);
-                    if (id is null || id == selfId) continue;
+                    if (id is null) { AddDependency(result, self, target); continue; }
+                    if (id == selfId) continue;
                     result.Add($"{selfId}\0{id}\0{(target.TypeKind == TypeKind.Interface ? "implements" : "extends")}");
                 }
             }
@@ -386,7 +390,8 @@ SortedSet<string>? SemanticEdgesCore(out string why)
                 var named = sym as INamedTypeSymbol ?? sym?.ContainingType;
                 if (named is null) continue;
                 var id = FactIdOf(named);
-                if (id is null || id == selfId) continue;
+                if (id is null) { AddDependency(result, self, named); continue; }
+                if (id == selfId) continue;
                 result.Add($"{selfId}\0{id}\0references");
             }
         }
@@ -403,6 +408,30 @@ SortedSet<string>? SemanticEdgesCore(out string why)
 
 // A symbol's fact id, if this corpus owns it: nested types fold into their
 // outermost type, exactly as pass 1 registered them.
+// A dependency in semantic mode is a *cross-assembly* reference to something
+// outside the corpus, named by the assembly it actually lives in - the thing
+// you would add to a project file. Syntax mode can only guess it from a using
+// directive's first segment, so Newtonsoft.Json arrives as `dep.Newtonsoft`
+// there and as `dep.Newtonsoft.Json` here (spec/l4-introspection.md, recorded
+// follow-up). A reference into the *same* assembly is your own code that this
+// mapping simply does not cover; calling that a dependency would be a lie.
+void AddDependency(SortedSet<string> into, INamedTypeSymbol from, INamedTypeSymbol target)
+{
+    var assembly = target.ContainingAssembly?.Name;
+    if (string.IsNullOrEmpty(assembly)) return;
+    if (SymbolEqualityComparer.Default.Equals(from.ContainingAssembly, target.ContainingAssembly)) return;
+    // The framework ships with the runtime and carries no architectural
+    // signal - the same exclusion syntax mode makes on the System namespace.
+    if (assembly == "mscorlib" || assembly == "netstandard" ||
+        assembly == "System" || assembly.StartsWith("System.", StringComparison.Ordinal)) return;
+    var id = $"dep.{assembly}";
+    if (types.ContainsKey(id) || namespaces.Contains(id)) return; // a corpus id wins
+    var fromId = FactIdOf(from);
+    if (fromId is null) return;
+    deps.Add(assembly);
+    into.Add($"{fromId} {id} imports");
+}
+
 string? FactIdOf(INamedTypeSymbol symbol)
 {
     var outer = symbol;
@@ -455,7 +484,7 @@ var facts = new Dictionary<string, object?>
 {
     ["schema"] = 1,
     ["language"] = "csharp",
-    ["extractor"] = $"blastradius-extract-cs 0.3.0 ({effectiveMode})",
+    ["extractor"] = $"blastradius-extract-cs 0.4.0 ({effectiveMode})",
     ["component"] = component,
     ["root"] = root,
     ["sourceDigest"] = digest,

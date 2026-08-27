@@ -315,8 +315,7 @@ one exception, since MSBuild has to load their solution.
   declares types into, not by each type: a using directive is
   file-scoped, so attributing it per type would invent precision the
   syntax does not carry. A file that declares no namespaced type emits
-  no dependency edge. Semantic mode can do better — assembly identity
-  rather than a namespace-root proxy — which is a recorded follow-up.
+  no dependency edge. **Semantic mode does better** — see below.
 - Tested against a fixture corpus (`extractors/dotnet/fixtures/`)
   covering file-scoped namespaces, partials, records, and a
   cross-namespace reference — asserting exact facts bytes.
@@ -340,7 +339,7 @@ Opt in per mapping with `mode: semantic` (the extractor also takes a
   reported on stderr and degrades to the syntax pass, exit 0. Semantic
   mode is never worse than syntax mode.
 - **Effective mode is recorded** in the facts' `extractor` string:
-  `blastradius-extract-cs 0.3.0 (semantic)` versus `(syntax-fallback)`.
+  `blastradius-extract-cs 0.4.0 (semantic)` versus `(syntax-fallback)`.
   This is what lets `introspect --check` tell a machine that *cannot*
   run the semantic pass apart from facts that are genuinely stale: the
   former reports "NOT VERIFIED" and passes, the latter fails. Repos
@@ -352,9 +351,27 @@ Opt in per mapping with `mode: semantic` (the extractor also takes a
   to the repo root before registering the MSBuild locator, so the
   target solution still loads under the SDK it pins. Extractors receive
   an absolute `repoRoot` and must not depend on the working directory.
-- **Dependency identity**: rollups still come from the using-directive
-  scan in both modes. Semantic mode could name packages by assembly
-  instead of namespace root — recorded follow-up, not done.
+- **Dependency identity** (0.7.0): semantic mode names a dependency by
+  the **assembly** it lives in — the thing you would add to a project
+  file — and attributes the edge to the *referencing type*, which it can
+  do honestly because it resolved a symbol rather than read a using
+  directive. `Newtonsoft.Json` is `dep.Newtonsoft.Json` here and
+  `dep.Newtonsoft` in syntax mode. A dependency is by definition a
+  **cross-assembly** reference to something outside the corpus: a
+  reference into the same assembly is your own code that the mapping
+  does not cover, and calling that a dependency would be a lie. The
+  framework is excluded by assembly (`mscorlib`, `netstandard`,
+  `System`, `System.*`), matching syntax mode's exclusion by namespace.
+
+  The using-directive scan therefore runs only when semantic mode did
+  not, since running both would report one dependency twice under two
+  ids. Gated by `test.sh` check 2b, which maps only `Beta/` of the
+  semantic fixture so `Alpha` falls outside the corpus — no NuGet
+  package needed to have a real external assembly. Syntax mode gets
+  that case wrong twice over, which is the point: the global using
+  lives in a file declaring no types, so it records no dependency at
+  all, and name matching resolves the reference to the in-corpus
+  `Beta.Widget` — the wrong `Widget`.
 
 ## Rust extractor
 
