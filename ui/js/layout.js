@@ -43,14 +43,30 @@ const LAYOUT_OPTIONS = {
 };
 
 /**
+ * Wrapping turns one very long chain into a snake of shorter columns
+ * (`elk.layered.wrapping.strategy`). It is applied on a second pass, and only
+ * when the first comes back far taller than it is wide with enough nodes for
+ * that to hurt: a small diagram reading straight down is the C4 convention and
+ * worth keeping, but sixteen chained components in a single 2400px column are
+ * correct and unreadable at once.
+ */
+const WRAP_MIN_NODES = 8;
+const WRAP_ASPECT = 2.5;
+const WRAP_OPTIONS = {
+  'elk.layered.wrapping.strategy': 'SINGLE_EDGE',
+  'elk.aspectRatio': '1.6',
+};
+
+/**
  * Layout a computed view (from data.computeView) with optional pins
  * ({id: [gx, gy]} in grid units).
  *
- * Pin policy (Phase 1): pinned nodes sit exactly at their pinned grid
- * position; unpinned nodes are ELK-laid-out as a block, offset to start below
- * the pinned bounding box so the two groups never collide. Deterministic by
- * construction. The spec's softer "interactive hints" refinement arrives with
- * editing (Phase 3), when pins become writable.
+ * Pin policy: pinned nodes sit exactly at their pinned grid position; unpinned
+ * nodes are ELK-laid-out as a block, then placed at the *least* displacement
+ * that clears every pinned box. It used to be unconditionally below the pinned
+ * bounding box, which meant pinning one node near the bottom shoved the entire
+ * rest of the diagram underneath it. Deterministic by construction: the
+ * candidate order is fixed and the tie-break is on displacement.
  *
  * Returns { nodes: [{id, x, y, width, height}], edges: [{from, to, points, label, labelAt, direction, exact}],
  * groups: [{id, label, x, y, width, height, members}] }.
@@ -71,11 +87,14 @@ export async function layoutView(elk, view, pins = {}, options = {}) {
   const compoundGroups = options.groups ? compoundable(unpinned, pins, view) : new Map();
 
   const inCompound = new Set([...compoundGroups.values()].flat().map((el) => el.id));
-  const graph = {
+  // A factory, not a literal: ELK writes coordinates into the graph it is
+  // given, so the wrapping pass below needs its own untouched copy.
+  const buildGraph = (extraOptions) => ({
     id: 'root',
     layoutOptions: {
       ...LAYOUT_OPTIONS,
       ...(compoundGroups.size ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' } : {}),
+      ...extraOptions,
     },
     children: [
       ...unpinned.filter((el) => !inCompound.has(el.id)).map((el) => ({ id: el.id, ...sizeOf(el) })),
@@ -90,28 +109,19 @@ export async function layoutView(elk, view, pins = {}, options = {}) {
     edges: view.edges
       .filter((e) => !pins[e.from] && !pins[e.to])
       .map((e, i) => ({ id: 'e' + i, sources: [e.from], targets: [e.to] })),
-  };
+  });
 
-  const laid = unpinned.length ? await elk.layout(graph) : { children: [] };
+  const laid = unpinned.length ? await runLayout(elk, buildGraph) : { children: [] };
 
   const nodes = [];
-  let pinnedMaxY = 0;
-  let pinnedMaxX = 0; // eslint-disable-line prefer-const -- shifted on reframe
   for (const el of pinned) {
     const [gx, gy] = pins[el.id];
-    const size = sizeOf(el);
-    const x = gx * GRID;
-    const y = gy * GRID;
-    nodes.push({ id: el.id, x, y, ...size });
-    pinnedMaxY = Math.max(pinnedMaxY, y + size.height);
-    pinnedMaxX = Math.max(pinnedMaxX, x + size.width);
+    nodes.push({ id: el.id, x: gx * GRID, y: gy * GRID, ...sizeOf(el) });
   }
 
-  // Offset the auto block clear of the pinned block (below it), grid-snapped.
-  const offsetY = pinned.length
-    ? Math.ceil((pinnedMaxY + GRID * 2) / GRID) * GRID
-    : GRID;
-  const offsetX = GRID;
+  // Place the auto-laid block at the least displacement that clears every
+  // pinned box, grid-snapped.
+  const { x: offsetX, y: offsetY } = placeBlock(nodes, blockRects(laid.children));
   // ELK reports compound children *relative to their parent*, so the tree is
   // walked and absolutised. `origins` keeps each container's absolute origin,
   // which the edge sections below also need — a section is relative to its
@@ -207,12 +217,101 @@ export async function layoutView(elk, view, pins = {}, options = {}) {
       e.labelAt.x += origin.x;
       e.labelAt.y += origin.y;
     }
-    pinnedMaxX += origin.x;
   }
 
-  const width = Math.max(pinnedMaxX, ...extents.map((n) => n.x + n.width), 0) + GRID;
+  const width = Math.max(...extents.map((n) => n.x + n.width), 0) + GRID;
   const height = Math.max(...extents.map((n) => n.y + n.height), 0) + GRID;
   return { nodes, edges, groups, width, height, origin };
+}
+
+/**
+ * One ELK pass, plus a wrapping pass when the first result is a tower.
+ *
+ * The choice is a pure function of the first result, so it is as deterministic
+ * as the layout it picks between, and the wrapped result is kept only if it is
+ * actually squarer — ELK declines to wrap some graphs, and a pass that changed
+ * nothing should not change which geometry ships.
+ */
+async function runLayout(elk, buildGraph) {
+  const first = await elk.layout(buildGraph());
+  const box = bboxOfRects(blockRects(first.children));
+  if (countNodes(first.children) < WRAP_MIN_NODES) return first;
+  if (!box.width || box.height <= box.width * WRAP_ASPECT) return first;
+  const wrapped = await elk.layout(buildGraph(WRAP_OPTIONS));
+  const wbox = bboxOfRects(blockRects(wrapped.children));
+  if (!wbox.width || !wbox.height) return first;
+  return wbox.height / wbox.width < box.height / box.width ? wrapped : first;
+}
+
+function countNodes(children) {
+  let n = 0;
+  for (const c of children ?? []) n += c.children?.length ? countNodes(c.children) : 1;
+  return n;
+}
+
+/** Top-level rectangles of a laid-out block: leaf nodes and compound boxes
+ * alike. A compound's box contains its children, so this is enough to reason
+ * about where the block as a whole can sit. */
+function blockRects(children) {
+  return (children ?? []).map((c) => ({ x: c.x, y: c.y, w: c.width, h: c.height }));
+}
+
+function bboxOfRects(rects) {
+  if (!rects.length) return { x: 0, y: 0, width: 0, height: 0 };
+  const x = Math.min(...rects.map((r) => r.x));
+  const y = Math.min(...rects.map((r) => r.y));
+  const right = Math.max(...rects.map((r) => r.x + r.w));
+  const bottom = Math.max(...rects.map((r) => r.y + r.h));
+  return { x, y, width: right - x, height: bottom - y };
+}
+
+/**
+ * Where to put the auto-laid block relative to the pinned nodes.
+ *
+ * Five fixed candidates — leave it where ELK put it, or push it clear below,
+ * right, above or left — and the cheapest that collides with nothing wins.
+ * Pushing below always clears (every auto node then starts under every pinned
+ * one), so there is always an answer; it is simply no longer the *only*
+ * answer, which is what made pinning a single low node relocate the whole
+ * diagram underneath it.
+ */
+function placeBlock(pinnedNodes, rects) {
+  const natural = { x: GRID, y: GRID };
+  if (!pinnedNodes.length || !rects.length) return natural;
+  const pinnedRects = pinnedNodes.map((n) => ({ x: n.x, y: n.y, w: n.width, h: n.height }));
+  const p = bboxOfRects(pinnedRects);
+  const box = bboxOfRects(rects);
+  const gap = GRID * 2;
+  const up = (v) => Math.ceil(v / GRID) * GRID;
+  const down = (v) => Math.floor(v / GRID) * GRID;
+  const below = { x: natural.x, y: up(p.y + p.height + gap - box.y) };
+  const candidates = [
+    natural,
+    below,
+    { x: up(p.x + p.width + gap - box.x), y: natural.y },
+    { x: natural.x, y: down(p.y - gap - (box.y + box.height)) },
+    { x: down(p.x - gap - (box.x + box.width)), y: natural.y },
+  ];
+  let best = null;
+  let bestCost = Infinity;
+  for (const c of candidates) {
+    if (rects.some((r) => pinnedRects.some((q) => rectsOverlap(shift(r, c), q)))) continue;
+    const cost = Math.abs(c.x - natural.x) + Math.abs(c.y - natural.y);
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = c;
+    }
+  }
+  return best ?? below;
+}
+
+const shift = (r, o) => ({ x: r.x + o.x, y: r.y + o.y, w: r.w, h: r.h });
+
+function rectsOverlap(a, b) {
+  return (
+    Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > 0 &&
+    Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > 0
+  );
 }
 
 /**

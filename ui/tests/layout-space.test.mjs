@@ -8,6 +8,10 @@
 //  - a pin may be negative. A diagram has no top-left corner, and clamping
 //    pins to one made it a wall to pile things against.
 //
+// Plus the two things layout owes a diagram that has grown: pinning one node
+// must not relocate every other one, and a long chain must not become a tower
+// nothing can read.
+//
 // Run: node --test ui/tests/layout-space.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -88,4 +92,71 @@ test('a negative pin is honoured, and the drawing is reframed around it', async 
 test('with no negative pin nothing is translated', async () => {
   const laid = await layoutView(elk, chain(3), { 's.c.n0': [2, 2] }, {});
   assert.deepEqual(laid.origin, { x: 0, y: 0 }, 'an ordinary layout must not shift');
+});
+
+test('a pin off to one side does not push the rest of the diagram below it', async () => {
+  const view = chain(4);
+  // Pinned well to the right of where a four-node chain lays itself out, and
+  // low enough that "start below the pinned bounding box" would send the whole
+  // chain down past it.
+  const laid = await layoutView(elk, view, { 's.c.n3': [30, 12] }, {});
+  const auto = laid.nodes.filter((n) => n.id !== 's.c.n3');
+  const pin = laid.nodes.find((n) => n.id === 's.c.n3');
+
+  assert.ok(
+    Math.min(...auto.map((n) => n.y)) < pin.y,
+    'the auto-laid block was pushed under a pin it never collided with'
+  );
+  for (const a of auto) {
+    const w = Math.min(a.x + a.width, pin.x + pin.width) - Math.max(a.x, pin.x);
+    const h = Math.min(a.y + a.height, pin.y + pin.height) - Math.max(a.y, pin.y);
+    assert.ok(w <= 0 || h <= 0, `${a.id} overlaps the pinned node`);
+  }
+});
+
+test('a pin in the way still displaces the block, and nothing overlaps', async () => {
+  // Pinned right where a chain starts: there is a genuine collision here, so
+  // the block has to move — the point is that it moves, not that it never does.
+  const laid = await layoutView(elk, chain(4), { 's.c.n3': [1, 1] }, {});
+  for (let i = 0; i < laid.nodes.length; i++) {
+    for (let j = i + 1; j < laid.nodes.length; j++) {
+      const a = laid.nodes[i], b = laid.nodes[j];
+      const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+      const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+      assert.ok(w <= 0 || h <= 0, `${a.id} overlaps ${b.id}`);
+    }
+  }
+});
+
+test('a long chain wraps instead of growing a tower', async () => {
+  const deep = await layoutView(elk, chain(16), {}, {});
+  assert.ok(
+    deep.height / deep.width < 2.5,
+    `16 chained components laid out ${Math.round(deep.width)}x${Math.round(deep.height)} — still a column`
+  );
+  for (let i = 0; i < deep.nodes.length; i++) {
+    for (let j = i + 1; j < deep.nodes.length; j++) {
+      const a = deep.nodes[i], b = deep.nodes[j];
+      const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+      const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+      assert.ok(w <= 0 || h <= 0, `${a.id} overlaps ${b.id}`);
+    }
+  }
+});
+
+test('a short chain is left reading straight down', async () => {
+  // Wrapping is for diagrams that have outgrown a column, not for every
+  // diagram: five boxes top to bottom is the C4 convention and stays.
+  const short = await layoutView(elk, chain(5), {}, {});
+  const columns = new Set(short.nodes.map((n) => n.x));
+  assert.equal(columns.size, 1, 'a five-node chain was wrapped when it did not need to be');
+});
+
+test('wrapping is deterministic', async () => {
+  const a = await layoutView(elk, chain(16), {}, {});
+  const b = await layoutView(new ELK(), chain(16), {}, {});
+  assert.deepEqual(
+    a.nodes.map((n) => [n.id, n.x, n.y]),
+    b.nodes.map((n) => [n.id, n.x, n.y])
+  );
 });
