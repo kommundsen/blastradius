@@ -11,12 +11,18 @@
 //! rather than from memory, because a file written to the wrong path with the
 //! wrong extension does nothing at all and says nothing about it:
 //!
-//! | agent   | workflows                        | subagent                         |
-//! |---------|----------------------------------|----------------------------------|
-//! | claude  | `.claude/commands/**/*.md`       | `.claude/agents/*.md`            |
-//! | copilot | `.github/prompts/*.prompt.md`    | `.github/agents/*.agent.md`      |
-//! | cursor  | `.agents/skills/*/SKILL.md`      | — (no per-repo subagent surface) |
-//! | codex   | `.agents/skills/*/SKILL.md`      | — (custom prompts are user-level and deprecated) |
+//! | agent   | reference                                    | workflows                     | subagent                    |
+//! |---------|----------------------------------------------|-------------------------------|-----------------------------|
+//! | claude  | `.claude/skills/blastradius/SKILL.md`        | `.claude/commands/**/*.md`    | `.claude/agents/*.md`       |
+//! | copilot | `.github/instructions/*.instructions.md`     | `.github/prompts/*.prompt.md` | `.github/agents/*.agent.md` |
+//! | cursor  | `.cursor/rules/*.mdc`                        | `.agents/skills/*/SKILL.md`   | —                           |
+//! | codex   | `AGENTS.md` (appended)                       | `.agents/skills/*/SKILL.md`   | —                           |
+//!
+//! Every reference but Codex's is a file of our own, so nothing of the
+//! project's is modified to make room for it — Copilot moved off an append
+//! into `copilot-instructions.md` for exactly that reason. Codex has no
+//! per-repo instructions file other than `AGENTS.md`, so that one still
+//! appends (merge-only, never clobbering).
 //!
 //! `.agents/skills/` is the shared convention Cursor and Codex both discover,
 //! so one set of files serves both; whichever is selected second finds them

@@ -96,6 +96,12 @@ Cursor and Codex both read `.agents/skills/`, so one set of files serves both.
 Where an agent has no subagent surface, the model workflow surveys the
 repository itself rather than delegating.
 
+Everything written is a file of Blastradius's own — Copilot gets
+`.github/instructions/blastradius.instructions.md` rather than an append into
+your `copilot-instructions.md` — so removing it later is deleting our files,
+not editing yours. Codex is the exception: `AGENTS.md` is its only per-repo
+instructions file, so that one is appended to, never overwritten.
+
 The **survey subagent** is read-only: it reads a whole repository and proposes
 a C4 structure with the evidence for each candidate, in its own context window
 so that reading does not crowd out the conversation.

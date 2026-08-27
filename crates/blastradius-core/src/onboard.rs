@@ -335,11 +335,43 @@ fn write_reference(agent: &str, root: &Path, rel: &str) -> Result<String, String
             Ok("wrote .cursor/rules/blastradius.mdc (Cursor)".into())
         }
         "codex" => append_instructions(&root.join("AGENTS.md"), "AGENTS.md (Codex)", rel),
-        "copilot" => append_instructions(
-            &root.join(".github/copilot-instructions.md"),
-            ".github/copilot-instructions.md (Copilot)",
-            rel,
-        ),
+        // Our own file rather than an append into `copilot-instructions.md`,
+        // which belongs to the project: a `.instructions.md` is removable on
+        // its own and never mixes our content into someone's house rules.
+        // `applyTo: '**'` keeps it always-on, which is what the shared file
+        // gave us — the model has to stay in step when *code* changes, not
+        // only when the workspace is open.
+        "copilot" => {
+            let path = root.join(".github/instructions/blastradius.instructions.md");
+            if path.exists() {
+                return Ok(".github/instructions/blastradius.instructions.md: already present".into());
+            }
+            // An earlier version appended to the shared file. Leave that be
+            // rather than saying the same thing twice.
+            let legacy = root.join(".github/copilot-instructions.md");
+            if legacy.is_file()
+                && std::fs::read_to_string(&legacy)
+                    .map(|t| t.to_lowercase().contains("blastradius"))
+                    .unwrap_or(false)
+            {
+                return Ok(".github/copilot-instructions.md: already mentions blastradius".into());
+            }
+            let text = format!(
+                "---
+description: Blastradius C4 architecture model in this repo
+applyTo: '**'
+---
+
+The modelling workflows are prompt files: `/blastradius-model` builds a
+model by interviewing you first, `/blastradius-sync` brings it back in step
+with the code, and `/blastradius-review` judges it.
+
+{}",
+                primer(rel)
+            );
+            write_new(&path, &text)?;
+            Ok("wrote .github/instructions/blastradius.instructions.md (Copilot)".into())
+        }
         other => Err(format!("unknown agent {other:?} — expected one of {AGENTS:?}")),
     }
 }

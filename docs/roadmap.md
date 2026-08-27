@@ -841,7 +841,15 @@ nothing and says nothing about it, which is the same silent-failure class as
 the packaging bugs above.
 
 What stays one document is the *reference*: it is what an agent reads before
-doing anything, and splitting it only makes half of it easy to miss.
+doing anything, and splitting it only makes half of it easy to miss. It is now
+also *our* file wherever the agent allows one — the owner's follow-up point:
+Copilot takes `.github/instructions/blastradius.instructions.md` (`applyTo:
+'**'`, so it stays always-on) instead of an append into
+`copilot-instructions.md`, which belongs to the project. Uninstalling is then
+deleting our files rather than editing theirs. Codex still appends to
+`AGENTS.md`, having no other per-repo instructions file; a repo set up by the
+earlier appending version is detected and left alone rather than told the same
+thing twice.
 
 ## 0.6.2 — released (2026-08-26): L4 works on an installed build
 

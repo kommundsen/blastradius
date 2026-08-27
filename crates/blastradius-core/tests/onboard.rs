@@ -82,7 +82,8 @@ fn skills_and_instructions_written_and_appended() {
     let log = setup(&dir, &SetupOptions { skills: all(), ..Default::default() });
     assert!(dir.join(".claude/skills/blastradius/SKILL.md").is_file(), "{log:?}");
     assert!(dir.join(".cursor/rules/blastradius.mdc").is_file());
-    assert!(dir.join(".github/copilot-instructions.md").is_file());
+    // Copilot now gets its own file rather than an append into the shared one.
+    assert!(dir.join(".github/instructions/blastradius.instructions.md").is_file());
     let agents_md = std::fs::read_to_string(dir.join("AGENTS.md")).unwrap();
     assert!(agents_md.contains("Keep me."), "existing content preserved");
     assert!(agents_md.contains("## Blastradius architecture model"));
@@ -157,7 +158,7 @@ fn every_agent_gets_the_workflows_in_its_own_format() {
         ".claude/commands/blastradius/review.md",
         ".claude/agents/blastradius-surveyor.md",
         // Copilot: prompt files, and a custom agent.
-        ".github/copilot-instructions.md",
+        ".github/instructions/blastradius.instructions.md",
         ".github/prompts/blastradius-model.prompt.md",
         ".github/prompts/blastradius-sync.prompt.md",
         ".github/prompts/blastradius-review.prompt.md",
@@ -261,12 +262,71 @@ fn every_reference_still_carries_the_schema_pointer_and_the_c4_rules() {
     for rel in [
         ".claude/skills/blastradius/SKILL.md",
         ".cursor/rules/blastradius.mdc",
-        ".github/copilot-instructions.md",
+        ".github/instructions/blastradius.instructions.md",
         "AGENTS.md",
     ] {
         let text = std::fs::read_to_string(dir.join(rel)).unwrap();
         assert!(text.contains("model_format"), "{rel} lost the schema pointer");
         assert!(text.contains("dependency, not a data flow"), "{rel} lost the C4 guidance");
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Copilot gets its own instructions file rather than an append into
+/// `.github/copilot-instructions.md`, which belongs to the project (owner's
+/// point, 2026-08-26): ours is removable on its own and never mixes into
+/// someone's house rules.
+#[test]
+fn copilot_gets_its_own_instructions_file_and_leaves_the_shared_one_alone() {
+    let dir = temp("copilot-own");
+    std::fs::create_dir_all(dir.join(".github")).unwrap();
+    let theirs = "# House rules
+
+Use tabs. Never mention semicolons.
+";
+    std::fs::write(dir.join(".github/copilot-instructions.md"), theirs).unwrap();
+
+    setup(&dir, &SetupOptions { skills: vec!["copilot".into()], ..Default::default() });
+
+    let ours = dir.join(".github/instructions/blastradius.instructions.md");
+    assert!(ours.is_file(), "no instructions file written");
+    let text = std::fs::read_to_string(&ours).unwrap();
+    assert!(text.starts_with("---
+description:"), "{text}");
+    // Always-on: the model has to stay in step when *code* changes too, not
+    // only when the workspace happens to be open.
+    assert!(text.contains("applyTo: '**'"), "{text}");
+    assert!(text.contains("model_format"), "{text}");
+
+    assert_eq!(
+        std::fs::read_to_string(dir.join(".github/copilot-instructions.md")).unwrap(),
+        theirs,
+        "the project's own instructions were modified"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A repo set up by an earlier version has our text appended to the shared
+/// file. Do not say the same thing twice.
+#[test]
+fn an_earlier_appended_copilot_setup_is_left_as_it_is() {
+    let dir = temp("copilot-legacy");
+    std::fs::create_dir_all(dir.join(".github")).unwrap();
+    std::fs::write(
+        dir.join(".github/copilot-instructions.md"),
+        "## Blastradius architecture model
+
+older setup
+",
+    )
+    .unwrap();
+
+    let log = setup(&dir, &SetupOptions { skills: vec!["copilot".into()], ..Default::default() });
+    assert!(
+        !dir.join(".github/instructions/blastradius.instructions.md").exists(),
+        "duplicated the reference; log = {log:#?}"
+    );
+    // The workflows are new either way, so those still land.
+    assert!(dir.join(".github/prompts/blastradius-model.prompt.md").is_file(), "{log:#?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
