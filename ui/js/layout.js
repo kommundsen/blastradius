@@ -58,6 +58,12 @@ const LAYOUT_OPTIONS = {
 export async function layoutView(elk, view, pins = {}, options = {}) {
   const pinned = view.nodes.filter((n) => pins[n.id]);
   const unpinned = view.nodes.filter((n) => !pins[n.id]);
+  // Real rendered sizes where the caller could measure them (the canvas can;
+  // headless SVG rendering cannot). A `.node` is content-sized, so a name that
+  // wraps to three lines is taller than any per-kind estimate — and layout
+  // that reserved the estimate leaves the overflow to collide with whatever
+  // is below. Falls back to the estimate, which is what the estimate is for.
+  const sizeOf = (el) => options.sizes?.get(el.id) ?? nodeSize(el);
 
   // Groups that ELK can lay out as real compounds: every member unpinned.
   // A group with a pinned member cannot be one — pinned nodes never enter the
@@ -72,13 +78,13 @@ export async function layoutView(elk, view, pins = {}, options = {}) {
       ...(compoundGroups.size ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' } : {}),
     },
     children: [
-      ...unpinned.filter((el) => !inCompound.has(el.id)).map((el) => ({ id: el.id, ...nodeSize(el) })),
+      ...unpinned.filter((el) => !inCompound.has(el.id)).map((el) => ({ id: el.id, ...sizeOf(el) })),
       ...[...compoundGroups.entries()].map(([label, members]) => ({
         id: groupId(label),
         layoutOptions: {
           'elk.padding': `[top=${GROUP_PAD.top},left=${GROUP_PAD.side},bottom=${GROUP_PAD.bottom},right=${GROUP_PAD.side}]`,
         },
-        children: members.map((el) => ({ id: el.id, ...nodeSize(el) })),
+        children: members.map((el) => ({ id: el.id, ...sizeOf(el) })),
       })),
     ],
     edges: view.edges
@@ -90,10 +96,10 @@ export async function layoutView(elk, view, pins = {}, options = {}) {
 
   const nodes = [];
   let pinnedMaxY = 0;
-  let pinnedMaxX = 0;
+  let pinnedMaxX = 0; // eslint-disable-line prefer-const -- shifted on reframe
   for (const el of pinned) {
     const [gx, gy] = pins[el.id];
-    const size = nodeSize(el);
+    const size = sizeOf(el);
     const x = gx * GRID;
     const y = gy * GRID;
     nodes.push({ id: el.id, x, y, ...size });
@@ -178,10 +184,35 @@ export async function layoutView(elk, view, pins = {}, options = {}) {
   routeEdges(edges, nodes);
   placeLabels(edges, nodes, groups);
 
+  // Reframe around the content. Pins may be negative — a diagram has no
+  // top-left corner, and clamping them to one made it a wall to pile things
+  // against — so the finished geometry is translated to start at one grid
+  // margin. `origin` is that translation: the canvas subtracts it again when
+  // writing a pin, so what lands in the YAML stays in the model's own
+  // coordinates and never drifts as the drawing grows.
   const extents = [...nodes, ...groups];
+  const minX = Math.min(0, ...extents.map((n) => n.x));
+  const minY = Math.min(0, ...extents.map((n) => n.y));
+  const origin = { x: minX < 0 ? GRID - minX : 0, y: minY < 0 ? GRID - minY : 0 };
+  if (origin.x || origin.y) {
+    for (const n of extents) {
+      n.x += origin.x;
+      n.y += origin.y;
+    }
+    for (const e of edges) {
+      for (const p of e.points) {
+        p.x += origin.x;
+        p.y += origin.y;
+      }
+      e.labelAt.x += origin.x;
+      e.labelAt.y += origin.y;
+    }
+    pinnedMaxX += origin.x;
+  }
+
   const width = Math.max(pinnedMaxX, ...extents.map((n) => n.x + n.width), 0) + GRID;
   const height = Math.max(...extents.map((n) => n.y + n.height), 0) + GRID;
-  return { nodes, edges, groups, width, height };
+  return { nodes, edges, groups, width, height, origin };
 }
 
 /**

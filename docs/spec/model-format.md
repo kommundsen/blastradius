@@ -150,11 +150,24 @@ real ELK compound, so the members are laid out *together* and ELK sizes the
 box. A group holding a pinned member cannot be — pinned nodes never enter the
 ELK graph — so its boundary is a box drawn round the finished geometry
 instead: the user has taken manual control of where those nodes sit, and the
-boundary follows rather than overrides. In the canvas the drawn box is then
-grown to cover its members' real rendered heights, because a `.node` is
-content-sized and a long name wraps taller than layout's per-kind estimate;
-the SVG path needs no such correction, since there nodes and boundaries use
-the same numbers.
+boundary follows rather than overrides. The canvas still grows the drawn box
+to its members' real rendered heights afterwards, though since 0.6.3 it also
+*measures* those heights before laying out (below), so the correction has
+little left to do; the SVG path needs none, since there nodes and boundaries
+use the same numbers.
+
+### Node sizes are measured, not estimated (0.6.3)
+
+`layout.js` carries a per-kind size estimate, and a `.node` is content-sized:
+a name that wraps to three lines renders taller than any estimate. Layout that
+reserved the estimate handed the overflow to whatever sat below — invisible on
+a small diagram, where the inter-layer gap absorbed it, and increasingly not
+invisible as a diagram filled up.
+
+The canvas now measures each node with the real markup and the real
+stylesheet, offscreen in one reflow, and passes the results to `layoutView`
+(`options.sizes`). Headless callers — the SVG export and the exported viewer —
+have no DOM and keep the estimate, which is what it is for.
 
 ## 3b. Deployment (ADR-0018)
 
@@ -231,6 +244,11 @@ include-context: true       # show people/externals related to scope (default tr
 - Elements absent from `layout:` are auto-placed (ADR-0006). Pinning is the
   exception, not the rule.
 - Grid units, not pixels: layouts survive zoom and density changes.
+- **Coordinates may be negative.** A diagram has no top-left corner; the
+  canvas reframes around whatever is drawn, translating the finished geometry
+  so nothing renders off-edge and reporting the shift so a pin written back
+  stays in the model's own coordinates. Pins were clamped to the positive
+  quadrant until 0.6.3, which made the origin a wall to pile things against.
 - A workspace with zero view files is valid — every level renders fully
   auto-laid-out.
 - `scope:` is required except on an `LD` overview, the one view whose subject

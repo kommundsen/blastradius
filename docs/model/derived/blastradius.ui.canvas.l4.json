@@ -4,7 +4,7 @@
   "extractor": "blastradius-extract-ts 0.2.0",
   "component": "blastradius.ui.canvas",
   "root": "ui/js",
-  "sourceDigest": "sha256:14b726e892bf4fd8aa8df9d8dfb9bea00171bf957878b6c52390616034832c5b",
+  "sourceDigest": "sha256:56c34a62094d3794b84056ce04d2405fae9c32d17484dda3c797f588ac84b3e0",
   "elements": [
     {
       "id": "app",

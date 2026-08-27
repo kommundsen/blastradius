@@ -790,6 +790,31 @@ Everything above is covered by tests, but two of these bugs existed
   offer, and follow the prompt through to a model — the 5-minute-stranger
   run, which is now a much shorter path than it was.
 
+## Canvas findings (2026-08-26, second tester round)
+
+Two reports from using 0.6.2 on real models, both reproduced before fixing.
+
+**Dense diagrams put nodes on top of each other.** Not a layout-engine
+problem: ELK's own geometry had zero overlaps. `layout.js` reserves a
+per-kind size *estimate* while a `.node` is content-sized, so a wrapped name
+renders taller than reserved and the overflow ran into the row below —
+measured at 79–100px against a 76px reservation on a 16-component view, 15 of
+16 nodes over. Small diagrams hid it in the 80px inter-layer gap; full ones
+did not. The canvas now measures with the real markup and stylesheet before
+laying out, and the gap comes back to a full 80px at every height.
+
+**"Elements land top-left and are hard to move."** The drag handler clamped
+pins with `Math.max(0, …)`, so nothing could be dragged above or left of the
+origin — the corner was a wall to pile things against. Pins may now be
+negative; layout reframes around whatever is drawn and reports the
+translation, so what reaches the YAML stays in model coordinates. This is the
+"infinite canvas" ask: the canvas already fits and centres content, so the
+constraint was the clamp rather than any extent.
+
+Still open from the same round: the agent skill wants restructuring into a
+workflow that interviews the user (level of detail, ADRs, introspection,
+deployment) rather than a single reference primer — see the note below.
+
 ## 0.6.2 — released (2026-08-26): L4 works on an installed build
 
 **Cut 2026-08-26.** L4 introspection was unusable on every packaged build

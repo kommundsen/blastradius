@@ -2,7 +2,7 @@
 // The Core owns truth; this file owns pixels. No write path exists here.
 
 import { computeView, findViewDef, docsFor, treeModel, rootOf, depthOf, liftTo, resolvePins, derivedGraphFor, environments } from './data.js';
-import { layoutView, GRID, groupDivs, fitGroupBoxes } from './layout.js';
+import { layoutView, GRID, groupDivs, fitGroupBoxes, nodeSize } from './layout.js';
 import { viewSvg, kicker, childCount } from './svg.js';
 import { edgeLabelLines } from './labels.js';
 import { HELP_PAGES, helpBody, helpLinkTarget } from './help.js';
@@ -338,8 +338,15 @@ async function renderCanvas({ animate = true } = {}) {
   const snap = effectiveSnapshot();
   const viewDef = findViewDef(snap, state.level, state.scope);
   const view = computeView(snap, state.level, state.scope, viewDef?.include_context ?? true);
+  // Hoisted: measuring the nodes before layout needs it (see measureNodes).
+  const elById = new Map([...snap.elements, ...view.nodes].map((e) => [e.id, e]));
+  // view.nodes carry the element objects themselves — at L4 those are
+  // derived elements that exist nowhere in snap.elements.
+  const childListFor = (el) =>
+    el.derived ? (derivedGraphFor(snap, el.id)?.elements ?? []) : state.snapshot.elements;
   const layout = await layoutView(elk, view, resolvePins(viewDef, view), {
     groups: viewDef?.show_groups ?? false,
+    sizes: measureNodes(view, elById, childListFor),
   });
   state.layout = layout;
 
@@ -350,11 +357,6 @@ async function renderCanvas({ animate = true } = {}) {
   // Boundaries first: they sit behind their members (--z-group) and must not
   // intercept clicks meant for the nodes inside them.
   for (const box of groupDivs(layout, document)) els.nodes.appendChild(box);
-  // view.nodes carry the element objects themselves — at L4 those are
-  // derived elements that exist nowhere in snap.elements.
-  const elById = new Map([...snap.elements, ...view.nodes].map((e) => [e.id, e]));
-  const childListFor = (el) =>
-    el.derived ? (derivedGraphFor(snap, el.id)?.elements ?? []) : state.snapshot.elements;
   const changeById = diffChangeMap();
   const conflictById = conflictMap();
   const movedPins = state.showLayoutDiff ? movedPinIds(viewDef) : new Set();
@@ -451,6 +453,46 @@ async function renderCanvas({ animate = true } = {}) {
   applyCamera();
   renderBreadcrumb();
   syncLevelSeg();
+}
+
+/** The size each node will actually render at.
+ *
+ * `nodeSize` in layout.js is a per-kind estimate, and a `.node` is
+ * content-sized: a name that wraps to three lines is taller than the estimate,
+ * so layout reserved too little and the overflow ran into whatever sat below.
+ * With few nodes the inter-layer gap hid it; with many it did not.
+ *
+ * Measured with the real markup and the real stylesheet, offscreen, in one
+ * reflow — the same trick `fitGroupBoxes` uses on group boxes after the fact,
+ * done before layout instead so the geometry is right the first time.
+ */
+function measureNodes(view, elById, childListFor) {
+  const probe = document.createElement('div');
+  probe.style.cssText =
+    'position:absolute;left:-10000px;top:0;visibility:hidden;pointer-events:none';
+  els.nodes.appendChild(probe);
+
+  const divs = view.nodes.map((n) => {
+    const el = elById.get(n.id) ?? n;
+    const d = document.createElement('div');
+    d.className = nodeClass(el);
+    // Width comes from the estimate and is authoritative — it is what the
+    // renderer sets. Only height is left to the content.
+    d.style.cssText = `width:${nodeSize(el).width}px;position:absolute`;
+    const kids = childCount(el, childListFor(el));
+    d.innerHTML =
+      `<span class="node-kicker">${esc(kicker(el))}</span>` +
+      `<span class="node-title">${esc(el.name)}</span>` +
+      (kids ? `<span class="node-meta">${kids}</span>` : '');
+    probe.appendChild(d);
+    return [n.id, d, nodeSize(el).width];
+  });
+
+  const sizes = new Map(
+    divs.map(([id, d, width]) => [id, { width, height: Math.ceil(d.offsetHeight) }])
+  );
+  probe.remove();
+  return sizes;
 }
 
 function nodeClass(el) {
@@ -1752,14 +1794,25 @@ function beginNodeDrag(ev, node, div) {
     if (!moved) return;
     const dx = (up.clientX - start.x) / scale;
     const dy = (up.clientY - start.y) / scale;
-    const gx = Math.max(0, Math.round((orig.x + dx) / GRID));
-    const gy = Math.max(0, Math.round((orig.y + dy) / GRID));
+    // The drop lands in *render* space, which is where the other nodes are,
+    // so the free-spot scan happens there too.
+    const rx = Math.round((orig.x + dx) / GRID);
+    const ry = Math.round((orig.y + dy) / GRID);
     // minimum distance: a drop may not land a node against its neighbours —
     // nudge to the nearest clear grid cell (deterministic ring scan)
-    const [fx, fy] = freePinSpot(gx, gy, node);
+    const [fx, fy] = freePinSpot(rx, ry, node);
+    // Convert to model space on the way out. Pins may be negative: a diagram
+    // has no top-left corner, and clamping them to one turned it into a wall
+    // to pile things against. Layout reframes around the content and reports
+    // the translation it used, so what reaches the YAML stays in the model's
+    // own coordinates however far the drawing grows in any direction.
+    const origin = state.layout.origin ?? { x: 0, y: 0 };
     const viewDef = findViewDef(effectiveSnapshot(), state.level, state.scope);
     await applyOp({ op: 'pin', view: viewDef?.id ?? null, level: state.level,
-      scope: state.scope, id: node.id, x: fx, y: fy });
+      scope: state.scope,
+      id: node.id,
+      x: fx - Math.round(origin.x / GRID),
+      y: fy - Math.round(origin.y / GRID) });
   };
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);
@@ -1784,7 +1837,9 @@ function freePinSpot(gx, gy, node) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
         const x = gx + dx;
         const y = gy + dy;
-        if (x >= 0 && y >= 0 && fits(x, y)) return [x, y];
+        // No quadrant guard: render space starts at the content, and a
+        // neighbouring cell above or left of the drop is a fine answer.
+        if (fits(x, y)) return [x, y];
       }
     }
   }
