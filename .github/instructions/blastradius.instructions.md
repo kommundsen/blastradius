@@ -1,14 +1,11 @@
 ---
-name: blastradius
-description: Query and edit this repo's Blastradius C4 architecture model (YAML workspace). Use when working with the architecture model, ADRs, or when a change affects modelled components.
+description: Blastradius C4 architecture model in this repo
+applyTo: '**'
 ---
 
-# Working with the Blastradius model
-
-Workflows live in slash commands rather than in here, because a skill loads
-on its own and an interview should not: `/blastradius:model` builds a model
-by asking first, `/blastradius:sync` brings it back in step with the code,
-and `/blastradius:review` judges it. This file is the reference they lean on.
+The modelling workflows are prompt files: `/blastradius-model` builds a
+model by interviewing you first, `/blastradius-sync` brings it back in step
+with the code, and `/blastradius-review` judges it.
 
 This repository contains a Blastradius workspace in `docs/` — a C4
 architecture model as plain YAML (blastradius.yaml + model/ + views/),
