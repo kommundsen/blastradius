@@ -93,6 +93,7 @@ export function viewSvg({ layout, elements, colors, fontCss = '', footer = true 
     if (el.kind === 'person') {
       out += `<circle cx="${n.x + n.width / 2}" cy="${n.y - 1}" r="5" fill="${fill === 'none' ? colors.bg : fill}" stroke="${stroke}"/>\n`;
     }
+    // A container's text sits at the top of a tall box, not centred in it.
     const kick = (kicker(el) || '').toUpperCase();
     out += `<text class="k" x="${n.x + 10}" y="${n.y + 18}">${esc(kick)}</text>\n`;
     out += `<text class="t" x="${n.x + 10}" y="${n.y + 36}">${esc(el.name.toUpperCase())}</text>\n`;

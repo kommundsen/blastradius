@@ -33,6 +33,7 @@ test('renders L1 plus every defined view, with real content', () => {
     'blastradius-core-L3.svg',
     'context-L1.svg',
     'deployment-LD.svg',
+    'dev-machine-LD.svg',
   ]);
   assert.match(files['context-L1.svg'], /BLASTRADIUS/);
   assert.match(files['blastradius-L2.svg'], /APP SHELL/);

@@ -4,7 +4,7 @@
   "extractor": "blastradius-extract-rust 0.3.0",
   "component": "blastradius.core.model-service",
   "root": "crates/blastradius-core/src",
-  "sourceDigest": "sha256:ffab78a1623e59ddd665ce791e2fcc60dbb877881805bdee2b9b57bcb98019fd",
+  "sourceDigest": "sha256:6456070a74abb9054f17d5bd5b01eab41272dc84f8f26e470ec978d117cb6e0a",
   "elements": [
     {
       "id": "dep.marked_yaml",
@@ -38,7 +38,7 @@
       "name": "DerivedEdge",
       "parent": "model",
       "path": "crates/blastradius-core/src/model.rs",
-      "line": 197
+      "line": 208
     },
     {
       "id": "model.DerivedElement",
@@ -46,7 +46,7 @@
       "name": "DerivedElement",
       "parent": "model",
       "path": "crates/blastradius-core/src/model.rs",
-      "line": 182
+      "line": 193
     },
     {
       "id": "model.DerivedGraph",
@@ -54,7 +54,7 @@
       "name": "DerivedGraph",
       "parent": "model",
       "path": "crates/blastradius-core/src/model.rs",
-      "line": 160
+      "line": 171
     },
     {
       "id": "model.Direction",
@@ -62,7 +62,7 @@
       "name": "Direction",
       "parent": "model",
       "path": "crates/blastradius-core/src/model.rs",
-      "line": 108
+      "line": 113
     },
     {
       "id": "model.Doc",
@@ -70,7 +70,7 @@
       "name": "Doc",
       "parent": "model",
       "path": "crates/blastradius-core/src/model.rs",
-      "line": 149
+      "line": 160
     },
     {
       "id": "model.Element",
@@ -94,7 +94,7 @@
       "name": "Relation",
       "parent": "model",
       "path": "crates/blastradius-core/src/model.rs",
-      "line": 115
+      "line": 120
     },
     {
       "id": "model.SourceMapping",
@@ -102,7 +102,7 @@
       "name": "SourceMapping",
       "parent": "model",
       "path": "crates/blastradius-core/src/model.rs",
-      "line": 93
+      "line": 98
     },
     {
       "id": "model.View",
@@ -110,7 +110,7 @@
       "name": "View",
       "parent": "model",
       "path": "crates/blastradius-core/src/model.rs",
-      "line": 132
+      "line": 137
     },
     {
       "id": "model.Workspace",
@@ -118,7 +118,7 @@
       "name": "Workspace",
       "parent": "model",
       "path": "crates/blastradius-core/src/model.rs",
-      "line": 205
+      "line": 216
     },
     {
       "id": "parse",

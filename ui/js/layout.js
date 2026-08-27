@@ -81,6 +81,13 @@ export async function layoutView(elk, view, pins = {}, options = {}) {
   // is below. Falls back to the estimate, which is what the estimate is for.
   const sizeOf = (el) => options.sizes?.get(el.id) ?? nodeSize(el);
 
+  // Containment mode (ADR-0018): a deployment view drawn as boxes inside
+  // boxes instead of one altitude at a time. The tree comes from the elements'
+  // own `parent`, restricted to what is visible, and a node with children is
+  // laid out by ELK as a compound and rendered as a node that happens to have
+  // room inside it.
+  const nestChildren = options.nested ? childrenByParent(unpinned) : null;
+
   // Groups that ELK can lay out as real compounds: every member unpinned.
   // A group with a pinned member cannot be one — pinned nodes never enter the
   // ELK graph — so it falls back to a box drawn round the finished geometry.
@@ -93,10 +100,16 @@ export async function layoutView(elk, view, pins = {}, options = {}) {
     id: 'root',
     layoutOptions: {
       ...LAYOUT_OPTIONS,
-      ...(compoundGroups.size ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' } : {}),
+      ...(compoundGroups.size || nestChildren?.kids.size
+        ? { 'elk.hierarchyHandling': 'INCLUDE_CHILDREN' }
+        : {}),
       ...extraOptions,
     },
-    children: [
+    children: nestChildren
+      ? unpinned
+          .filter((el) => !nestChildren.parentOf.has(el.id))
+          .map((el) => nestedNode(el, nestChildren, sizeOf))
+      : [
       ...unpinned.filter((el) => !inCompound.has(el.id)).map((el) => ({ id: el.id, ...sizeOf(el) })),
       ...[...compoundGroups.entries()].map(([label, members]) => ({
         id: groupId(label),
@@ -134,7 +147,14 @@ export async function layoutView(elk, view, pins = {}, options = {}) {
       const y = child.y + oy;
       origins.set(child.id, { x, y });
       if (child.children?.length) {
-        laidGroups.push({ id: child.id, x, y, width: child.width, height: child.height });
+        if (nestChildren) {
+          // A container, not a boundary: it keeps its kicker, its name and its
+          // dive. Pushed before its children so the DOM order paints it behind
+          // them.
+          nodes.push({ id: child.id, x, y, width: child.width, height: child.height, contains: true });
+        } else {
+          laidGroups.push({ id: child.id, x, y, width: child.width, height: child.height });
+        }
         absorb(child.children, x, y);
       } else {
         nodes.push({ id: child.id, x, y, width: child.width, height: child.height });
@@ -366,6 +386,41 @@ export function fitGroupBoxes(container, layout) {
   }
 }
 
+/** Containment padding: the same side/bottom as a group boundary, with a
+ * taller top because a container carries a kicker and a name, not one label
+ * strip. */
+const NEST_PAD = { top: 52, side: 16, bottom: 16 };
+
+/** Parent -> children among the visible nodes, plus the reverse. Only real
+ * containment counts: an element whose parent is not on screen is a root here,
+ * so a scoped view nests what it shows and nothing above it. */
+function childrenByParent(nodes) {
+  const visible = new Set(nodes.map((n) => n.id));
+  const kids = new Map();
+  const parentOf = new Map();
+  for (const el of nodes) {
+    if (!el.parent || !visible.has(el.parent)) continue;
+    parentOf.set(el.id, el.parent);
+    if (!kids.has(el.parent)) kids.set(el.parent, []);
+    kids.get(el.parent).push(el);
+  }
+  return { kids, parentOf };
+}
+
+/** One node of the ELK containment tree: a leaf keeps its measured size, a
+ * container is sized by ELK around what it holds. */
+function nestedNode(el, tree, sizeOf) {
+  const kids = tree.kids.get(el.id);
+  if (!kids?.length) return { id: el.id, ...sizeOf(el) };
+  return {
+    id: el.id,
+    layoutOptions: {
+      'elk.padding': `[top=${NEST_PAD.top},left=${NEST_PAD.side},bottom=${NEST_PAD.bottom},right=${NEST_PAD.side}]`,
+    },
+    children: kids.map((k) => nestedNode(k, tree, sizeOf)),
+  };
+}
+
 /** Padding between a group's boundary and its members; `top` leaves room for
  * the label strip. */
 const GROUP_PAD = { top: 28, side: 14, bottom: 14 };
@@ -457,8 +512,11 @@ function routeEdges(edges, nodes) {
     const from = byId.get(e.from);
     const to = byId.get(e.to);
     if (!from || !to || e.from === e.to) continue;
+    // A container is a region, not an obstacle: every edge to something inside
+    // it necessarily crosses it, and treating it as solid would send every
+    // line on a detour round the box it is already inside.
     const obstacles = nodes
-      .filter((n) => n.id !== e.from && n.id !== e.to)
+      .filter((n) => n.id !== e.from && n.id !== e.to && !n.contains)
       .map((n) => ({ x: n.x, y: n.y, w: n.width, h: n.height }));
     if (!obstacles.some((r) => polylineHitsRect(e.points, r))) continue;
     const detour = findDetour(from, to, obstacles);
@@ -548,7 +606,13 @@ function placeLabels(edges, nodes, groups = []) {
   // interior is where its members and their edges live, and treating the whole
   // rect as occupied would stampede every intra-group label out of the box.
   const boxes = [
-    ...nodes.map((n) => ({ x: n.x, y: n.y, w: n.width, h: n.height })),
+    // A container contributes only its label strip, for the same reason a
+    // group does: its interior is where its members live.
+    ...nodes.map((n) =>
+      n.contains
+        ? { x: n.x, y: n.y, w: n.width, h: GROUP_PAD.top }
+        : { x: n.x, y: n.y, w: n.width, h: n.height }
+    ),
     ...groups.map((g) => ({ x: g.x, y: g.y, w: g.width, h: GROUP_PAD.top })),
   ];
   const overlap = (a, b) => {

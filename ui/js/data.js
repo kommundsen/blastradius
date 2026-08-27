@@ -102,12 +102,18 @@ function computeDerivedView(snapshot, scope) {
  * lifted to the deepest visible ancestor of each endpoint and deduplicated;
  * self-loops after lifting are dropped.
  */
-export function computeView(snapshot, level, scope, includeContext = true) {
+export function computeView(snapshot, level, scope, includeContext = true, nested = false) {
   if (level === 'L4') return computeDerivedView(snapshot, scope);
   const els = byId(snapshot);
   const visible = new Map(); // id -> element
 
   const isContext = (el) => el.kind === 'person' || el.kind === 'external';
+
+  // Containment (ADR-0018): a deployment view can show its whole subtree in
+  // one frame instead of one altitude at a time. Only the depth changes —
+  // everything below (relation lifting, context, ordering) is untouched, and
+  // the renderer decides what nesting looks like.
+  const deep = nested && level === 'LD';
 
   if (level === 'L1') {
     for (const el of snapshot.elements) {
@@ -118,6 +124,13 @@ export function computeView(snapshot, level, scope, includeContext = true) {
     // of L1 (ADR-0018). Diving into one shows its nodes.
     for (const el of snapshot.elements) {
       if (el.kind === 'environment') visible.set(el.id, el);
+    }
+    if (deep) {
+      // Every environment plus everything inside it.
+      const roots = [...visible.keys()];
+      for (const el of snapshot.elements) {
+        if (roots.some((r) => el.id.startsWith(r + '.'))) visible.set(el.id, el);
+      }
     }
     // Plus the people and external systems the deployment actually touches —
     // unlike L1, which shows every context element, this is relation-driven:
@@ -136,9 +149,8 @@ export function computeView(snapshot, level, scope, includeContext = true) {
     const scopeDepth = depthOf(scope);
     const childDepth = scopeDepth + 1;
     for (const el of snapshot.elements) {
-      if (el.id.startsWith(scope + '.') && depthOf(el.id) === childDepth) {
-        visible.set(el.id, el);
-      }
+      if (!el.id.startsWith(scope + '.')) continue;
+      if (deep || depthOf(el.id) === childDepth) visible.set(el.id, el);
     }
     // Context and sibling elements join only when a relation touches the
     // scope's strict *interior* — a relation to the bare scope element has no

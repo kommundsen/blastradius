@@ -83,3 +83,15 @@ test('the deployment altitude still works alongside it', async ({ page }) => {
   await expect(page.locator('.node.is-environment')).not.toHaveCount(0);
   expect(page.errors).toEqual([]);
 });
+
+test('a nested deployment view exports as containment, not as a dive', async ({ page }) => {
+  // `nested: true` is a view option (ADR-0018), so the export has to honour
+  // it or the shared file disagrees with the app about what the view is.
+  await pick(page, 'D');
+  await page.locator('#nodes .node', {
+    has: page.locator('.node-title', { hasText: 'Developer Machine' }),
+  }).dblclick();
+  await expect(page.locator('.node.is-nested')).not.toHaveCount(0);
+  await expect(page.locator('.node.is-container-instance')).not.toHaveCount(0);
+  expect(page.errors).toEqual([]);
+});

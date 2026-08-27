@@ -92,10 +92,13 @@
   }
 
   async function renderCanvas() {
-    const view = computeView(snap, state.level, state.scope);
     const viewDef = findViewDef(snap, state.level, state.scope);
+    const view = computeView(
+      snap, state.level, state.scope, viewDef?.include_context ?? true, viewDef?.nested ?? false
+    );
     const layout = await layoutView(elk, view, resolvePins(viewDef, view), {
       groups: viewDef?.show_groups ?? false,
+      nested: viewDef?.nested ?? false,
     });
     state.layout = layout;
 
@@ -108,8 +111,11 @@
     for (const n of layout.nodes) {
       const el = elById.get(n.id);
       const div = document.createElement('div');
-      div.className = nodeClass(el) + (state.selected === n.id ? ' is-active' : '');
-      div.style.cssText = `left:${n.x}px;top:${n.y}px;width:${n.width}px;position:absolute`;
+      div.className = nodeClass(el) + (state.selected === n.id ? ' is-active' : '') +
+        (n.contains ? ' is-nested' : '');
+      div.style.cssText = n.contains
+        ? `left:${n.x}px;top:${n.y}px;width:${n.width}px;height:${n.height}px;position:absolute`
+        : `left:${n.x}px;top:${n.y}px;width:${n.width}px;position:absolute`;
       div.tabIndex = 0;
       div.dataset.id = n.id;
       div.innerHTML =

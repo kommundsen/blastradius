@@ -339,7 +339,9 @@ async function renderCanvas({ animate = true } = {}) {
   els.edgeLayer.style.pointerEvents = 'none';
   const snap = effectiveSnapshot();
   const viewDef = findViewDef(snap, state.level, state.scope);
-  const view = computeView(snap, state.level, state.scope, viewDef?.include_context ?? true);
+  const view = computeView(
+    snap, state.level, state.scope, viewDef?.include_context ?? true, viewDef?.nested ?? false
+  );
   // Hoisted: measuring the nodes before layout needs it (see measureNodes).
   const elById = new Map([...snap.elements, ...view.nodes].map((e) => [e.id, e]));
   // view.nodes carry the element objects themselves — at L4 those are
@@ -348,6 +350,7 @@ async function renderCanvas({ animate = true } = {}) {
     el.derived ? (derivedGraphFor(snap, el.id)?.elements ?? []) : state.snapshot.elements;
   const layout = await layoutView(elk, view, resolvePins(viewDef, view), {
     groups: viewDef?.show_groups ?? false,
+    nested: viewDef?.nested ?? false,
     sizes: measureNodes(view, elById, childListFor),
   });
   state.layout = layout;
@@ -376,7 +379,12 @@ async function renderCanvas({ animate = true } = {}) {
       : change === 'changed' ? ['~', 'Modified vs base']
       : movedPins.has(n.id) ? ['⌖', 'Pin moved (layout only)']
       : null;
-    div.style.cssText = `left:${n.x}px;top:${n.y}px;width:${n.width}px;position:absolute`;
+    // A container (ADR-0018 nesting) is sized by the layout in both axes and
+    // painted behind what it holds; every other node is content-sized.
+    div.style.cssText = n.contains
+      ? `left:${n.x}px;top:${n.y}px;width:${n.width}px;height:${n.height}px;position:absolute`
+      : `left:${n.x}px;top:${n.y}px;width:${n.width}px;position:absolute`;
+    if (n.contains) div.classList.add('is-nested');
     div.tabIndex = 0;
     div.setAttribute('role', 'button');
     div.dataset.id = n.id;

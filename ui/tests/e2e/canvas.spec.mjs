@@ -132,24 +132,59 @@ test('LD: dive the deployment tree down to a container instance', async ({ page 
   await expect(page.locator('#edges text.edge-label')).toContainText(['triggers on push']);
   await page.screenshot({ path: 'test-results/webkit-LD-overview.png', fullPage: true });
 
-  await node('Developer Machine').dblclick();
-  await expect(node('Windows 11 Workstation')).toBeVisible();
-  await node('Windows 11 Workstation').dblclick();
-  await expect(node('Terminal')).toBeVisible();
-
-  // One more step reaches the containers actually running there, named
-  // after the containers they instantiate.
-  await node('Blastradius (dev build)').dblclick();
-  await expect(page.locator('.node.is-container-instance')).toHaveCount(3);
-  await expect(node('Canvas UI')).toBeVisible();
-  await expect(node('Canvas UI').locator('.node-kicker')).toContainText('Container instance');
-  await expect(page.locator('#breadcrumb')).toContainText('Blastradius (dev build)');
+  // CI has no view of its own, so it dives one altitude at a time — the
+  // product's default everywhere.
+  await node('GitHub Actions').dblclick();
+  await expect(node('ubuntu-latest Runner')).toBeVisible();
+  await expect(page.locator('.node.is-nested')).toHaveCount(0);
+  await node('windows-latest Runner').dblclick();
+  await expect(node('MSIX Packaging')).toBeVisible();
+  await expect(page.locator('#breadcrumb')).toContainText('windows-latest Runner');
   await page.screenshot({ path: 'test-results/webkit-LD.png', fullPage: true });
 
   // Escape climbs back out of the tree.
   await page.locator('#canvas').click({ position: { x: 5, y: 5 } });
   await page.keyboard.press('Escape');
-  await expect(node('Terminal')).toBeVisible();
+  await expect(node('ubuntu-latest Runner')).toBeVisible();
+  expect(page.errors).toEqual([]);
+});
+
+// Containment is opt-in per view (ADR-0018): the developer machine declares
+// `nested: true`, so diving into it draws boxes inside boxes instead of one
+// altitude at a time. It is the one place the product does this, which is why
+// the CI environment above still dives.
+test('LD: a view with nested:true draws containment in one frame', async ({ page }) => {
+  const node = (title) =>
+    page.locator('#nodes .node', { has: page.locator('.node-title', { hasText: title }) });
+  await page.locator('#level-seg .seg-opt', { hasText: 'D' }).click();
+  await node('Developer Machine').dblclick();
+
+  const workstation = node('Windows 11 Workstation');
+  await expect(workstation).toHaveClass(/is-nested/);
+  // Two altitudes below the workstation, in the same frame: the containers
+  // actually running, named after what they instantiate.
+  await expect(node('Blastradius (dev build)')).toHaveClass(/is-nested/);
+  await expect(page.locator('.node.is-container-instance')).toHaveCount(4);
+  await expect(node('Canvas UI')).toBeVisible();
+  await expect(node('Canvas UI').locator('.node-kicker')).toContainText('Container instance');
+
+  // Every child is drawn inside its container's box, and behind nothing.
+  const boxes = await page.locator('#nodes .node').evaluateAll((els) =>
+    Object.fromEntries(els.map((e) => {
+      const r = e.getBoundingClientRect();
+      return [e.dataset.id, { l: r.left, t: r.top, r: r.right, b: r.bottom }];
+    }))
+  );
+  const host = boxes['dev-machine.workstation'];
+  for (const id of Object.keys(boxes)) {
+    if (!id.startsWith('dev-machine.workstation.')) continue;
+    const c = boxes[id];
+    expect(
+      c.l >= host.l - 1 && c.t >= host.t - 1 && c.r <= host.r + 1 && c.b <= host.b + 1,
+      `${id} escaped its container`
+    ).toBe(true);
+  }
+  await page.screenshot({ path: 'test-results/webkit-LD-nested.png', fullPage: true });
   expect(page.errors).toEqual([]);
 });
 

@@ -341,3 +341,48 @@ fn a_non_numeric_replicas_is_an_error_with_a_line() {
     assert!(e.iter().any(|d| d.message.contains("not a whole number")), "{diags:?}");
     assert!(e.iter().all(|d| d.line > 0), "diagnostics must carry a line: {e:?}");
 }
+
+// ---- nested display (ADR-0018 follow-up) -----------------------------------
+// C4 conventionally draws deployment as boxes inside boxes; this product draws
+// one altitude at a time everywhere else and does not want two ways of saying
+// "what is inside". So containment is an opt-in per *view*, and only on the
+// one level where it is the convention.
+
+#[test]
+fn a_deployment_view_can_ask_for_containment() {
+    let t = temp("nested-view");
+    write(&t.dir, "blastradius.yaml", MANIFEST);
+    write(&t.dir, "model/shop.yaml", SYSTEM);
+    write(&t.dir, "model/deployment.yaml", DEPLOYMENT);
+    write(
+        &t.dir,
+        "views/prod.yaml",
+        "view: prod\nname: Production\nscope: production\nlevel: LD\nnested: true\n",
+    );
+    let (ws, diags) = blastradius_core::load_workspace(&t.dir);
+    assert!(!has_errors(&diags), "{diags:?}");
+    let v = ws.views.iter().find(|v| v.id == "prod").expect("view");
+    assert!(v.nested, "`nested: true` did not reach the view");
+}
+
+#[test]
+fn nesting_outside_deployment_is_a_warning_not_a_silent_no_op() {
+    let t = temp("nested-wrong-level");
+    write(&t.dir, "blastradius.yaml", MANIFEST);
+    write(&t.dir, "model/shop.yaml", SYSTEM);
+    write(&t.dir, "model/deployment.yaml", DEPLOYMENT);
+    write(
+        &t.dir,
+        "views/containers.yaml",
+        "view: containers\nscope: shop\nlevel: L2\nnested: true\n",
+    );
+    let (ws, diags) = blastradius_core::load_workspace(&t.dir);
+    // Still a valid workspace — the key is ignored, not fatal.
+    assert!(!has_errors(&diags), "{diags:?}");
+    assert!(
+        diags.iter().any(|d| d.message.contains("deployment-only")),
+        "an ignored key must say so: {diags:?}"
+    );
+    let v = ws.views.iter().find(|v| v.id == "containers").expect("view");
+    assert!(!v.nested, "nesting leaked onto an L2 view");
+}

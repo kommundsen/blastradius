@@ -17,7 +17,14 @@ fn repo_docs_workspace_is_valid() {
     // 25 logical + 20 deployment (ADR-0018): 3 environments, 8 nodes, 9 instances.
     assert_eq!(ws.elements.len(), 45, "element count changed — update this test with the model");
     assert_eq!(ws.docs.len(), 29, "registered doc count changed");
-    assert_eq!(ws.views.len(), 3);
+    // L1 is implicit; the four files are containers (L2), core components
+    // (L3), the deployment overview, and the nested developer machine.
+    assert_eq!(ws.views.len(), 4);
+    assert_eq!(
+        ws.views.iter().filter(|v| v.nested).count(),
+        1,
+        "the dogfood model exercises the nested deployment view (ADR-0018)"
+    );
     assert_eq!(
         ws.elements.values().filter(|e| e.kind.is_deployment()).count(),
         20,

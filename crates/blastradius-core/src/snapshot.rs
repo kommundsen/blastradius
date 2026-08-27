@@ -104,6 +104,8 @@ pub struct SnapView {
     pub include_context: bool,
     /// Draw `group:` boundaries in this view (spec §3c); off by default.
     pub show_groups: bool,
+    /// Draw a deployment view as boxes inside boxes (ADR-0018); off by default.
+    pub nested: bool,
 }
 
 #[derive(Serialize)]
@@ -193,6 +195,7 @@ pub fn snapshot(vfs: &dyn Vfs, ws: &Workspace, diags: &[Diagnostic]) -> Snapshot
             layout: v.layout.clone(),
             include_context: v.include_context,
             show_groups: v.show_groups,
+            nested: v.nested,
         })
         .collect();
 

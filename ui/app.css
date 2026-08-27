@@ -254,3 +254,19 @@ select.input { appearance: auto; }
 }
 .palette-empty, .palette-foot { padding: var(--space-3) var(--space-4); font-size: var(--text-xs); }
 .palette-foot { border-top: 1px solid var(--color-divider); }
+
+/* ---- nested deployment containers (ADR-0018) ----------------------------- */
+/* A container is still a node — kicker, name, dive — that happens to have room
+   inside it. So: same border and type, sized by the layout rather than by its
+   content, text at the top, and painted behind its members. Deliberately not
+   a `.group-box`: a boundary has no identity, and this one does. */
+.node.is-nested {
+  justify-content: flex-start;
+  z-index: var(--z-group, 1);
+  background: var(--node-fill-nested, color-mix(in srgb, var(--node-fill) 55%, transparent));
+  box-shadow: none;
+}
+.node.is-nested.is-active { z-index: var(--z-group, 1); }
+/* Clicks land on whatever is under the pointer: the container answers for its
+   own padding, its members for themselves. */
+.node.is-nested > .node-meta { margin-top: auto; }

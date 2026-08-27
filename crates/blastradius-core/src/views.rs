@@ -46,6 +46,18 @@ pub fn parse_view_file(vfs: &dyn Vfs, rel: &str, ws: &mut Workspace, diags: &mut
         return;
     }
 
+    // Containment is the deployment picture; everywhere else the answer to
+    // "show me what is inside" is to dive, and two ways of saying it would be
+    // two things to learn.
+    let nested = yaml::get_str(map, "nested") == Some("true") && level == "LD";
+    if yaml::get_str(map, "nested") == Some("true") && level != "LD" {
+        diags.push(Diagnostic::warning(
+            rel,
+            yaml::field_line(map, "nested"),
+            format!("`nested: true` on an {level} view is ignored — nesting is deployment-only (ADR-0018)"),
+        ));
+    }
+
     let mut layout = BTreeMap::new();
     if let Some(Node::Mapping(pins)) = map.get_node("layout") {
         for (key, val) in pins.iter() {
@@ -80,6 +92,7 @@ pub fn parse_view_file(vfs: &dyn Vfs, rel: &str, ws: &mut Workspace, diags: &mut
         level,
         layout,
         show_groups: yaml::get_str(map, "show-groups") == Some("true"),
+        nested,
         include_context: yaml::get_str(map, "include-context") != Some("false"),
         file: rel.to_string(),
         line,

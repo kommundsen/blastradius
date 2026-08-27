@@ -160,3 +160,63 @@ test('wrapping is deterministic', async () => {
     b.nodes.map((n) => [n.id, n.x, n.y])
   );
 });
+
+test('nested mode lays children inside their parent', async () => {
+  // A deployment tree: one environment holding a node holding two instances.
+  const view = {
+    nodes: [
+      { id: 'prod.host', kind: 'deployment-node', name: 'Host', parent: 'prod' },
+      { id: 'prod.host.api', kind: 'container-instance', name: 'API', parent: 'prod.host' },
+      { id: 'prod.host.web', kind: 'container-instance', name: 'Web', parent: 'prod.host' },
+    ],
+    edges: [{ from: 'prod.host.api', to: 'prod.host.web', label: 'calls', direction: 'forward' }],
+  };
+  const laid = await layoutView(elk, view, {}, { nested: true });
+
+  const at = (id) => laid.nodes.find((n) => n.id === id);
+  const host = at('prod.host');
+  assert.ok(host?.contains, 'the parent was not laid out as a container');
+  for (const id of ['prod.host.api', 'prod.host.web']) {
+    const c = at(id);
+    assert.ok(
+      c.x >= host.x && c.y >= host.y &&
+        c.x + c.width <= host.x + host.width &&
+        c.y + c.height <= host.y + host.height,
+      `${id} is not inside its container`
+    );
+  }
+  // The container is painted before its members, so the DOM order puts it
+  // behind them.
+  assert.ok(
+    laid.nodes.indexOf(host) < laid.nodes.indexOf(at('prod.host.api')),
+    'a container must come before what it holds'
+  );
+});
+
+test('without nesting the same view is flat', async () => {
+  const view = {
+    nodes: [
+      { id: 'prod.host', kind: 'deployment-node', name: 'Host', parent: 'prod' },
+      { id: 'prod.host.api', kind: 'container-instance', name: 'API', parent: 'prod.host' },
+    ],
+    edges: [],
+  };
+  const laid = await layoutView(elk, view, {}, {});
+  assert.ok(laid.nodes.every((n) => !n.contains), 'nesting leaked into an ordinary view');
+});
+
+test('an edge into a container does not detour around it', async () => {
+  // A container is a region, not an obstacle: every edge to something inside
+  // it crosses it by definition.
+  const view = {
+    nodes: [
+      { id: 'prod.host', kind: 'deployment-node', name: 'Host', parent: 'prod' },
+      { id: 'prod.host.api', kind: 'container-instance', name: 'API', parent: 'prod.host' },
+      { id: 'prod.gw', kind: 'deployment-node', name: 'Gateway', parent: 'prod' },
+    ],
+    edges: [{ from: 'prod.gw', to: 'prod.host.api', label: 'routes', direction: 'forward' }],
+  };
+  const laid = await layoutView(elk, view, {}, { nested: true });
+  assert.equal(laid.edges.length, 1);
+  assert.ok(laid.edges[0].points.length <= 3, 'the edge was routed round the box it enters');
+});

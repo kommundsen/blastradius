@@ -220,6 +220,16 @@ environments:
   `replicas: 0` is an error — an element that runs none of itself is one
   you should delete, and a zero is far likelier to be a mistake than a
   statement.
+- **Containment is opt-in per view.** `nested: true` on an `LD` view draws
+  the scope's whole subtree in one frame — environments, nodes, and the
+  instances inside them — instead of one altitude at a time. Everywhere
+  else the answer to "what is inside this" is to dive, and two ways of
+  saying it would be two things to learn; deployment is the one place
+  where C4's convention is containment and a reader may genuinely want
+  the physical picture at once. A container is still a node (kicker,
+  name, dive), sized by the layout and painted behind its members, not a
+  `group:` boundary — a boundary has no identity and this does. On any
+  other level the key is ignored with a warning rather than silently.
 - **Imported from Structurizr** since 0.7.0: `deploymentEnvironment`,
   `deploymentNode` (nested to any depth), `infrastructureNode`, and
   `containerInstance` all map, and a node's trailing instance count
@@ -253,6 +263,9 @@ layout:                     # pinned positions — grid units (26px cells @ 1×)
   ui: [4, 2]
   core: [10, 4]
 show-groups: false          # draw `group:` boundaries (§3c) — default false
+nested: false               # LD only: draw the whole subtree as boxes inside
+                            # boxes rather than one altitude at a time
+                            # (ADR-0018) — default false; a warning elsewhere
 include-context: true       # show people/externals related to scope (default true)
                             # (honored by the renderer since 2026-08-22 — it was
                             # parsed-but-ignored before; core-components.yaml

@@ -1115,6 +1115,29 @@ and a zero is far likelier to be a mistake than a statement. Deliberately
 replicated, and dogfooding a fact that is not true would be worse than not
 dogfooding it — it is covered by fixtures instead.
 
+**Nested-box rendering, opt-in per view.** `nested: true` on an `LD` view
+draws the scope's whole subtree in one frame instead of one altitude at a
+time. Everywhere else the answer to "what is inside this" is to dive, and two
+ways of saying it would be two things to learn — deployment is the one place
+where C4's convention is containment and a reader may genuinely want the
+physical picture at once. On any other level the key is ignored *with a
+warning*, not silently.
+
+Substantially cheaper than when it was deferred, exactly as the pool
+predicted: 0.5.0's grouped elements had already built compound ELK layout,
+the absolutising walk, and the draw order. What was new is that a container
+here is a **node**, not a boundary — it keeps its kicker, its name, its
+inspector and its dive, and is merely large enough to hold its members. A
+`group:` box has no identity; this does. Two consequences fall out and are
+handled: a container is a region rather than an obstacle for edge routing (an
+edge into it crosses it by definition), and it contributes only its label
+strip to label de-collision.
+
+Dogfooded on a new `dev-machine` view, which says the thing the dive-based
+overview cannot: all three containers run in **one process on one
+workstation**. The overview above it deliberately stays dive-based, so the
+repo exercises both.
+
 **Structurizr deployment import.** `deploymentEnvironment` and
 `deploymentNode` were tokenised and thrown away through 0.6.x: a DSL that says
 where its containers run is telling you something the logical model cannot,

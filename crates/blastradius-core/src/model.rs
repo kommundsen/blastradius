@@ -147,6 +147,12 @@ pub struct View {
     /// grouping is presentation, and no existing diagram should change shape
     /// because an element gained a label.
     pub show_groups: bool,
+    /// Draw a deployment view as boxes inside boxes rather than one altitude
+    /// at a time (ADR-0018 follow-up). Off by default and deployment-only:
+    /// the whole product is "one altitude, dive to go deeper", and this is the
+    /// one place where C4's convention is containment and a reader may want
+    /// the physical picture in a single frame.
+    pub nested: bool,
     pub file: String,
     pub line: u64,
 }

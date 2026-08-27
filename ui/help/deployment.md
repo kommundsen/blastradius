@@ -40,7 +40,7 @@ Three kinds:
 - **Container instance** — a container from your logical model, actually
   running somewhere. `container:` names it.
 
-## It dives, it does not nest
+## It dives — unless you ask it not to
 
 C4 conventionally draws deployment as boxes inside boxes. Blastradius draws it
 the way it draws everything else: **one altitude at a time**. The overview
@@ -49,6 +49,25 @@ what runs there.
 
 That keeps one navigation model across the whole product — what you learned
 flying through containers and components works unchanged here.
+
+Deployment is the one place where the containment picture is genuinely worth
+having in a single frame, so a deployment view can ask for it:
+
+```yaml
+view: dev-machine
+scope: dev-machine
+level: LD
+nested: true
+```
+
+Now that view draws the whole subtree at once: nodes as boxes with what runs
+inside them drawn inside them. Everything else still works — a container is
+still a node, so it keeps its kind, its name, its inspector and its dive; it
+is simply large enough to hold its members.
+
+It is per view and off by default, so switching one environment to containment
+leaves the rest diving. On any level other than `LD` the key is ignored, and
+says so.
 
 ## Instances are checked
 

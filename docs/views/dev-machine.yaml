@@ -1,0 +1,11 @@
+# LD, scoped and nested — the one place the product draws containment rather
+# than diving (ADR-0018). The developer machine is small enough to read in a
+# single frame, and what it is *saying* is that all three containers run inside
+# one process on one workstation, which a dive-per-altitude view splits across
+# two screens. The overview above it deliberately stays dive-based: this is an
+# option, not a new default.
+view: dev-machine
+name: Developer Machine
+scope: dev-machine
+level: LD
+nested: true
