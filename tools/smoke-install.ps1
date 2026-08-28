@@ -209,8 +209,32 @@ containers:
       # must make core stage the extractor into %LOCALAPPDATA% and run it from
       # there. WindowsApps permits reading the DLL but not loading it as an
       # assembly, which is what took C# introspection down in 0.6.2.
-      $staged = Join-Path $env:LOCALAPPDATA 'Blastradius'
-      if (-not (Test-Path (Join-Path $staged '*\dotnet\BlastradiusExtract.dll'))) {
+      #
+      # Both roots, because core falls back to TEMP when LOCALAPPDATA is unset
+      # (introspect.rs `extractor_cache`) — and the failure prints what it
+      # actually found, since "it did not stage" on its own sent the last two
+      # CI runs guessing.
+      $roots = @($env:LOCALAPPDATA, [System.IO.Path]::GetTempPath()) |
+        Where-Object { $_ } | ForEach-Object { Join-Path $_ 'Blastradius' }
+      $found = $roots | Where-Object { Test-Path $_ } | ForEach-Object {
+        Get-ChildItem $_ -Recurse -Filter 'BlastradiusExtract.dll' -ErrorAction SilentlyContinue
+      }
+      if (-not $found) {
+        Write-Host "    LOCALAPPDATA = $env:LOCALAPPDATA"
+        Write-Host "    TEMP         = $([System.IO.Path]::GetTempPath())"
+        foreach ($root in $roots) {
+          Write-Host "    $root exists: $(Test-Path $root)"
+          if (Test-Path $root) {
+            Get-ChildItem $root -Recurse -ErrorAction SilentlyContinue |
+              Select-Object -First 20 -ExpandProperty FullName |
+              ForEach-Object { Write-Host "      $_" }
+          }
+        }
+        $probe = Join-Path $bundle 'extractors\dotnet\.smoke-write-probe'
+        $stillWritable = $true
+        try { [System.IO.File]::WriteAllText($probe, ''); Remove-Item $probe -Force }
+        catch { $stillWritable = $false }
+        Write-Host "    extractor dir writable right now: $stillWritable"
         Fail 'the extractor was not staged out of the unwritable bundle - the 0.6.2 path did not run'
       }
       Write-Host '    extractor staged out of the read-only bundle, as it must be'
