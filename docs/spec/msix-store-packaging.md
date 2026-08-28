@@ -120,12 +120,21 @@ it, `init` on a repository that already has files keeps them, what it wrote
 validates, and both out-of-process extractors run - the C# one with an
 absolute repository root, which is the pair of faults 0.6.2 fixed.
 
-`-ReadOnly` denies write on the bundle first. That is what makes core stage
+`-ReadOnly` makes the bundle read-only first. That is what makes core stage
 the C# extractor into `%LOCALAPPDATA%` instead of running it in place, and it
 reaches the WindowsApps failure mode without needing an MSIX at all: a package
 directory permits *reading* the DLL but not loading it as an assembly. The run
 then asserts the staged copy exists, so the path is proved rather than merely
 traversed.
+
+Read-only means a **protected DACL** granting the current account read and
+execute, not a Deny ACE. `AddAccessRule` appends rather than canonicalising,
+so on an elevated account — which is what a CI runner is — the inherited
+Administrators Allow is evaluated first and a Deny never bites. The gate's
+first CI run passed every step and then reported that the extractor had not
+been staged, because the bundle had never actually been unwritable. It now
+probes the directory the same way core does before trusting the setup, and
+says so plainly if the machine would not co-operate.
 
 CI runs both passes on every push (the `installed` job, over a bundle staged
 from a release CLI build); the release workflow runs them again on the real

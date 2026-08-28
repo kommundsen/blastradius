@@ -993,6 +993,16 @@ A new `installed` job runs both passes on every push, and the release workflow
 runs them on the real staged archive before it is published, replacing an
 inline smoke that only checked the C# extractor.
 
+**Its own first CI run caught it out**, which is the most encouraging thing
+about it. Read-only was a Deny ACE, and `AddAccessRule` appends rather than
+canonicalising — so on an elevated account (a runner) the inherited
+Administrators Allow is evaluated first and the Deny never bites. Every step
+passed and then the staging assertion failed, correctly, because the bundle
+had never been unwritable. It is now a protected DACL granting read and
+execute, and the script probes the directory the same way core does before
+trusting its own setup. A gate that cannot tell you its precondition failed
+is a gate you will eventually believe by mistake.
+
 **Found while writing it**: `blastradius init --help` scaffolded a workspace
 into a folder literally called `--help`, and any mistyped flag scaffolded one
 named after the typo — the argument loop treated every unrecognised token as a

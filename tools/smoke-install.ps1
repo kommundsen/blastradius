@@ -22,13 +22,13 @@
 #   .\tools\smoke-install.ps1 -Cli dist\blastradius-0.7.0-windows-x64\blastradius.exe
 #   .\tools\smoke-install.ps1 -Cli blastradius.exe -Installed   # after Add-AppxPackage
 #
-# -ReadOnly denies write access to the bundle first, which is what makes core
-# stage the C# extractor into %LOCALAPPDATA% rather than run it in place. That
-# is the 0.6.2 code path, and it is reachable without an MSIX at all.
+# -ReadOnly makes the bundle read-only first, which is what makes core stage
+# the C# extractor into %LOCALAPPDATA% rather than run it in place. That is the
+# 0.6.2 code path, and it is reachable without an MSIX at all.
 param(
   [Parameter(Mandatory = $true)][string]$Cli,
   [switch]$Installed,      # the CLI came from a package: no extractors/ beside it to inspect
-  [switch]$ReadOnly,       # deny write on the bundle first (an install directory is not writable)
+  [switch]$ReadOnly,       # make the bundle read-only first (an install directory is)
   [switch]$SkipDotnet,     # no .NET runtime on this machine
   [switch]$SkipNode        # no node on this machine
 )
@@ -69,13 +69,40 @@ if (-not $Installed) {
 }
 
 if ($ReadOnly) {
-  Step '2b' 'denying write on the bundle'
-  $acl = Get-Acl $bundle
-  $deny = New-Object System.Security.AccessControl.FileSystemAccessRule(
+  Step '2b' 'making the bundle read-only'
+  # A *protected* DACL granting this account read+execute and nothing else —
+  # deliberately not a Deny ACE. AddAccessRule appends rather than
+  # canonicalising, so on an elevated account (a CI runner) the inherited
+  # Administrators Allow is evaluated first and the Deny never bites: the
+  # first CI run of this gate passed every step and then found the extractor
+  # had not been staged, because the bundle was never actually unwritable.
+  # Removing inheritance removes that Allow instead of trying to outrank it.
+  #
+  # The DACL only, via the .NET API: Get-Acl/Set-Acl round-trip the SACL as
+  # well, and writing that back needs SeSecurityPrivilege — which the restore
+  # below does not have once this account's own access is gone.
+  $dir = [System.IO.DirectoryInfo]::new($bundle)
+  $sec = [System.IO.FileSystemAclExtensions]::GetAccessControl(
+    $dir, [System.Security.AccessControl.AccessControlSections]::Access)
+  $sec.SetAccessRuleProtection($true, $false)   # drop inherited, keep nothing
+  foreach ($rule in @($sec.Access)) {
+    if ($null -ne $rule -and -not $rule.IsInherited) { $null = $sec.RemoveAccessRule($rule) }
+  }
+  $sec.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
     [System.Security.Principal.WindowsIdentity]::GetCurrent().Name,
-    'Write', 'ContainerInherit,ObjectInherit', 'None', 'Deny')
-  $acl.AddAccessRule($deny)
-  Set-Acl -Path $bundle -AclObject $acl
+    'ReadAndExecute', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
+  [System.IO.FileSystemAclExtensions]::SetAccessControl($dir, $sec)
+
+  # Prove the precondition rather than assume it. Core decides to stage by
+  # writing a probe file into the extractor directory (introspect.rs
+  # `writable`), so this is the same question it will ask.
+  $probe = Join-Path $bundle 'extractors\dotnet\.smoke-write-probe'
+  $writable = $true
+  try { [System.IO.File]::WriteAllText($probe, ''); Remove-Item $probe -Force }
+  catch { $writable = $false }
+  if ($writable) {
+    Fail 'the bundle is still writable after the ACL change - the read-only pass would prove nothing'
+  }
 }
 
 try {
@@ -194,11 +221,14 @@ containers:
 }
 finally {
   if ($ReadOnly -and $bundle) {
-    $acl = Get-Acl $bundle
-    foreach ($rule in @($acl.Access | Where-Object { $_.AccessControlType -eq 'Deny' })) {
-      $acl.RemoveAccessRule($rule) | Out-Null
-    }
-    Set-Acl -Path $bundle -AclObject $acl
+    # Hand the bundle back to inheritance, so whatever cleans the workspace up
+    # afterwards can. The owner keeps WRITE_DAC implicitly, which is what lets
+    # this run at all after the account's own write access was removed.
+    $dir = [System.IO.DirectoryInfo]::new($bundle)
+    $sec = [System.IO.FileSystemAclExtensions]::GetAccessControl(
+      $dir, [System.Security.AccessControl.AccessControlSections]::Access)
+    $sec.SetAccessRuleProtection($false, $false)
+    [System.IO.FileSystemAclExtensions]::SetAccessControl($dir, $sec)
   }
   if ($scratch -and (Test-Path $scratch)) {
     Remove-Item $scratch -Recurse -Force -ErrorAction SilentlyContinue
