@@ -4,7 +4,7 @@
   "extractor": "blastradius-extract-rust 0.3.0",
   "component": "blastradius.core.sync-engine",
   "root": "crates/blastradius-core/src",
-  "sourceDigest": "sha256:14f76158e73da2600e74bd3a1b3f39fff2462ebb72d533cd661f9addc5411a7c",
+  "sourceDigest": "sha256:4e9f94f5464d788a375b6f8c4dc0653aad4b4ce3001fdfe42571d0c2957339df",
   "elements": [
     {
       "id": "dep.marked_yaml",
@@ -44,7 +44,7 @@
       "name": "FileChange",
       "parent": "sync",
       "path": "crates/blastradius-core/src/sync.rs",
-      "line": 55
+      "line": 64
     },
     {
       "id": "sync.JournalEvent",
@@ -52,7 +52,7 @@
       "name": "JournalEvent",
       "parent": "sync",
       "path": "crates/blastradius-core/src/sync.rs",
-      "line": 1173
+      "line": 1280
     },
     {
       "id": "sync.Operation",
@@ -68,7 +68,7 @@
       "name": "SyncEngine",
       "parent": "sync",
       "path": "crates/blastradius-core/src/sync.rs",
-      "line": 72
+      "line": 91
     },
     {
       "id": "sync.Transaction",
@@ -76,7 +76,15 @@
       "name": "Transaction",
       "parent": "sync",
       "path": "crates/blastradius-core/src/sync.rs",
-      "line": 64
+      "line": 83
+    },
+    {
+      "id": "sync.ViewTarget",
+      "kind": "enum",
+      "name": "ViewTarget",
+      "parent": "sync",
+      "path": "crates/blastradius-core/src/sync.rs",
+      "line": 73
     }
   ],
   "edges": [
@@ -133,6 +141,11 @@
     {
       "from": "sync.SyncEngine",
       "to": "sync.Transaction",
+      "kind": "references"
+    },
+    {
+      "from": "sync.SyncEngine",
+      "to": "sync.ViewTarget",
       "kind": "references"
     },
     {
