@@ -950,11 +950,20 @@ given, so nobody's existing automation silently relocates its workspace.
 Locations are validated — relative, no `..`, no absolute paths — and the
 starter model is named after the project rather than the folder it lands in.
 
-## 0.7.0 — in progress (2026-08-27)
+## 0.7.0 — released (2026-08-28)
 
-Picked from the pool below plus the structural finding above it, in that
-order: the install-shaped hole in CI first, because three consecutive releases
-went out through it, then the two things a user actually feels.
+**Cut 2026-08-28.** Picked from the pool below plus the structural finding
+above it, in that order: the install-shaped hole in CI first, because three
+consecutive releases went out through it, then the two things a user actually
+feels, then the recorded debts.
+
+The through-line is that four of these were only findable by running the
+thing rather than reading it — the install-only bugs, the exported viewer's
+missing altitude, the layout that fought a pin, and a 2400px column that was
+technically correct. So the release ships two gates that did not exist:
+something that runs an *installed* build (`installed`, every push), and
+something that opens the *exported file* (`ui/tests/export/`, in the job that
+already built it).
 
 ### Something finally exercises an installed build
 
