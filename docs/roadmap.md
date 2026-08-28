@@ -950,10 +950,14 @@ given, so nobody's existing automation silently relocates its workspace.
 Locations are validated — relative, no `..`, no absolute paths — and the
 starter model is named after the project rather than the folder it lands in.
 
-## 0.7.1 — in progress (2026-08-28)
+## 0.8.0 — released (2026-08-28)
 
 Owner testing of the 0.7.0 build, plus a question about the onboarding
-hand-off that turned out to be a real drift.
+hand-off that turned out to be a real drift — and, from a request that looked
+like a one-liner, descriptions on the box: a new view-file key, a new
+operation, and the app's first context menu. A minor bump rather than the
+0.7.1 this was planned as, because a release that adds a model-format key is
+not a patch.
 
 ### Descriptions belong on the box, not only in the inspector
 
