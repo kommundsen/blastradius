@@ -1003,6 +1003,23 @@ execute, and the script probes the directory the same way core does before
 trusting its own setup. A gate that cannot tell you its precondition failed
 is a gate you will eventually believe by mistake.
 
+**Open question, deliberately not closed for the release.** With the DACL
+fixed, the runner reports the extractor directory as unwritable, C#
+introspection *succeeds* out of it — and core never stages into
+`%LOCALAPPDATA%`. On a Windows 11 desktop, the same script against the same
+bundle stages every time. So `introspect.rs`'s `writable()` probe and the
+PowerShell probe disagree on a GitHub runner, and nobody has explained why
+yet.
+
+The staging check is therefore **reported, not enforced**: what protects a
+user is step 6 — C# introspection working from a read-only install — and that
+is asserted hard. Whether it got there by staging is this implementation's
+answer, not the contract, and failing a build over a mechanism nobody has
+explained is asserting a guess. The diagnostics print on every read-only run,
+so the next person to look has the evidence rather than three rounds of
+theorising. Worth returning to: if `writable()` can be wrong about a
+directory, the 0.6.2 fix rests on it being right.
+
 **Found while writing it**: `blastradius init --help` scaffolded a workspace
 into a folder literally called `--help`, and any mistyped flag scaffolded one
 named after the typo — the argument loop treated every unrecognised token as a
