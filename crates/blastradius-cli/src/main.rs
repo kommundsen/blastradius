@@ -578,7 +578,28 @@ fn init(args: &[String]) -> ExitCode {
             println!("  {line}");
         }
     }
+    // The workflows are the point of setting an agent up, and the CLI used to
+    // write three of them and then say nothing about how to run any of them.
+    let workflows = blastradius_cli::onboard::workflow_summary(&opts.skills);
+    if !workflows.is_empty() {
+        println!("workflows:");
+        for line in &workflows {
+            println!("  {line}");
+        }
+    }
     println!("next:\n  blastradius-app {shown}    # open it in the app\n  blastradius validate {shown}");
+    if !opts.skills.is_empty() || !opts.mcp.is_empty() {
+        println!(
+            "
+then ask your agent, in this repository:
+  {}",
+            blastradius_cli::onboard::sample_prompt(
+                &blastradius_cli::onboard::workspace_rel(root),
+                &opts.skills,
+                &opts.mcp,
+            )
+        );
+    }
     ExitCode::SUCCESS
 }
 

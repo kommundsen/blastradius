@@ -54,8 +54,17 @@ test('a folder with no workspace is an offer, not an error', async ({ page }) =>
   // Scaffolded, opened, and then handed the thing to do next.
   await expect(page.locator('.welcome')).toHaveCount(0);
   await expect(page.locator('#app-dialog .dialog-title')).toHaveText(/now ask your agent/i);
-  await expect(page.locator('#dlg-prompt')).toContainText('model its architecture');
+  // The hand-off invokes the workflow rather than telling the agent to model
+  // straight away — the interview is the point of it (0.7.1).
+  await expect(page.locator('#dlg-prompt')).toContainText('/blastradius:model');
+  await expect(page.locator('#dlg-prompt')).toContainText('Interview me first');
   await expect(page.locator('#app-dialog')).toContainText('mcp config (claude)');
+
+  // And all three workflows are named. sync and review were written to disk
+  // and never mentioned to the person who had just installed them.
+  const installed = page.locator('.dlg-workflows li');
+  await expect(installed).toHaveCount(3);
+  await expect(installed).toContainText([/^model /, /^sync /, /^review /]);
 });
 
 test('the agent selection is honoured, not ignored', async ({ page }) => {

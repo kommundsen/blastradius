@@ -112,7 +112,18 @@ function mockSync(cmd, args) {
         ...mcp.map((a) => `wrote mcp config (${a})`),
         ...skills.map((a) => `wrote skill (${a})`),
       ],
-      prompt: 'Read this repository and model its architecture in the Blastradius workspace at `docs`.',
+      // Mirrors core: the hand-off depends on what was selected, and names
+      // the workflows when any were written (core::onboard).
+      prompt: skills.length
+        ? "Model this repository's architecture into the Blastradius workspace at `docs` by running the blastradius model workflow — /blastradius:model in Claude Code. Interview me first."
+        : 'Read this repository and model its architecture in the Blastradius workspace at `docs`. Use the blastradius MCP tools.',
+      workflows: skills.length
+        ? [
+            'model — build or extend the model, interviewing you first: /blastradius:model in Claude Code',
+            'sync — bring the model back in step with the code since a commit: /blastradius:sync in Claude Code',
+            'review — judge the model against the repository, changing nothing: /blastradius:review in Claude Code',
+          ]
+        : [],
     };
   }
   if (cmd === 'workspace_demo') {
@@ -1147,7 +1158,7 @@ function initWorkspaceDialog(path, suggest = 'docs') {
         if (res?.prompt && (res.log ?? []).length) {
           // openDialog closes the current dialog on a truthy confirm, which
           // would take this one with it — false leaves the replacement up.
-          startedDialog(res.prompt, res.log, res.kept ?? []);
+          startedDialog(res.prompt, res.log, res.kept ?? [], res.workflows ?? []);
           return false;
         }
         return;
@@ -1170,7 +1181,7 @@ function initWorkspaceDialog(path, suggest = 'docs') {
 /** The workspace exists and the agents are wired: hand over the prompt that
  *  turns it into a real model. "Initialised successfully" is not an answer to
  *  "now what?". */
-function startedDialog(prompt, log, kept = []) {
+function startedDialog(prompt, log, kept = [], workflows = []) {
   const wrote = log.filter((l) => l.startsWith('wrote ')).map((l) => l.slice(6));
   const failed = log.filter((l) => !l.startsWith('wrote ') && !l.includes('already'));
   openDialog({
@@ -1178,6 +1189,12 @@ function startedDialog(prompt, log, kept = []) {
     body: `<p class="text-muted">Paste this into Claude Code, Copilot, Cursor or
         Codex in this repository:</p>
       <textarea class="input dlg-prompt" id="dlg-prompt" rows="6" readonly>${esc(prompt)}</textarea>
+      ${workflows.length ? `<div class="dlg-workflows">
+        <span class="dlg-group-title">Three workflows were installed</span>
+        <ul>${workflows.map((w) => `<li>${esc(w)}</li>`).join('')}</ul>
+        <p class="text-muted dlg-note">Modelling is the first one. The other two
+          are for later, once the model exists and the code has moved on.</p>
+      </div>` : ''}
       ${wrote.length ? `<p class="text-muted dlg-note">Wrote ${esc(wrote.join(', '))}.
         Your agent may need to be restarted, and Claude Code will ask you to
         approve the project's MCP server the first time.</p>` : ''}

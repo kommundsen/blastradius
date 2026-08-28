@@ -270,3 +270,15 @@ select.input { appearance: auto; }
 /* Clicks land on whatever is under the pointer: the container answers for its
    own padding, its members for themselves. */
 .node.is-nested > .node-meta { margin-top: auto; }
+
+/* ---- onboarding hand-off: the workflows that were installed -------------- */
+/* The dialog used to show one pasteable prompt and nothing else, so `sync` and
+   `review` were written to disk and never mentioned to the person who had just
+   installed them. */
+.dlg-workflows { margin-top: var(--space-3); }
+.dlg-workflows ul {
+  margin: var(--space-2) 0 0; padding-left: var(--space-4);
+  font-size: var(--text-sm); color: var(--color-text-muted);
+}
+.dlg-workflows li { margin-bottom: var(--space-1); }
+.dlg-workflows code, .dlg-workflows li { overflow-wrap: anywhere; }

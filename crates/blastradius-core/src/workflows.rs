@@ -34,13 +34,52 @@
 /// `(path under the repository root, contents)`.
 pub type File = (String, String);
 
+/// The workflows, in the order a person meets them. One list, so the files
+/// written and the hand-off that tells you about them cannot disagree about
+/// which workflows exist or what they do.
+pub const CATALOGUE: [(&str, &str); 3] = [
+    ("model", "build or extend the model, interviewing you first"),
+    ("sync", "bring the model back in step with the code since a commit"),
+    ("review", "judge the model against the repository, changing nothing"),
+];
+
+/// How a person actually invokes one of these workflows, per agent. Derived
+/// from the same table `files_for` writes, and pinned by a test, because the
+/// onboarding hand-off quotes these strings and a wrong one is worse than
+/// none: it sends someone to a command that does not exist.
+///
+/// `None` for an agent with no workflow surface.
+pub fn invocation(agent: &str, workflow: &str) -> Option<String> {
+    match agent {
+        "claude" => Some(format!("/blastradius:{workflow}")),
+        "copilot" => Some(format!("/blastradius-{workflow}")),
+        // Cursor and Codex invoke a skill by name rather than with a prefix.
+        "cursor" | "codex" => Some(format!("the `blastradius-{workflow}` skill")),
+        _ => None,
+    }
+}
+
+/// The label a person would recognise, for the same hand-off.
+pub fn agent_label(agent: &str) -> &'static str {
+    match agent {
+        "claude" => "Claude Code",
+        "copilot" => "GitHub Copilot",
+        "cursor" => "Cursor",
+        "codex" => "Codex",
+        _ => "your agent",
+    }
+}
+
 /// The workflow files for one agent. Empty for an agent with no surface for
 /// them — never a file written somewhere nothing will look.
 pub fn files_for(agent: &str, rel: &str) -> Vec<File> {
+    // Descriptions here are the frontmatter an agent reads; CATALOGUE carries
+    // the shorter phrasing a person reads. Names come from CATALOGUE so the
+    // two lists cannot drift apart on *which* workflows exist.
     let w = [
-        ("model", "Build or extend the C4 architecture model, interviewing you first", "[what to focus on, optional]", model_body(rel)),
-        ("sync", "Bring the architecture model back in step with the code", "[git ref to compare against, default: the merge-base]", sync_body(rel)),
-        ("review", "Review the architecture model against the code and report honestly", "", review_body(rel)),
+        (CATALOGUE[0].0, "Build or extend the C4 architecture model, interviewing you first", "[what to focus on, optional]", model_body(rel)),
+        (CATALOGUE[1].0, "Bring the architecture model back in step with the code", "[git ref to compare against, default: the merge-base]", sync_body(rel)),
+        (CATALOGUE[2].0, "Review the architecture model against the code and report honestly", "", review_body(rel)),
     ];
     match agent {
         "claude" => {

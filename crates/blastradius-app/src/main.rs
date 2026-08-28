@@ -254,6 +254,15 @@ fn workspace_init(
     }
     let agents = agents.unwrap_or_default();
     let mut log: Vec<String> = Vec::new();
+    // The hand-off depends on what was actually set up — a workflow to invoke,
+    // MCP tools to call, or neither — so it is built from the same selections
+    // rather than being one fixed sentence.
+    let prompt = blastradius_core::onboard::sample_prompt(
+        &blastradius_core::onboard::workspace_rel(&root),
+        &agents.skills,
+        &agents.mcp,
+    );
+    let workflows = blastradius_core::onboard::workflow_summary(&agents.skills);
     if !agents.mcp.is_empty() || !agents.skills.is_empty() {
         log = blastradius_core::onboard::setup(
             &root,
@@ -265,12 +274,11 @@ fn workspace_init(
             },
         );
     }
-    let prompt = blastradius_core::onboard::sample_prompt(&blastradius_core::onboard::workspace_rel(&root));
     let opened = open_root(&app, &state, root)?;
     Ok(serde_json::json!({
         "opened": opened, "scaffolded": scaffolded,
         "created": created, "kept": kept,
-        "log": log, "prompt": prompt,
+        "log": log, "prompt": prompt, "workflows": workflows,
     }))
 }
 

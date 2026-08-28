@@ -52,16 +52,77 @@ pub fn workspace_rel(workspace: &Path) -> String {
 /// What to paste into a coding agent to turn a scaffolded workspace into a
 /// real model. Shown by the app after it sets the agents up, because
 /// "initialised successfully" is not an answer to "now what?".
-pub fn sample_prompt(rel: &str) -> String {
+pub fn sample_prompt(rel: &str, skills: &[String], mcp: &[String]) -> String {
     let loc = if rel == "." { "this folder".to_string() } else { format!("`{rel}`") };
+
+    // A workflow was written: hand over *that*, not a fresh instruction to go
+    // and model. The whole point of the workflows is that modelling starts by
+    // asking what to cover (0.6.3), and a prompt that says "model this
+    // repository" walks straight past the interview they exist to run.
+    let ways: Vec<String> = skills
+        .iter()
+        .filter_map(|a| {
+            crate::workflows::invocation(a, "model")
+                .map(|i| format!("{i} in {}", crate::workflows::agent_label(a)))
+        })
+        .collect();
+    if !ways.is_empty() {
+        return format!(
+            "Model this repository's architecture into the Blastradius workspace \
+             at {loc} by running the blastradius model workflow — {}. Interview me \
+             first: scope, how much detail, whether to attach documents, whether \
+             components should point at their source, and whether there is a \
+             deployment story worth drawing. Do not start modelling before asking.",
+            ways.join(", or ")
+        );
+    }
+
+    // MCP but no workflow: the instruction has to carry it all itself.
+    if !mcp.is_empty() {
+        return format!(
+            "Read this repository and model its architecture in the Blastradius \
+             workspace at {loc}. Use the blastradius MCP tools — call model_format \
+             first for the schema, then apply_operations to create the systems, \
+             containers and components and the relations between them. Model what \
+             a reader needs to reason about, not everything that exists; stop at \
+             components. Run validate when you are done."
+        );
+    }
+
+    // Neither: no tools registered and no workflow written, so point at the one
+    // thing that does exist — the format, from the binary that enforces it.
     format!(
         "Read this repository and model its architecture in the Blastradius \
-         workspace at {loc}. Use the blastradius MCP tools — call model_format \
-         first for the schema, then apply_operations to create the systems, \
-         containers and components and the relations between them. Model what \
-         a reader needs to reason about, not everything that exists; stop at \
-         components. Run validate when you are done."
+         workspace at {loc}. Run `blastradius format` first for the schema, edit \
+         the YAML directly, and run `blastradius validate` when you are done. \
+         Model what a reader needs to reason about, not everything that exists; \
+         stop at components."
     )
+}
+
+/// The workflows that were just written, in the words a person needs: what
+/// each one is for, and how to start it in each agent that got it.
+///
+/// The hand-off dialog showed one pasteable prompt and nothing else, so
+/// `sync` and `review` existed on disk and were never mentioned to the person
+/// who had just installed them.
+pub fn workflow_summary(skills: &[String]) -> Vec<String> {
+    if skills.is_empty() {
+        return Vec::new();
+    }
+    crate::workflows::CATALOGUE
+        .iter()
+        .map(|(name, what)| {
+            let ways: Vec<String> = skills
+                .iter()
+                .filter_map(|a| {
+                    crate::workflows::invocation(a, name)
+                        .map(|i| format!("{i} in {}", crate::workflows::agent_label(a)))
+                })
+                .collect();
+            format!("{name} — {what}: {}", ways.join(", or "))
+        })
+        .collect()
 }
 
 /// Apply the selected extras. `workspace` is the folder holding

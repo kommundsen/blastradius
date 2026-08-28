@@ -9,8 +9,16 @@ rotting.
 
 Opening a folder that has no workspace offers this along with the starter
 model. Pick the pieces you want — the **MCP server**, the **skills and
-instructions**, or both — and which of the four agents get them, then you are
-handed a prompt to paste. Everything is on by default.
+instructions**, or both — and which of the four agents get them. Everything is
+on by default.
+
+You are then handed a prompt to paste, and told which workflows were installed
+and how to start each one in each agent you chose. The prompt **invokes the
+model workflow** rather than telling your agent to go and model the
+repository, because being asked what to cover first is the point of it. If you
+took the MCP server without the skills there is no workflow to invoke, so the
+prompt carries the instructions itself; if you took neither, it points at
+`blastradius format` and direct YAML editing.
 
 `blastradius init` does the same from the command line, for Claude Code,
 GitHub Copilot, Cursor, and Codex, in each one's native format. For an

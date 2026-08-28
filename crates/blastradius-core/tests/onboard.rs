@@ -365,3 +365,94 @@ fn a_legacy_agents_md_is_left_exactly_as_it_is() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ---- the hand-off (0.7.1) --------------------------------------------------
+// The prompt the app pastes into your agent is generated separately from the
+// workflow files, and drifted the moment the workflows arrived: it told the
+// agent to model the repository straight away, which walks past the interview
+// the model workflow exists to run. Nothing pinned it.
+
+#[test]
+fn the_handoff_invokes_the_workflow_when_one_was_written() {
+    let prompt = blastradius_core::onboard::sample_prompt(
+        "docs",
+        &["claude".to_string()],
+        &["claude".to_string()],
+    );
+    assert!(prompt.contains("/blastradius:model"), "{prompt}");
+    assert!(prompt.contains("Interview me first"), "{prompt}");
+    // It must not tell the agent to go and model without asking, which is
+    // exactly what the pre-0.7.1 prompt did.
+    assert!(!prompt.contains("apply_operations"), "{prompt}");
+}
+
+#[test]
+fn the_handoff_names_the_surface_each_selected_agent_actually_has() {
+    let all: Vec<String> =
+        blastradius_core::onboard::AGENTS.iter().map(|a| a.to_string()).collect();
+    let prompt = blastradius_core::onboard::sample_prompt("docs", &all, &[]);
+    for want in ["/blastradius:model", "/blastradius-model", "`blastradius-model` skill"] {
+        assert!(prompt.contains(want), "{want} missing from: {prompt}");
+    }
+    for label in ["Claude Code", "GitHub Copilot", "Cursor", "Codex"] {
+        assert!(prompt.contains(label), "{label} missing from: {prompt}");
+    }
+}
+
+#[test]
+fn without_workflows_the_handoff_falls_back_to_what_is_there() {
+    // MCP only: no workflow to invoke, so the instruction carries it.
+    let mcp_only = blastradius_core::onboard::sample_prompt("docs", &[], &["claude".to_string()]);
+    assert!(mcp_only.contains("model_format"), "{mcp_only}");
+    assert!(mcp_only.contains("apply_operations"), "{mcp_only}");
+    assert!(!mcp_only.contains("/blastradius"), "there is no command to invoke: {mcp_only}");
+
+    // Neither: naming tools that were never registered would be worse than
+    // saying nothing, so it points at the CLI, which always exists.
+    let bare = blastradius_core::onboard::sample_prompt("docs", &[], &[]);
+    assert!(bare.contains("blastradius format"), "{bare}");
+    assert!(!bare.contains("MCP"), "{bare}");
+    assert!(!bare.contains("/blastradius"), "{bare}");
+}
+
+/// The invocation strings the hand-off quotes must match files that are
+/// actually written. A wrong one is worse than none: it sends someone to a
+/// command that does not exist.
+#[test]
+fn every_quoted_invocation_matches_a_file_that_gets_written() {
+    for agent in blastradius_core::onboard::AGENTS {
+        let files = blastradius_core::workflows::files_for(agent, "docs");
+        let paths: Vec<&str> = files.iter().map(|(p, _)| p.as_str()).collect();
+        for (name, _) in blastradius_core::workflows::CATALOGUE {
+            let inv = blastradius_core::workflows::invocation(agent, name)
+                .unwrap_or_else(|| panic!("{agent} has no invocation for {name}"));
+            // Derive the file the invocation implies, per vendor.
+            let expected = match agent {
+                "claude" => format!(".claude/commands/blastradius/{name}.md"),
+                "copilot" => format!(".github/prompts/blastradius-{name}.prompt.md"),
+                _ => format!(".agents/skills/blastradius-{name}/SKILL.md"),
+            };
+            assert!(
+                paths.contains(&expected.as_str()),
+                "{agent} is told to run {inv}, but {expected} is never written; got {paths:?}"
+            );
+        }
+    }
+}
+
+/// `sync` and `review` were written to disk and never mentioned to the person
+/// who had just installed them.
+#[test]
+fn the_handoff_lists_every_workflow_that_was_installed() {
+    let summary = blastradius_core::onboard::workflow_summary(&["claude".to_string()]);
+    assert_eq!(summary.len(), blastradius_core::workflows::CATALOGUE.len());
+    for (name, _) in blastradius_core::workflows::CATALOGUE {
+        assert!(
+            summary.iter().any(|l| l.starts_with(&format!("{name} "))),
+            "{name} is installed but unmentioned: {summary:?}"
+        );
+    }
+    assert!(summary.iter().all(|l| l.contains("/blastradius:")), "{summary:?}");
+    // Nothing to list when no workflows were written.
+    assert!(blastradius_core::onboard::workflow_summary(&[]).is_empty());
+}

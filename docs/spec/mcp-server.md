@@ -88,6 +88,19 @@ absent, and a repo set up by an earlier version — our text already inside
 `copilot-instructions.md`, or the whole primer pasted into `AGENTS.md` — is
 left exactly as it is rather than told the same thing twice.
 
+**The hand-off names the workflow, not the task** (0.7.1). The prompt the app
+and the CLI print is generated from what was actually selected: an invocation
+of the *model* workflow when one was written (`/blastradius:model`,
+`/blastradius-model`, or the `blastradius-model` skill, for the agents chosen),
+the MCP instructions when tools were registered but no workflow, and a pointer
+to `blastradius format` when neither. It shipped as one fixed sentence telling
+the agent to model the repository straight away — which walked past the
+interview the workflows exist to run, and named MCP tools that a
+skills-only setup never registered. Both surfaces also list all three
+workflows and how to start them; `sync` and `review` were written to disk and
+never mentioned. Pinned by tests that derive the quoted invocations from the
+files `workflows::files_for` actually writes.
+
 `blastradius init` offers to write project-scoped registration during
 onboarding — `.mcp.json` (Claude Code), `.vscode/mcp.json` (Copilot/VS
 Code), `.cursor/mcp.json` (Cursor), `.codex/config.toml` (Codex; loads only
