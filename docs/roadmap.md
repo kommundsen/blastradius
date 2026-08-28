@@ -952,7 +952,11 @@ starter model is named after the project rather than the folder it lands in.
 
 ## 0.7.0 — released (2026-08-28)
 
-**Cut 2026-08-28.** Picked from the pool below plus the structural finding
+**Cut 2026-08-28.** Store submission `1152921505701761076` reached
+`PreProcessing`; portable archives for Windows and Linux are on the [GitHub
+Release](https://github.com/kommundsen/blastradius/releases/tag/v0.7.0).
+
+Picked from the pool below plus the structural finding
 above it, in that order: the install-shaped hole in CI first, because three
 consecutive releases went out through it, then the two things a user actually
 feels, then the recorded debts.
@@ -1003,13 +1007,20 @@ execute, and the script probes the directory the same way core does before
 trusting its own setup. A gate that cannot tell you its precondition failed
 is a gate you will eventually believe by mistake.
 
-**Open question, deliberately not closed for the release.** With the DACL
-fixed, the runner reports the extractor directory as unwritable, C#
-introspection *succeeds* out of it — and core never stages into
-`%LOCALAPPDATA%`. On a Windows 11 desktop, the same script against the same
-bundle stages every time. So `introspect.rs`'s `writable()` probe and the
-PowerShell probe disagree on a GitHub runner, and nobody has explained why
-yet.
+**Open question, deliberately not closed for the release — and much narrower
+than it first looked.** With the DACL fixed, the `installed` job reports the
+extractor directory as unwritable, C# introspection *succeeds* out of it, and
+core never stages into `%LOCALAPPDATA%`. The first reading was "desktop stages,
+runner does not". The release run disproved that: the `portable` job ran the
+same script, on the same runner image, against the real staged archive, and
+logged `extractor staged out of the read-only bundle`.
+
+So it is not a runner-versus-desktop difference at all. It is a difference
+between two jobs on the same image — `installed` stages a bundle by hand into
+`bundle/`, `portable` stages one through `tools/stage-portable.mjs` into
+`dist/<name>/` — and only one of them makes `writable()` say no. That is a
+far more tractable question than the one it started as, and whoever picks it
+up has both logs.
 
 The staging check is therefore **reported, not enforced**: what protects a
 user is step 6 — C# introspection working from a read-only install — and that
@@ -1019,6 +1030,10 @@ explained is asserting a guess. The diagnostics print on every read-only run,
 so the next person to look has the evidence rather than three rounds of
 theorising. Worth returning to: if `writable()` can be wrong about a
 directory, the 0.6.2 fix rests on it being right.
+
+**Shipped anyway, and correctly**: every leg of the release ran the smoke
+against the artifact it actually publishes, and the Windows portable archive
+staged the extractor exactly as designed.
 
 **Found while writing it**: `blastradius init --help` scaffolded a workspace
 into a folder literally called `--help`, and any mistyped flag scaffolded one
