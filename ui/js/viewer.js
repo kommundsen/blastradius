@@ -8,7 +8,7 @@
 // and a camera (ADR-0009).
 
 /* global SNAPSHOT, INCLUDE_DOC_BODIES, ELK, marked,
-   computeView, findViewDef, resolvePins, docsFor, treeModel, rootOf, depthOf, liftTo,
+   computeView, findViewDef, resolvePins, resolveDescriptions, docsFor, treeModel, rootOf, depthOf, liftTo,
    derivedGraphFor, layoutView, groupDivs, fitGroupBoxes, GRID, kicker, multiplicity,
    edgeLabelLines */
 
@@ -99,6 +99,9 @@
     const layout = await layoutView(elk, view, resolvePins(viewDef, view), {
       groups: viewDef?.show_groups ?? false,
       nested: viewDef?.nested ?? false,
+      // No DOM to measure with here, so a described box is sized from the
+      // estimate in labels.js — the same one the SVG export wraps to.
+      descriptions: resolveDescriptions(viewDef, view),
     });
     state.layout = layout;
 
@@ -121,7 +124,8 @@
       div.innerHTML =
         `<span class="node-kicker">${esc(kicker(el))}</span>` +
         `<span class="node-title">${esc(el.name)}</span>` +
-        (metaLine(el) ? `<span class="node-meta">${metaLine(el)}</span>` : '');
+        (metaLine(el) ? `<span class="node-meta">${metaLine(el)}</span>` : '') +
+        (n.describe && el.description ? `<span class="node-desc">${esc(el.description)}</span>` : '');
       div.addEventListener('click', () => select(n.id));
       div.addEventListener('dblclick', () => dive(n.id));
       nodes.appendChild(div);

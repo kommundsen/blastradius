@@ -10,6 +10,8 @@ Both write the same files, and the app and your editor stay in step.
   or deployment nodes in the **D** view.
 - **Rename and describe** in the inspector: name, technology, and description
   are editable in place.
+- **Right-click a box** to draw its description inside it, or take it off
+  again. See *Descriptions on the box* below.
 - **`R`**, then click a target, draws a relation from the selected element.
   Give it a label and a protocol so the line means something — the label reads
   on the line, the protocol under it in brackets, `calls` / `[JSON/HTTPS]`.
@@ -69,6 +71,32 @@ Layout is not stored in model files. Positions live in view files under
 
 Pin what you care about, and let the rest arrange itself — until you start
 arranging, at which point that view is yours and stops moving under you.
+
+## Descriptions on the box
+
+An element's description is a field on the element, written once in the
+inspector. Whether a *diagram* draws it is a separate choice, made per view:
+right-click the box and pick **Show description**, and the text appears at the
+bottom of it, under a hairline — where C4 puts it.
+
+It is off by default and it is per view, both for the same reason. Nearly
+everything in a real model has a description, so drawing them all would make
+every existing diagram taller overnight; and the container that is a bare name
+in the L2 overview is usually the one you want a paragraph on in the L3 view
+that is about it.
+
+Right-clicking a box with no description yet offers the inspector field
+instead — there is nothing to show until there is something to say.
+
+Like a pin, the choice is stored in the view file rather than the model, so it
+never shows up in a semantic diff:
+
+```yaml
+descriptions: [core, sync-engine]
+```
+
+A described box is taller, and the layout accounts for it — on the canvas, in
+the SVG and PNG exports, and in the exported HTML.
 
 ## Validation
 

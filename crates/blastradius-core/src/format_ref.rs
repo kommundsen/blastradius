@@ -281,11 +281,18 @@ Optional — every level renders without any view file.
     level: L2          # L1 | L2 | L3 | LD
     layout:            # pinned positions, grid units; anything absent is auto-placed
       web: [4, 2]
+    descriptions: [web]  # boxes that draw their `description:` inside them
     show-groups: false
     include-context: true
     nested: false      # LD only: boxes inside boxes instead of one altitude
 
 `scope` is required except on an `LD` overview of every environment.
+
+`descriptions:` lists elements by the same scope-relative key a pin uses. It
+is per view rather than per element on purpose: the same container can be a
+bare name in the L2 overview and carry its paragraph in the L3 view that is
+about it. The text itself is the element's `description:` field — this only
+decides where it is drawn.
 
 `nested: true` on an `LD` view draws the whole subtree in one frame. It is
 ignored with a warning on any other level: everywhere else, the way to see

@@ -277,3 +277,23 @@ export function resolvePins(viewDef, view) {
   }
   return out;
 }
+
+/**
+ * The visible elements whose description this view draws inside their box
+ * (spec §4), as a Set of full ids.
+ *
+ * Keys are written scope-relative exactly as pins are, so they are resolved
+ * the same way — an id that resolves to nothing visible is simply not drawn,
+ * which is what happens to a pin for an element this view does not show.
+ */
+export function resolveDescriptions(viewDef, view) {
+  const out = new Set();
+  if (!viewDef) return out;
+  const visible = new Set(view.nodes.map((n) => n.id));
+  for (const key of viewDef.descriptions ?? []) {
+    const scoped = viewDef.scope ? viewDef.scope + '.' + key : key;
+    const id = visible.has(scoped) ? scoped : visible.has(key) ? key : null;
+    if (id) out.add(id);
+  }
+  return out;
+}

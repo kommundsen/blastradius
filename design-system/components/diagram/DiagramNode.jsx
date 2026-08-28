@@ -12,7 +12,7 @@ const BADGE_LABEL = {
 };
 
 export function DiagramNode({
-  kicker, title, meta, type = 'system', status,
+  kicker, title, meta, description, type = 'system', status,
   active, external, x, y, width, style, onSelect, ...rest
 }) {
   const cls = [
@@ -42,5 +42,6 @@ export function DiagramNode({
     {kicker && <span className="node-kicker">{kicker}</span>}
     <span className="node-title">{title}</span>
     {meta && <span className="node-meta">{meta}</span>}
+    {description && <span className="node-desc">{description}</span>}
   </div>;
 }

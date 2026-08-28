@@ -1,7 +1,7 @@
 // Blastradius Phase 1 frontend: read-only rendering of one workspace.
 // The Core owns truth; this file owns pixels. No write path exists here.
 
-import { computeView, findViewDef, docsFor, treeModel, rootOf, depthOf, liftTo, resolvePins, derivedGraphFor, environments } from './data.js';
+import { computeView, findViewDef, docsFor, treeModel, rootOf, depthOf, liftTo, resolvePins, resolveDescriptions, derivedGraphFor, environments } from './data.js';
 import { layoutView, GRID, groupDivs, fitGroupBoxes, nodeSize } from './layout.js';
 import { viewSvg, kicker, metaLine } from './svg.js';
 import { edgeLabelLines, multiplicity } from './labels.js';
@@ -183,12 +183,28 @@ function mockSync(cmd, args) {
   } else if (op.op === 'set-relation-field') {
     const r = snap.relations.find((r) => r.from === op.from && r.to === op.to);
     if (r) r[op.field] = op.value;
+  } else if (op.op === 'set-field') {
+    const el = snap.elements.find((e) => e.id === op.id);
+    if (!el) throw new Error('unknown element');
+    if (op.value) el[op.field] = op.value;
+    else delete el[op.field];
   } else if (op.op === 'pin') {
     const v = snap.views.find((v) => op.view ? v.id === op.view :
       (v.level === op.level && (op.level === 'L1' || v.scope === op.scope)));
     if (v) {
       const key = op.scope && op.id.startsWith(op.scope + '.') ? op.id.slice(op.scope.length + 1) : op.id;
       v.layout[key] = [op.x, op.y];
+    }
+  } else if (op.op === 'show-description') {
+    // The real engine writes a view file when there is none; the mock has no
+    // filesystem, so it can only edit a view the fixture already declares.
+    const v = snap.views.find((v) => op.view ? v.id === op.view :
+      (v.level === op.level && (op.level === 'L1' || v.scope === op.scope)));
+    if (v) {
+      const key = op.scope && op.id.startsWith(op.scope + '.') ? op.id.slice(op.scope.length + 1) : op.id;
+      const list = new Set(v.descriptions ?? []);
+      if (op.show) list.add(key); else list.delete(key);
+      v.descriptions = [...list].sort();
     }
   }
   mockState.undo.push({ label, snap: before });
@@ -372,10 +388,15 @@ async function renderCanvas({ animate = true } = {}) {
   // derived elements that exist nowhere in snap.elements.
   const childListFor = (el) =>
     el.derived ? (derivedGraphFor(snap, el.id)?.elements ?? []) : state.snapshot.elements;
+  // Which boxes draw their description (spec §4). Measuring needs it before
+  // layout, and layout stamps `describe` on the nodes so rendering below
+  // cannot disagree with the height that was reserved.
+  const describe = resolveDescriptions(viewDef, view);
   const layout = await layoutView(elk, view, resolvePins(viewDef, view), {
     groups: viewDef?.show_groups ?? false,
     nested: viewDef?.nested ?? false,
-    sizes: measureNodes(view, elById, childListFor),
+    descriptions: describe,
+    sizes: measureNodes(view, elById, childListFor, describe),
   });
   state.layout = layout;
 
@@ -414,10 +435,7 @@ async function renderCanvas({ animate = true } = {}) {
     div.dataset.id = n.id;
     if (state.selected === n.id) div.classList.add('is-active');
     const kids = metaLine(el, childListFor(el));
-    div.innerHTML =
-      `<span class="node-kicker">${esc(kicker(el))}</span>` +
-      `<span class="node-title">${esc(el.name)}</span>` +
-      (kids ? `<span class="node-meta">${kids}</span>` : '');
+    div.innerHTML = nodeInner(el, kids, n.describe);
     if (badge) {
       const b = document.createElement('span');
       b.className = 'node-badge';
@@ -438,6 +456,7 @@ async function renderCanvas({ animate = true } = {}) {
       if (ev.key === 'Enter') { ev.preventDefault(); dive(n.id); }
       if (ev.key === ' ') { ev.preventDefault(); select(n.id); }
     });
+    div.addEventListener('contextmenu', (ev) => openNodeMenu(ev, n.id));
     div.addEventListener('pointerdown', (ev) => beginNodeDrag(ev, n, div));
     els.nodes.appendChild(div);
   }
@@ -500,7 +519,7 @@ async function renderCanvas({ animate = true } = {}) {
  * reflow — the same trick `fitGroupBoxes` uses on group boxes after the fact,
  * done before layout instead so the geometry is right the first time.
  */
-function measureNodes(view, elById, childListFor) {
+function measureNodes(view, elById, childListFor, describe = new Set()) {
   const probe = document.createElement('div');
   probe.style.cssText =
     'position:absolute;left:-10000px;top:0;visibility:hidden;pointer-events:none';
@@ -513,20 +532,51 @@ function measureNodes(view, elById, childListFor) {
     // Width comes from the estimate and is authoritative — it is what the
     // renderer sets. Only height is left to the content.
     d.style.cssText = `width:${nodeSize(el).width}px;position:absolute`;
-    const kids = metaLine(el, childListFor(el));
-    d.innerHTML =
-      `<span class="node-kicker">${esc(kicker(el))}</span>` +
-      `<span class="node-title">${esc(el.name)}</span>` +
-      (kids ? `<span class="node-meta">${kids}</span>` : '');
+    d.innerHTML = nodeInner(el, metaLine(el, childListFor(el)), describe.has(n.id));
     probe.appendChild(d);
     return [n.id, d, nodeSize(el).width];
   });
 
+  // Height for every node, plus — for the ones that turn out to be containers
+  // — the breakdown layout needs to reserve room for their own chrome: the
+  // kicker+name block above what they hold, and the meta line and description
+  // below it. A container is sized by ELK from its children and its padding,
+  // so anything it draws itself has to be padding or it gets sat on.
   const sizes = new Map(
-    divs.map(([id, d, width]) => [id, { width, height: Math.ceil(d.offsetHeight) }])
+    divs.map(([id, d, width]) => {
+      const title = d.querySelector('.node-title');
+      const meta = d.querySelector('.node-meta');
+      const desc = d.querySelector('.node-desc');
+      return [id, {
+        width,
+        height: Math.ceil(d.offsetHeight),
+        header: Math.ceil(title.offsetTop + title.offsetHeight + NODE_PAD),
+        meta: meta ? Math.ceil(meta.offsetHeight) : 0,
+        // The rule's own margin sits outside `offsetHeight`.
+        desc: desc ? Math.ceil(desc.offsetHeight) + NODE_DESC_MARGIN : 0,
+      }];
+    })
   );
   probe.remove();
   return sizes;
+}
+
+/** `.node` padding and `.node-desc`'s margin, from components.css — the two
+ *  numbers a measured height cannot see from inside the element. */
+const NODE_PAD = 10;
+const NODE_DESC_MARGIN = 6;
+
+/** A box's contents: kicker, name, meta line, and — where the view asks for
+ *  it — the description at the bottom. Written once because `measureNodes`
+ *  measures this markup and `renderCanvas` draws it, and a difference between
+ *  the two is a box laid out at the wrong height. */
+function nodeInner(el, meta, describe) {
+  return (
+    `<span class="node-kicker">${esc(kicker(el))}</span>` +
+    `<span class="node-title">${esc(el.name)}</span>` +
+    (meta ? `<span class="node-meta">${meta}</span>` : '') +
+    (describe && el.description ? `<span class="node-desc">${esc(el.description)}</span>` : '')
+  );
 }
 
 function nodeClass(el) {
@@ -854,6 +904,16 @@ function wireChrome() {
   els.diffBtn.addEventListener('click', toggleDiff);
   els.historyBtn.addEventListener('click', openHistory);
   document.getElementById('share-btn').addEventListener('click', openShareDialog);
+
+  // A context menu outlives nothing: any click, key or scroll elsewhere ends
+  // it. Capture phase, so a click on the node underneath still closes it.
+  document.addEventListener('pointerdown', (ev) => {
+    if (ctxMenu && !ctxMenu.contains(ev.target)) closeNodeMenu();
+  }, true);
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') closeNodeMenu();
+  }, true);
+  els.canvas.addEventListener('scroll', closeNodeMenu, true);
 
   // theme cycle: auto -> light -> dark
   let theme = 'auto';
@@ -1469,7 +1529,15 @@ function renderSide() {
   if (many) {
     html += `<p class="insp-desc text-muted">${esc(many)} — ${el.replicas} of these run.</p>`;
   }
-  if (el.description) html += `<p class="insp-desc">${esc(el.description)}</p>`;
+  if (canEdit()) {
+    // The description is a model field like the name, so it is edited beside
+    // it. Where it is *drawn* is the diagram's business — right-click the box.
+    html += `<textarea class="input insp-desc-input" id="insp-desc" rows="3"
+      placeholder="What is this, in a sentence?"
+      aria-label="Element description">${esc(el.description ?? '')}</textarea>`;
+  } else if (el.description) {
+    html += `<p class="insp-desc">${esc(el.description)}</p>`;
+  }
 
   if (rels.length) {
     html += `<div class="insp-section">Relations</div>`;
@@ -1514,6 +1582,16 @@ function renderSide() {
       const name = nameInput.value.trim();
       if (name && name !== el.name) {
         await applyOp({ op: 'rename', id, name });
+      }
+    });
+  }
+  const descInput = document.getElementById('insp-desc');
+  if (descInput) {
+    descInput.addEventListener('change', async () => {
+      const value = descInput.value.trim();
+      // An emptied box removes the field rather than writing `description: ""`.
+      if (value !== (el.description ?? '')) {
+        await applyOp({ op: 'set-field', id, field: 'description', value });
       }
     });
   }
@@ -2100,6 +2178,82 @@ function selectRelation(edge) {
   state.doc = null;
   state.help = null; // same as select(): the inspector wins over help
   renderSide();
+}
+
+// --- node context menu -------------------------------------------------------
+// The only per-box thing that is a property of *this diagram* rather than of
+// the element: whether the description is drawn (spec §4). It belongs on the
+// box for the same reason a pin does — you decide it while looking at the
+// picture — so right-click is where it lives, and the text itself stays in
+// the inspector with the other fields.
+
+let ctxMenu = null;
+
+function closeNodeMenu() {
+  ctxMenu?.remove();
+  ctxMenu = null;
+}
+
+function openNodeMenu(ev, id) {
+  ev.preventDefault();
+  closeNodeMenu();
+  select(id);
+  const el = anyElement(id);
+  // Derived (L4) elements are read-only, and editing is off entirely while
+  // the model is stale, in a conflict, or in time-travel.
+  if (!el || el.derived || !canEdit()) return;
+
+  const viewDef = findViewDef(effectiveSnapshot(), state.level, state.scope);
+  const shown = state.layout?.nodes.find((n) => n.id === id)?.describe ?? false;
+  const items = el.description
+    ? [[
+        shown ? 'Hide description' : 'Show description',
+        () => applyOp({
+          op: 'show-description',
+          view: viewDef?.id ?? null,
+          level: state.level,
+          scope: state.scope,
+          id,
+          show: !shown,
+        }),
+      ]]
+    : [['Add a description…', () => focusDescriptionField()]];
+
+  const menu = document.createElement('div');
+  menu.className = 'ctx-menu';
+  menu.setAttribute('role', 'menu');
+  for (const [label, run] of items) {
+    const btn = document.createElement('button');
+    btn.className = 'ctx-item';
+    btn.setAttribute('role', 'menuitem');
+    btn.textContent = label;
+    btn.addEventListener('click', () => { closeNodeMenu(); run(); });
+    menu.appendChild(btn);
+  }
+  document.body.appendChild(menu);
+  // Placed after appending so the real size is known: a menu opened near the
+  // right or bottom edge folds back instead of hanging off the window.
+  const box = menu.getBoundingClientRect();
+  const x = Math.min(ev.clientX, window.innerWidth - box.width - 8);
+  const y = Math.min(ev.clientY, window.innerHeight - box.height - 8);
+  menu.style.left = `${Math.max(8, x)}px`;
+  menu.style.top = `${Math.max(8, y)}px`;
+  ctxMenu = menu;
+  menu.querySelector('.ctx-item')?.focus();
+}
+
+/** Put the cursor in the inspector's description box — where "add a
+ *  description" from the canvas has to end up, since the text is a model
+ *  field and this is the field. */
+function focusDescriptionField() {
+  if (state.sideMode === 'source') {
+    state.sideMode = 'inspect';
+    for (const opt of els.sideMode.querySelectorAll('.seg-opt')) {
+      opt.classList.toggle('is-active', opt.querySelector('input').value === 'inspect');
+    }
+  }
+  renderSide();
+  document.getElementById('insp-desc')?.focus();
 }
 
 // --- dialogs -----------------------------------------------------------------

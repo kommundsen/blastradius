@@ -3,7 +3,7 @@
 // positions. Pure module — the ELK instance is injected, so node tests can
 // require elk.bundled.js and assert run-to-run determinism.
 
-import { edgeLabelLines } from './labels.js';
+import { descriptionHeight, edgeLabelLines } from './labels.js';
 
 export const GRID = 26; // px per grid unit at 1x — the canvas dot pitch
 
@@ -20,10 +20,15 @@ const SIZES = {
   'container-instance': { width: 164, height: 62 },
 };
 
-export function nodeSize(el) {
+/** Estimated box size. `description` is the text the box will draw at the
+ *  bottom, when this view asks for it (spec §4) — passing it reserves the
+ *  wrapped height, since a described box is materially taller. */
+export function nodeSize(el, description = null) {
   const base = SIZES[el.kind] ?? SIZES.container;
   // meta line (tech) adds a row
-  return el.tech ? { width: base.width, height: base.height + 14 } : { ...base };
+  let height = base.height + (el.tech ? 14 : 0);
+  if (description) height += descriptionHeight(description, base.width);
+  return { width: base.width, height };
 }
 
 /** ELK options: deterministic via the fixed seed; model order is a
@@ -74,12 +79,24 @@ const WRAP_OPTIONS = {
 export async function layoutView(elk, view, pins = {}, options = {}) {
   const pinned = view.nodes.filter((n) => pins[n.id]);
   const unpinned = view.nodes.filter((n) => !pins[n.id]);
+  // Which boxes draw their description at the bottom (spec §4). Only sizing
+  // needs it here: the renderers read `describe` off the finished node, so the
+  // box that reserved the height is exactly the box that fills it.
+  const describe = options.descriptions ?? new Set();
   // Real rendered sizes where the caller could measure them (the canvas can;
   // headless SVG rendering cannot). A `.node` is content-sized, so a name that
-  // wraps to three lines is taller than any per-kind estimate — and layout
-  // that reserved the estimate leaves the overflow to collide with whatever
-  // is below. Falls back to the estimate, which is what the estimate is for.
-  const sizeOf = (el) => options.sizes?.get(el.id) ?? nodeSize(el);
+  // wraps to three lines — or a description — is taller than any per-kind
+  // estimate, and layout that reserved the estimate leaves the overflow to
+  // collide with whatever is below. Falls back to the estimate, which is what
+  // the estimate is for.
+  const sizeOf = (el) => {
+    // Only the outer box: `sizes` entries also carry the measured breakdown of
+    // a node's own chrome (below), which is nobody else's business — every
+    // consumer spreads this into a laid-out node.
+    const m = options.sizes?.get(el.id);
+    if (m) return { width: m.width, height: m.height };
+    return nodeSize(el, describe.has(el.id) ? el.description : null);
+  };
 
   // Containment mode (ADR-0018): a deployment view drawn as boxes inside
   // boxes instead of one altitude at a time. The tree comes from the elements'
@@ -108,7 +125,7 @@ export async function layoutView(elk, view, pins = {}, options = {}) {
     children: nestChildren
       ? unpinned
           .filter((el) => !nestChildren.parentOf.has(el.id))
-          .map((el) => nestedNode(el, nestChildren, sizeOf))
+          .map((el) => nestedNode(el, nestChildren, sizeOf, describe, options.sizes))
       : [
       ...unpinned.filter((el) => !inCompound.has(el.id)).map((el) => ({ id: el.id, ...sizeOf(el) })),
       ...[...compoundGroups.entries()].map(([label, members]) => ({
@@ -241,6 +258,10 @@ export async function layoutView(elk, view, pins = {}, options = {}) {
 
   const width = Math.max(...extents.map((n) => n.x + n.width), 0) + GRID;
   const height = Math.max(...extents.map((n) => n.y + n.height), 0) + GRID;
+  for (const n of nodes) {
+    if (describe.has(n.id)) n.describe = true;
+  }
+
   return { nodes, edges, groups, width, height, origin };
 }
 
@@ -386,10 +407,20 @@ export function fitGroupBoxes(container, layout) {
   }
 }
 
-/** Containment padding: the same side/bottom as a group boundary, with a
- * taller top because a container carries a kicker and a name, not one label
- * strip. */
-const NEST_PAD = { top: 52, side: 16, bottom: 16 };
+/** Containment padding: the same sides as a group boundary. Top and bottom
+ * are computed per container instead (see `nestedNode`) — a container's own
+ * chrome is content-sized, and a constant either wastes space or gets sat on.
+ */
+const NEST_PAD = { side: 16, bottom: 16 };
+
+/** Clear space between a container's own chrome and what it holds. */
+const NEST_GAP = 10;
+
+/** Chrome estimates for the headless path, where nothing can be measured:
+ * `.node` padding plus a kicker and a one-line name above, one meta line
+ * below. Deliberately generous — under-reserving is what the measured path
+ * exists to avoid. */
+const CHROME_EST = { header: 44, meta: 15 };
 
 /** Parent -> children among the visible nodes, plus the reverse. Only real
  * containment counts: an element whose parent is not on screen is a root here,
@@ -409,15 +440,38 @@ function childrenByParent(nodes) {
 
 /** One node of the ELK containment tree: a leaf keeps its measured size, a
  * container is sized by ELK around what it holds. */
-function nestedNode(el, tree, sizeOf) {
+function nestedNode(el, tree, sizeOf, describe = new Set(), sizes = null) {
   const kids = tree.kids.get(el.id);
-  if (!kids?.length) return { id: el.id, ...sizeOf(el) };
+  const own = sizeOf(el);
+  if (!kids?.length) return { id: el.id, ...own };
+
+  // A leaf box grows to fit its contents; a container is sized by ELK from its
+  // children and its padding, so its own chrome has to be *asked for* as
+  // padding or whatever is inside sits on top of it. This was a constant
+  // (`top: 52`), which a two-line kicker — `[DEPLOYMENT NODE: POWERSHELL]` in
+  // the dogfood deployment view — overran, putting the container's own name
+  // underneath its first child. The measured breakdown comes from the canvas;
+  // headless callers fall back to the estimates above.
+  const m = sizes?.get(el.id);
+  const descH =
+    describe.has(el.id) && el.description
+      ? m?.desc ?? descriptionHeight(el.description, own.width)
+      : 0;
+  const top = (m?.header ?? CHROME_EST.header) + NEST_GAP;
+  const bottom = NEST_PAD.bottom + (m?.meta ?? CHROME_EST.meta) + descH;
+
   return {
     id: el.id,
     layoutOptions: {
-      'elk.padding': `[top=${NEST_PAD.top},left=${NEST_PAD.side},bottom=${NEST_PAD.bottom},right=${NEST_PAD.side}]`,
+      'elk.padding': `[top=${top},left=${NEST_PAD.side},bottom=${bottom},right=${NEST_PAD.side}]`,
+      // ELK sizes a compound from its children alone, so a container holding
+      // one small box came out narrower than its own title line — which is
+      // what made that kicker wrap in the first place. Never narrower than the
+      // box it would be on its own.
+      'elk.nodeSize.constraints': 'MINIMUM_SIZE',
+      'elk.nodeSize.minimum': `(${own.width},0)`,
     },
-    children: kids.map((k) => nestedNode(k, tree, sizeOf)),
+    children: kids.map((k) => nestedNode(k, tree, sizeOf, describe, sizes)),
   };
 }
 

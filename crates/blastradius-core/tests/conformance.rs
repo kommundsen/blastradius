@@ -25,6 +25,13 @@ fn repo_docs_workspace_is_valid() {
         1,
         "the dogfood model exercises the nested deployment view (ADR-0018)"
     );
+    // And the per-view description list (spec §4), on the L3 view that is
+    // about those two components — the L2 overview above it stays bare, which
+    // is the whole reason the flag is per view.
+    let described: Vec<_> = ws.views.iter().filter(|v| !v.descriptions.is_empty()).collect();
+    assert_eq!(described.len(), 1, "the dogfood model exercises descriptions on the box");
+    assert_eq!(described[0].id, "core-components");
+    assert_eq!(described[0].descriptions.len(), 2);
     assert_eq!(
         ws.elements.values().filter(|e| e.kind.is_deployment()).count(),
         20,

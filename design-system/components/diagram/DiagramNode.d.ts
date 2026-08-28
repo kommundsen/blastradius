@@ -4,6 +4,12 @@ export interface DiagramNodeProps {
   title: string;
   /** Secondary line, e.g. "8 components" */
   meta?: string;
+  /**
+   * The element's description, drawn at the bottom under a hairline. Pass it
+   * only where the diagram asks for it — the box has no fixed height, and a
+   * described box is materially taller than a bare one.
+   */
+  description?: string;
   /** C4 element kind. Encoded by geometry, never by colour. */
   type?: 'person' | 'system' | 'container' | 'component';
   /**

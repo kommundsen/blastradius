@@ -188,6 +188,37 @@ test('LD: a view with nested:true draws containment in one frame', async ({ page
   expect(page.errors).toEqual([]);
 });
 
+// The other half of containment: a container also draws *itself* — a kicker,
+// a name, a meta line — and ELK sizes it from its children alone, so anything
+// it draws has to be reserved as padding. It was a constant tall enough for a
+// one-line kicker, and `[DEPLOYMENT NODE: POWERSHELL]` wraps to two: the
+// Terminal container's own name rendered underneath the CLI box inside it.
+test('LD: a container never has its own chrome sat on by what it holds', async ({ page }) => {
+  const node = (title) =>
+    page.locator('#nodes .node', { has: page.locator('.node-title', { hasText: title }) });
+  await page.locator('#level-seg .seg-opt', { hasText: 'D' }).click();
+  await node('Developer Machine').dblclick();
+  await expect(node('Terminal')).toHaveClass(/is-nested/);
+
+  const overlaps = await page.locator('#nodes .node.is-nested').evaluateAll((hosts) =>
+    hosts.flatMap((host) => {
+      const own = [...host.children].filter((c) => c.matches('.node-kicker, .node-title, .node-meta, .node-desc'));
+      const kids = [...host.parentElement.querySelectorAll('.node')].filter(
+        (n) => n !== host && n.dataset.id?.startsWith(host.dataset.id + '.')
+      );
+      const hits = (a, b) =>
+        a.left < b.right - 1 && a.right > b.left + 1 && a.top < b.bottom - 1 && a.bottom > b.top + 1;
+      return own.flatMap((part) =>
+        kids
+          .filter((kid) => hits(part.getBoundingClientRect(), kid.getBoundingClientRect()))
+          .map((kid) => `${host.dataset.id} ${part.className} under ${kid.dataset.id}`)
+      );
+    })
+  );
+  expect(overlaps).toEqual([]);
+  expect(page.errors).toEqual([]);
+});
+
 test('groups draw boundaries behind their members, and only where asked', async ({ page }) => {
   const node = (title) =>
     page.locator('#nodes .node', { has: page.locator('.node-title', { hasText: title }) });

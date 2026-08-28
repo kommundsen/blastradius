@@ -6,7 +6,7 @@
 // ADR-0005 tradition.
 
 import { GRID } from './layout.js';
-import { edgeLabelLines, kicker, multiplicity } from './labels.js';
+import { descriptionLines, edgeLabelLines, kicker, multiplicity } from './labels.js';
 
 export { kicker };
 
@@ -57,6 +57,7 @@ export function viewSvg({ layout, elements, colors, fontCss = '', footer = true 
     .t{font-family:'Barlow Condensed',sans-serif;font-weight:600;fill:${colors.text};font-size:15px;letter-spacing:.02em}
     .k{fill:${colors.key};font-size:9px;letter-spacing:1px}
     .m{fill:${colors.muted};font-size:10px}
+    .d{fill:${colors.muted};font-size:11px}
     .lbl{fill:${colors.muted};font-size:10px;paint-order:stroke fill;stroke:${colors.bg};stroke-width:4px;stroke-linejoin:round}
   </style>\n`;
   out += `<rect width="${W}" height="${H}" fill="${colors.bg}"/>\n`;
@@ -99,6 +100,16 @@ export function viewSvg({ layout, elements, colors, fontCss = '', footer = true 
     out += `<text class="t" x="${n.x + 10}" y="${n.y + 36}">${esc(el.name.toUpperCase())}</text>\n`;
     const meta = metaLine(el, elements);
     if (meta) out += `<text class="m" x="${n.x + 10}" y="${n.y + 52}">${esc(meta)}</text>\n`;
+    // The description sits at the bottom under a hairline, as `.node-desc`
+    // draws it on the canvas. `describe` comes from the layout, so the box
+    // that reserved the height is the box that fills it.
+    if (n.describe && el.description) {
+      const top = n.y + (meta ? 52 : 36) + 10;
+      out += `<line x1="${n.x + 10}" y1="${top}" x2="${n.x + n.width - 10}" y2="${top}" stroke="${stroke}"/>\n`;
+      for (const [i, line] of descriptionLines(el.description, n.width).entries()) {
+        out += `<text class="d" x="${n.x + 10}" y="${top + 12 + i * 15}">${esc(line)}</text>\n`;
+      }
+    }
   }
   out += '</g>\n';
   if (footer) {

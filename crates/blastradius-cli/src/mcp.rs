@@ -760,6 +760,14 @@ fn operation_schema() -> Value {
                     "id": id("element to place"),
                     "x": {"type": "integer"}, "y": {"type": "integer"},
                 }), vec!["level", "id", "x", "y"]),
+            variant("show-description", "Draw an element's description inside its box in one view, or stop drawing it. Per view, not per element: set the description itself with set-field.",
+                json!({
+                    "view": id("view id; omit for the default view at this level and scope"),
+                    "level": {"type": "string", "enum": ["L1", "L2", "L3", "LD"]},
+                    "scope": id("id of the element being looked inside; omit at L1"),
+                    "id": id("element whose box is affected"),
+                    "show": {"type": "boolean", "description": "true draws the description, false removes it from this view"},
+                }), vec!["level", "id", "show"]),
         ],
     })
 }

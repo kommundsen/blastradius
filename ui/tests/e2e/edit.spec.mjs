@@ -81,6 +81,57 @@ test('edge click opens relation inspector; delete removes it', async ({ page }) 
   expect(page.errors).toEqual([]);
 });
 
+// Descriptions on the box (spec §4): the text is a model field edited in the
+// inspector, and whether a given diagram draws it is toggled on the box.
+test('description is written in the inspector and drawn from the box menu', async ({ page }) => {
+  await node(page, 'Blastradius').dblclick(); // L2
+  await expect(page.locator('#breadcrumb')).toContainText('Containers');
+  const core = node(page, 'Core').first();
+  await core.click();
+
+  // The field carries the description the model already has, and editing it
+  // does not put the text on the diagram — that is a separate decision.
+  const desc = page.locator('#insp-desc');
+  await expect(desc).toHaveValue(/Library-first/);
+  await desc.fill('The domain, and nothing that draws pixels.');
+  await desc.blur();
+  await expect(page.locator('#undo-btn')).toBeEnabled();
+  // The edit re-renders the canvas, so wait for the box to be back before
+  // measuring it — `#nodes` is emptied and rebuilt in between.
+  await expect(core).toBeVisible();
+  await expect(core.locator('.node-desc')).toHaveCount(0);
+
+  // Right-click puts it on the box, and the box grows to hold it.
+  const before = (await core.boundingBox()).height;
+  await core.click({ button: 'right' });
+  await page.locator('.ctx-menu .ctx-item', { hasText: 'Show description' }).click();
+  await expect(core.locator('.node-desc')).toHaveText('The domain, and nothing that draws pixels.');
+  expect((await core.boundingBox()).height).toBeGreaterThan(before);
+
+
+  // And the same menu takes it off again.
+  await core.click({ button: 'right' });
+  await page.locator('.ctx-menu .ctx-item', { hasText: 'Hide description' }).click();
+  await expect(core.locator('.node-desc')).toHaveCount(0);
+  expect(page.errors).toEqual([]);
+});
+
+test('an element with no description is offered the field instead', async ({ page }) => {
+  await page.locator('#level-seg .seg-opt', { hasText: 'D' }).click();
+  await node(page, 'Developer Machine').first().dblclick();
+  const box = node(page, 'Windows 11 Workstation').first();
+  await expect(box).toBeVisible();
+
+  // A nested container is painted behind its children, so aim at its own
+  // title strip rather than the centre, which belongs to whatever is inside.
+  await box.click({ button: 'right', position: { x: 24, y: 12 } });
+  await page.locator('.ctx-menu .ctx-item', { hasText: 'Add a description' }).click();
+  // Nothing to show yet, so the menu hands over to the field that creates one.
+  await expect(page.locator('#insp-desc')).toBeFocused();
+  await expect(page.locator('.ctx-menu')).toHaveCount(0);
+  expect(page.errors).toEqual([]);
+});
+
 test('source panel opens with file list', async ({ page }) => {
   await page.locator('#side-mode .seg-opt', { hasText: 'Source' }).click();
   await expect(page.locator('#src-file')).toBeVisible();

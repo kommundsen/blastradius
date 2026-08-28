@@ -19,6 +19,11 @@ pub enum Operation {
     /// Drag-to-pin: upsert `layout.<id>: [x, y]` in the view's file. Creates
     /// the view file when the level+scope has none yet.
     Pin { view: Option<String>, level: String, scope: Option<String>, id: String, x: i64, y: i64 },
+    /// Show or hide an element's `description:` inside its box, by adding or
+    /// removing its id from the view's `descriptions:` list. Per view, like a
+    /// pin, and written to the same file — what a diagram says about a box is
+    /// the diagram's business, not the element's.
+    ShowDescription { view: Option<String>, level: String, scope: Option<String>, id: String, show: bool },
     /// Rename = set `name:` — the id is immutable (ADR-0003).
     Rename { id: String, name: String },
     /// Set a scalar field on an element (whitelisted: name, description,
@@ -38,7 +43,11 @@ pub enum Operation {
 /// write guard in `apply`.
 fn op_target_ids(op: &Operation) -> Vec<&str> {
     match op {
-        Operation::Pin { id, .. } | Operation::Rename { id, .. } | Operation::SetField { id, .. } | Operation::Delete { id } => vec![id],
+        Operation::Pin { id, .. }
+        | Operation::ShowDescription { id, .. }
+        | Operation::Rename { id, .. }
+        | Operation::SetField { id, .. }
+        | Operation::Delete { id } => vec![id],
         Operation::Create { parent, id, .. } => {
             let mut v = vec![id.as_str()];
             if let Some(p) = parent {
@@ -59,6 +68,16 @@ pub struct FileChange {
     pub before: Option<String>,
     /// None = file deleted (unused in v1 — no op deletes files).
     pub after: Option<String>,
+}
+
+/// The view file a per-view edit writes into (see `SyncEngine::view_target`).
+enum ViewTarget {
+    /// A view file that already exists: its path, and the element id in the
+    /// key style that view uses.
+    Existing { rel: String, key: String },
+    /// No view file covers this level+scope yet, so one has to be authored.
+    /// `header` is everything above the section the caller is about to write.
+    New { rel: String, header: String, key: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -312,7 +331,12 @@ impl SyncEngine {
         // Granular staleness (spec, Phase 5): a stale *view* file blocks only
         // operations that would write into it — i.e. pinning that view. The
         // target must be resolved before compute (its text does not parse).
-        if let Operation::Pin { view, level, scope, .. } = &op {
+        let writes_view = match &op {
+            Operation::Pin { view, level, scope, .. }
+            | Operation::ShowDescription { view, level, scope, .. } => Some((view, level, scope)),
+            _ => None,
+        };
+        if let Some((view, level, scope)) = writes_view {
             let target = self.model.views.iter().find(|v| match view {
                 Some(vid) => &v.id == vid,
                 None => v.level == *level && (level == "L1" || Some(v.scope.as_str()) == scope.as_deref()),
@@ -327,6 +351,15 @@ impl SyncEngine {
             }
         }
         let changes = self.compute_changes(&op)?;
+        // Toggling something to the state it is already in is not an edit, and
+        // pushing it would put an undo entry on the stack that undoes nothing.
+        if changes.is_empty() {
+            return Ok(Transaction {
+                label: op_label(&op),
+                source: "canvas".to_string(),
+                changes,
+            });
+        }
         if let Some(c) = changes.iter().find(|c| self.stale.contains(&c.rel)) {
             return Err(format!(
                 "{}: does not parse — pinning is disabled until it is fixed",
@@ -466,6 +499,9 @@ impl SyncEngine {
             Operation::Pin { view, level, scope, id, x, y } => {
                 self.compute_pin(view.as_deref(), level, scope.as_deref(), id, *x, *y)
             }
+            Operation::ShowDescription { view, level, scope, id, show } => {
+                self.compute_show_description(view.as_deref(), level, scope.as_deref(), id, *show)
+            }
             Operation::Rename { id, name } => {
                 let (rel, chain) = self.element_chain(id)?;
                 let text = self.files.get(&rel).ok_or("file not cached")?;
@@ -520,15 +556,22 @@ impl SyncEngine {
         Ok((el.file.clone(), chain))
     }
 
-    fn compute_pin(
+    /// Where a per-view edit lands, and how that view names the element.
+    ///
+    /// Pinning and description toggles are the same problem — both write
+    /// presentation for one element into the view for a level+scope, and both
+    /// have to author that view file when there is not one yet — so they ask
+    /// the question here once rather than each answering it their own way.
+    ///
+    /// `verb` names the operation in the one error this can raise.
+    fn view_target(
         &self,
         view: Option<&str>,
         level: &str,
         scope: Option<&str>,
         id: &str,
-        x: i64,
-        y: i64,
-    ) -> Result<Vec<FileChange>, String> {
+        verb: &str,
+    ) -> Result<ViewTarget, String> {
         // An empty scope is the deployment overview, which the canvas
         // addresses as no scope at all (ADR-0018).
         fn view_scope(v: &crate::model::View) -> Option<&str> {
@@ -538,49 +581,97 @@ impl SyncEngine {
             Some(vid) => v.id == vid,
             None => v.level == level && (level == "L1" || view_scope(v) == scope),
         });
-        // pins are written scope-relative when inside the scope (spec §4 style)
-        let pin_key = |scope: &str, id: &str| -> String {
+        // keys are written scope-relative when inside the scope (spec §4 style)
+        let view_key = |scope: &str, id: &str| -> String {
             id.strip_prefix(&format!("{scope}."))
                 .map(str::to_string)
                 .unwrap_or_else(|| id.to_string())
         };
-        let value = format!("[{x}, {y}]");
         match existing {
             Some(v) => {
-                let rel = v.file.clone();
-                let text = self.files.get(&rel).ok_or("view file not cached")?;
-                let key = pin_key(&v.scope, id);
-                let after = set_layout_pin(text, &key, &value)?;
-                Ok(vec![self.change(&rel, after)])
+                Ok(ViewTarget::Existing { rel: v.file.clone(), key: view_key(&v.scope, id) })
             }
             None => {
-                // No view file yet, so pinning writes one. L1 and the
-                // deployment overview have no scope element to name — their
-                // subject is the whole model, or every environment — so they
-                // get a scope-less view and absolute pin keys. Requiring a
-                // scope here is why dragging any node at L1 failed outright in
-                // a workspace with no L1 view file, which is most of them.
+                // No view file yet, so this writes one. L1 and the deployment
+                // overview have no scope element to name — their subject is
+                // the whole model, or every environment — so they get a
+                // scope-less view and absolute keys. Requiring a scope here is
+                // why dragging any node at L1 failed outright in a workspace
+                // with no L1 view file, which is most of them.
                 let (view_id, scope_line, key) = match scope {
                     Some(s) => {
                         let last = s.rsplit('.').next().unwrap_or(s);
                         (
                             format!("{last}-{}", level.to_lowercase()),
                             format!("scope: {s}\n"),
-                            pin_key(s, id),
+                            view_key(s, id),
                         )
                     }
                     None if level == "L1" || level == "LD" => {
                         let name = if level == "L1" { "context" } else { "deployment" };
                         (name.to_string(), String::new(), id.to_string())
                     }
-                    None => return Err(format!("cannot pin at {level} without a scope element")),
+                    None => return Err(format!("cannot {verb} at {level} without a scope element")),
                 };
                 let rel = format!("views/{view_id}.yaml");
                 if self.files.contains_key(&rel) {
                     return Err(format!("{rel} exists but defines no matching view"));
                 }
-                let text =
-                    format!("view: {view_id}\n{scope_line}level: {level}\nlayout:\n  {key}: {value}\n");
+                let header = format!("view: {view_id}\n{scope_line}level: {level}\n");
+                Ok(ViewTarget::New { rel, header, key })
+            }
+        }
+    }
+
+    fn compute_pin(
+        &self,
+        view: Option<&str>,
+        level: &str,
+        scope: Option<&str>,
+        id: &str,
+        x: i64,
+        y: i64,
+    ) -> Result<Vec<FileChange>, String> {
+        let value = format!("[{x}, {y}]");
+        match self.view_target(view, level, scope, id, "pin")? {
+            ViewTarget::Existing { rel, key } => {
+                let text = self.files.get(&rel).ok_or("view file not cached")?;
+                let after = set_layout_pin(text, &key, &value)?;
+                Ok(vec![self.change(&rel, after)])
+            }
+            ViewTarget::New { rel, header, key } => {
+                let text = format!("{header}layout:\n  {key}: {value}\n");
+                Ok(vec![FileChange { rel, before: None, after: Some(text) }])
+            }
+        }
+    }
+
+    /// Add or remove the element from the view's `descriptions:` list.
+    ///
+    /// Toggling to the state the view is already in yields no changes at all,
+    /// which `apply` treats as a no-op rather than an empty undo entry.
+    fn compute_show_description(
+        &self,
+        view: Option<&str>,
+        level: &str,
+        scope: Option<&str>,
+        id: &str,
+        show: bool,
+    ) -> Result<Vec<FileChange>, String> {
+        match self.view_target(view, level, scope, id, "show a description")? {
+            ViewTarget::Existing { rel, key } => {
+                let text = self.files.get(&rel).ok_or("view file not cached")?;
+                match set_view_descriptions(text, &key, show)? {
+                    Some(after) => Ok(vec![self.change(&rel, after)]),
+                    None => Ok(Vec::new()),
+                }
+            }
+            ViewTarget::New { rel, header, key } => {
+                // Hiding what no view file asks to show is already true.
+                if !show {
+                    return Ok(Vec::new());
+                }
+                let text = format!("{header}descriptions: [{key}]\n");
                 Ok(vec![FileChange { rel, before: None, after: Some(text) }])
             }
         }
@@ -1215,6 +1306,9 @@ fn op_label(op: &Operation) -> String {
     match op {
         Operation::Pin { id, x, y, .. } => format!("pin {id} at [{x}, {y}]"),
         Operation::Rename { id, name } => format!("rename {id} to {name:?}"),
+        Operation::ShowDescription { id, show, .. } => {
+            format!("{} description on {id}", if *show { "show" } else { "hide" })
+        }
         Operation::SetField { id, field, value } => format!("set {field} on {id} to {value:?}"),
         Operation::Create { id, kind, .. } => format!("create {kind} {id}"),
         Operation::Delete { id } => format!("delete {id}"),
@@ -1272,6 +1366,74 @@ fn set_layout_pin(text: &str, key: &str, value: &str) -> Result<String, String> 
         out.push_str(&format!("layout:\n  {key}: {value}\n"));
         Ok(out)
     }
+}
+
+/// Add or remove `key` in a view's `descriptions:` list, rewriting it as one
+/// flow sequence. `Ok(None)` means the list already says what was asked.
+///
+/// The line is generated whole rather than spliced into, because unlike the
+/// model files there is nothing in it to preserve: it is a sorted list of ids
+/// this engine wrote. Everything around it survives, which is the part that
+/// matters — a view file is hand-edited and commented like any other.
+fn set_view_descriptions(text: &str, key: &str, show: bool) -> Result<Option<String>, String> {
+    let span = splice::find_entry(text, &["descriptions"])?;
+    let mut ids: BTreeSet<String> = BTreeSet::new();
+    if span.is_some() {
+        let root = marked_yaml::parse_yaml(0, text).map_err(|e| e.to_string())?;
+        if let marked_yaml::Node::Mapping(map) = &root {
+            if let Some(marked_yaml::Node::Sequence(seq)) = map.get_node("descriptions") {
+                for item in seq.iter() {
+                    if let marked_yaml::Node::Scalar(sc) = item {
+                        ids.insert(sc.as_str().to_string());
+                    }
+                }
+            }
+        }
+    }
+    let changed = if show { ids.insert(key.to_string()) } else { ids.remove(key) };
+    if !changed {
+        return Ok(None);
+    }
+    let list: Vec<&str> = ids.iter().map(String::as_str).collect();
+
+    let Some(span) = span else {
+        // No list yet — append one. (`changed` above rules out the empty case.)
+        let mut out = text.to_string();
+        if !out.ends_with('\n') {
+            out.push('\n');
+        }
+        out.push_str(&format!("descriptions: [{}]\n", list.join(", ")));
+        return Ok(Some(out));
+    };
+
+    // A one-line list can carry a trailing comment; a block sequence spread
+    // over several lines is replaced wholesale by the single flow line.
+    let mut out = String::new();
+    for (i, line) in text.split_inclusive('\n').enumerate() {
+        let n = i + 1;
+        if n < span.key_line || n > span.end_line {
+            out.push_str(line);
+            continue;
+        }
+        if n > span.key_line {
+            continue; // consumed by the replacement written on the key line
+        }
+        let eol = line.trim_end_matches(['\r', '\n']);
+        let nl = &line[eol.len()..];
+        let indent = " ".repeat(span.indent);
+        let comment = if span.inline {
+            eol.find(" #").map(|p| &eol[p..]).unwrap_or("")
+        } else {
+            ""
+        };
+        // An empty list is no list: drop the entry entirely rather than leave
+        // a `descriptions: []` behind for a reader to wonder about.
+        if list.is_empty() {
+            continue;
+        }
+        out.push_str(&format!("{indent}descriptions: [{}]{comment}{nl}", list.join(", ")));
+    }
+    Ok(Some(out))
 }
 
 /// Set label/protocol on the sequence item matching raw endpoints.

@@ -294,6 +294,13 @@ textarea.input { min-height: 90px; resize: vertical; }
 .node-title { font-family: var(--font-heading); font-weight: var(--font-heading-weight);
   font-size: var(--text-md); line-height: var(--leading-tight); text-transform: uppercase; }
 .node-meta { font-size: var(--text-2xs); color: var(--color-text-muted); }
+/* A description is the only prose on a box, so it sits at the bottom under a
+   hairline: the identity lines above stay what you read first. Opt-in per
+   view (spec §4) — a box without one is unchanged. */
+.node-desc { margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--node-border);
+  font-size: var(--text-xs); line-height: 1.35; color: var(--color-text-muted);
+  text-transform: none; white-space: normal; }
+.node.is-external .node-desc { border-top-color: var(--node-external); }
 
 .node.is-active { z-index: var(--z-node-active); background: var(--node-fill-active);
   border: 1.5px solid var(--node-border-active); box-shadow: var(--shadow-node-active); }

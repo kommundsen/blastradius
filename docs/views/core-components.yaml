@@ -7,3 +7,7 @@ level: L3
 include-context: false
 # Groups (spec §3c) are opt-in per view; this one draws them.
 show-groups: true
+# Descriptions on the box (spec §4) are opt-in per view too. The two
+# components this view is really about say what they are; the rest stay
+# names, which is the point of the flag being per view and per element.
+descriptions: [model-service, sync-engine]

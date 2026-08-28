@@ -955,6 +955,71 @@ starter model is named after the project rather than the folder it lands in.
 Owner testing of the 0.7.0 build, plus a question about the onboarding
 hand-off that turned out to be a real drift.
 
+### Descriptions belong on the box, not only in the inspector
+
+Owner request: *"I would like to have the option to add a description to an
+element. This is typically shown at the bottom part of the element box."*
+
+The field already existed and was already parsed, searchable and shown in the
+inspector — but read-only there, and no diagram had ever drawn it. So there
+were two gaps, not one: no way to write a description from the app, and no way
+to see it on the picture. The inspector gained an editable field routed
+through the `set-field` operation that already whitelisted `description`.
+
+The drawing half needed a decision about **where the choice lives**. C4 puts
+the description in the box by default, but nearly every element in a real
+workspace already has one, so drawing them all would have made every existing
+diagram taller the moment this shipped — the same argument that made groups
+opt-in (spec §3c). Owner's call, from three options: a per-element toggle on
+the box, stored per view. So `descriptions: [core]` in the view file, beside
+`layout:`, resolved with the same scope-relative keys, written by the same
+machinery — including authoring the view file when the level+scope has none,
+which is most of them. The same container can be a bare name in the L2
+overview and carry its paragraph in the L3 view that is about it.
+
+Right-click is a new surface: the app had no context menu at all. It carries
+one item, because there is exactly one thing about a box that belongs to the
+*diagram* rather than to the element. A box with no description yet is offered
+the inspector field instead — there is nothing to show until there is
+something to say.
+
+The cost is that a described box is **taller**, and four surfaces had to agree
+about how much taller. The canvas measures the real markup (`measureNodes`);
+the SVG export, the exported viewer and the layout estimate share one wrap in
+`ui/js/labels.js`. A nested deployment container is the one case that cannot
+grow — ELK sizes it from its children — so it asks for the room as bottom
+padding instead, wrapped at the leaf width, which over-reserves rather than
+letting the text land on what is inside.
+
+### A nested container was sat on by what it held
+
+Noticed while looking at the deployment view during the description work, and
+confirmed against a pristine worktree at `6419db5`: it was already broken, and
+had been since containment shipped (ADR-0018).
+
+`NEST_PAD.top` was a constant, 52px, sized for a container's kicker and name.
+But `[DEPLOYMENT NODE: POWERSHELL]` wraps to two lines in a narrow box, and
+`elk.padding` is what stands between a container's own chrome and its first
+child — so the Terminal container's name rendered underneath the CLI instance
+inside it. The meta line had the matching problem at the other end: it is
+pushed to the bottom of a nested box by `margin-top: auto`, and the 16px of
+bottom padding did not hold it.
+
+Two causes, both the same shape as the description problem next door — a
+constant standing in for something that is content-sized:
+
+- The padding is now the container's **measured** chrome, from the same probe
+  that measures leaf heights (`measureNodes` returns the breakdown alongside
+  the height); the headless path keeps an estimate, generously rounded.
+- ELK sizes a compound from its children alone, so a container holding one
+  small box came out narrower than its own title line — which is what made the
+  kicker wrap. A compound now carries `elk.nodeSize.minimum` of the box it
+  would be on its own.
+
+Pinned by an e2e test that walks every nested container and asserts none of
+its own spans intersects any descendant's box. It reports eight overlaps
+against the old constant.
+
 ### The hand-off had drifted past its own workflows
 
 Asked whether the suggested prompt was still correct. It was not, and nothing

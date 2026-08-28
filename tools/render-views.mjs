@@ -14,7 +14,7 @@ import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
 
-import { computeView, findViewDef, resolvePins } from '../ui/js/data.js';
+import { computeView, findViewDef, resolvePins, resolveDescriptions } from '../ui/js/data.js';
 import { layoutView } from '../ui/js/layout.js';
 import { viewSvg } from '../ui/js/svg.js';
 
@@ -150,6 +150,7 @@ for (const t of targets) {
   const def = findViewDef(snapshot, t.level, t.scope);
   const layout = await layoutView(new ELK(), view, resolvePins(def, view), {
     groups: def?.show_groups ?? false,
+    descriptions: resolveDescriptions(def, view),
   });
   const svg = viewSvg({ layout, elements: snapshot.elements, colors, fontCss: fonts, footer });
   const file = join(outDir, `${t.name}.svg`);

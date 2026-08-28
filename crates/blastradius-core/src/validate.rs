@@ -84,6 +84,15 @@ pub fn cross_validate(ws: &Workspace, diags: &mut Vec<Diagnostic>) {
                 ));
             }
         }
+        for id in &v.descriptions {
+            if ws.resolve(id, (!overview).then_some(v.scope.as_str())).is_none() {
+                diags.push(Diagnostic::error(
+                    &v.file as &str,
+                    v.line,
+                    format!("descriptions names unknown element {id:?}"),
+                ));
+            }
+        }
     }
 
     // --- docs: unique ids, vocab, element links, supersedes ------------------

@@ -104,6 +104,9 @@ pub struct SnapView {
     pub include_context: bool,
     /// Draw `group:` boundaries in this view (spec §3c); off by default.
     pub show_groups: bool,
+    /// Elements whose description is drawn in their box (spec §4), as written
+    /// in the view file — scope-relative, resolved by the renderer like a pin.
+    pub descriptions: Vec<String>,
     /// Draw a deployment view as boxes inside boxes (ADR-0018); off by default.
     pub nested: bool,
 }
@@ -195,6 +198,7 @@ pub fn snapshot(vfs: &dyn Vfs, ws: &Workspace, diags: &[Diagnostic]) -> Snapshot
             layout: v.layout.clone(),
             include_context: v.include_context,
             show_groups: v.show_groups,
+            descriptions: v.descriptions.iter().cloned().collect(),
             nested: v.nested,
         })
         .collect();

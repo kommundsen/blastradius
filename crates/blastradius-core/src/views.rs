@@ -5,7 +5,7 @@ use crate::model::{View, Workspace};
 use crate::vfs::Vfs;
 use crate::yaml;
 use marked_yaml::Node;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub fn parse_view_file(vfs: &dyn Vfs, rel: &str, ws: &mut Workspace, diags: &mut Vec<Diagnostic>) {
     let Some((node, _)) = yaml::load_file(vfs, rel, diags) else {
@@ -90,6 +90,35 @@ pub fn parse_view_file(vfs: &dyn Vfs, rel: &str, ws: &mut Workspace, diags: &mut
         }
     }
 
+    // Which boxes show their description (spec §4). A flow sequence of ids in
+    // the same scope-relative style as a pin key — this is a property of the
+    // diagram, not of the element, so it lives here and not in the model file.
+    let mut descriptions = BTreeSet::new();
+    if let Some(node) = map.get_node("descriptions") {
+        match yaml::as_sequence(node) {
+            Some(seq) => {
+                for item in seq.iter() {
+                    match yaml::as_str(item) {
+                        // Targets resolve against scope in validate, as pins do.
+                        Some(s) => {
+                            descriptions.insert(s.to_string());
+                        }
+                        None => diags.push(Diagnostic::error(
+                            rel,
+                            yaml::line_of(item),
+                            "descriptions entries must be element ids",
+                        )),
+                    }
+                }
+            }
+            None => diags.push(Diagnostic::error(
+                rel,
+                yaml::field_line(map, "descriptions"),
+                "`descriptions:` must be a list of element ids (spec §4)",
+            )),
+        }
+    }
+
     ws.views.push(View {
         id,
         name: yaml::get_str(map, "name").map(str::to_string),
@@ -97,6 +126,7 @@ pub fn parse_view_file(vfs: &dyn Vfs, rel: &str, ws: &mut Workspace, diags: &mut
         level,
         layout,
         show_groups: yaml::get_str(map, "show-groups") == Some("true"),
+        descriptions,
         nested,
         include_context: yaml::get_str(map, "include-context") != Some("false"),
         file: rel.to_string(),

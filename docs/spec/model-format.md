@@ -169,6 +169,15 @@ stylesheet, offscreen in one reflow, and passes the results to `layoutView`
 (`options.sizes`). Headless callers — the SVG export and the exported viewer —
 have no DOM and keep the estimate, which is what it is for.
 
+The same applies to a **container** in a nested deployment view, with one
+twist: it cannot grow, because ELK sizes it from its children. Its own chrome —
+kicker, name, meta line, and a description where the view draws one — has to be
+reserved as `elk.padding`, and that was a constant until 0.7.1, when a kicker
+that wrapped to two lines was found rendering under the container's first
+child. It is now the measured chrome, and a compound also carries an
+`elk.nodeSize.minimum` of the box it would be as a leaf, so a container holding
+one small thing is never narrower than its own title.
+
 ## 3b. Deployment (ADR-0018)
 
 The physical counterpart to the logical model: where the containers
@@ -262,6 +271,8 @@ level: L2                   # L1 | L2 | L3 | LD — which altitude this view cap
 layout:                     # pinned positions — grid units (26px cells @ 1×)
   ui: [4, 2]
   core: [10, 4]
+descriptions: [core]        # boxes that draw their `description:` inside them
+                            # — scope-relative keys, same style as a pin
 show-groups: false          # draw `group:` boundaries (§3c) — default false
 nested: false               # LD only: draw the whole subtree as boxes inside
                             # boxes rather than one altitude at a time
@@ -284,6 +295,30 @@ include-context: true       # show people/externals related to scope (default tr
   auto-laid-out.
 - `scope:` is required except on an `LD` overview, the one view whose subject
   is the whole deployment rather than one element.
+
+### Descriptions on the box (0.7.1)
+
+An element's `description:` is a model field (§3). `descriptions:` says which
+boxes *draw* it, at the bottom of the box under a hairline, which is where C4
+puts it.
+
+- **Per view, not per element.** The same container is a bare name in the L2
+  overview and carries its paragraph in the L3 view that is about it. Storing
+  the choice on the element would make those two diagrams argue over one flag,
+  the way `layout:` would if pins lived in the model file.
+- **Off by default**, for the reason groups are (§3c): nearly every element in
+  a real workspace already has a description, and writing one must not silently
+  make every existing diagram taller.
+- Keys are resolved exactly as pin keys are — scope-relative where the element
+  is inside the scope, absolute otherwise; naming an element the view does not
+  show is an error, as it is for a pin.
+- The canvas toggles it from the box's right-click menu, which writes
+  `descriptions:` through the sync engine (`show-description`); the file is
+  created if the level+scope has none yet, as pinning does.
+- A described box is **taller**, and layout accounts for it: the canvas
+  measures the real markup, and the headless surfaces (SVG export, exported
+  viewer) wrap the text with the shared estimate in `ui/js/labels.js`, so all
+  four surfaces agree about how many lines a description costs.
 
 ## 5. Documents
 

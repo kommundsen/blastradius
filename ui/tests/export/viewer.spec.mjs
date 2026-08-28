@@ -77,6 +77,29 @@ test('the tree lists code under its component', async ({ page }) => {
   expect(page.errors).toEqual([]);
 });
 
+test('a view that asks for descriptions draws them, sized for the text', async ({ page }) => {
+  // The dogfood L3 view names two of its six components (spec §4). The
+  // exported viewer has no DOM measuring pass, so it sizes described boxes
+  // from the shared estimate in labels.js — if that estimate and the markup
+  // disagree, the text overflows its box, which is what this checks.
+  const node = (t) =>
+    page.locator('#nodes .node', { has: page.locator('.node-title', { hasText: t }) }).first();
+  await node('Blastradius').dblclick();
+  await expect(page.locator('#breadcrumb')).toContainText('Containers');
+  await node('Core').dblclick();
+  await expect(page.locator('#breadcrumb')).toContainText('Components');
+
+  const described = node('Sync Engine');
+  await expect(described.locator('.node-desc')).toContainText('Arbiter between canvas');
+  // Only where the view asks: the other four components stay bare.
+  await expect(page.locator('#nodes .node-desc')).toHaveCount(2);
+  await expect(node('Exporter').locator('.node-desc')).toHaveCount(0);
+
+  const clipped = await described.evaluate((el) => el.scrollHeight - el.clientHeight);
+  expect(clipped).toBeLessThanOrEqual(1);
+  expect(page.errors).toEqual([]);
+});
+
 test('the deployment altitude still works alongside it', async ({ page }) => {
   await expect(page.locator('#level-seg input[value="LD"]')).toBeEnabled();
   await pick(page, 'D');

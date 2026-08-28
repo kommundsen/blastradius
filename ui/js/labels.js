@@ -53,6 +53,42 @@ export function multiplicity(el) {
   return el.replicas && el.replicas > 1 ? `×${el.replicas}` : null;
 }
 
+/** Description text at 11px, the size `.node-desc` renders it at. */
+const DESC_LINE_HEIGHT = 15;
+const DESC_CHAR_WIDTH = 5.1;
+const DESC_PAD = 20; // `.node` padding, both sides
+
+/**
+ * How an element's description wraps inside a box `width` px wide.
+ *
+ * Only the surfaces with no DOM need this: the SVG export draws these lines
+ * literally, and layout reserves their height. The canvas measures the real
+ * markup instead (app.js `measureNodes`), which is always truer than an
+ * estimate and is why the estimate only has to be close.
+ */
+export function descriptionLines(text, width) {
+  const max = Math.max(8, Math.floor((width - DESC_PAD) / DESC_CHAR_WIDTH));
+  const lines = [];
+  let line = '';
+  for (const word of String(text).split(/\s+/).filter(Boolean)) {
+    const next = line ? `${line} ${word}` : word;
+    if (next.length > max && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+/** Height `.node-desc` adds to a box: the rule's own 6px margin, 5px padding
+ *  and 1px rule, plus a line box per wrapped line. */
+export function descriptionHeight(text, width) {
+  return 12 + descriptionLines(text, width).length * DESC_LINE_HEIGHT;
+}
+
 /**
  * A relation's label, as the lines a diagram draws: the label, then the
  * technology in brackets beneath it.

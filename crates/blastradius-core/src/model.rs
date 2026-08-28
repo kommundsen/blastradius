@@ -4,7 +4,7 @@
 //! the global address is the dotted path. `ElementId` is always the full
 //! dotted path; context elements (people/external) are bare ids.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub type ElementId = String;
 
@@ -147,6 +147,12 @@ pub struct View {
     /// grouping is presentation, and no existing diagram should change shape
     /// because an element gained a label.
     pub show_groups: bool,
+    /// Elements whose `description:` is drawn inside their box, as written in
+    /// the view file (scope-relative, like a pin key). Per view rather than
+    /// per element because what a diagram says is the diagram's business: the
+    /// same container can be a bare name in the L2 overview and carry its
+    /// paragraph in the L3 view that is about it.
+    pub descriptions: BTreeSet<ElementId>,
     /// Draw a deployment view as boxes inside boxes rather than one altitude
     /// at a time (ADR-0018 follow-up). Off by default and deployment-only:
     /// the whole product is "one altitude, dive to go deeper", and this is the
