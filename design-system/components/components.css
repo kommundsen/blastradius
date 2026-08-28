@@ -253,16 +253,25 @@ textarea.input { min-height: 90px; resize: vertical; }
    JS owns two things: the transform on .canvas-camera, and --camera-scale set to
    the same scale factor. Everything below reads --camera-scale; nothing else needs to. */
 
+/* The dot grid lives here, on the element that fills the viewport and never
+   moves, so it covers the whole canvas at every pan and zoom — the drawing sits
+   *in* an endless sheet rather than on a finite rectangle of it.
+
+   It still belongs to the drawing, not to the screen: JS sets background-size
+   from the camera scale and background-position from the camera translation,
+   so the dots pan and zoom with the model and the dot at model (0,0) stays
+   under the model's origin. It used to be painted on .canvas-camera, which is
+   viewport-sized and *translated* — so the dotted area slid off with the
+   drawing and the model appeared to sit in a corner of it. */
 .canvas { position: relative; overflow: hidden; background: var(--canvas-bg);
-  z-index: var(--z-canvas); }
+  z-index: var(--z-canvas);
+  background-image: radial-gradient(var(--canvas-dot) 1px, transparent 1px);
+  background-size: var(--canvas-dot-pitch, 26px) var(--canvas-dot-pitch, 26px);
+  transition: background-position var(--transition-camera),
+              background-size var(--transition-camera); }
 
 .canvas-camera { position: absolute; inset: 0; transform-origin: 0 0;
-  transition: var(--transition-camera); will-change: transform;
-  /* The dot grid rides the camera — a blueprint grid belongs to the drawing,
-     not to the screen. Below ~0.5x, JS should swap the pitch to 4x and re-render
-     rather than let the dots collapse into a wash. */
-  background-image: radial-gradient(var(--canvas-dot) 1px, transparent 1px);
-  background-size: var(--canvas-dot-pitch, 26px) var(--canvas-dot-pitch, 26px); }
+  transition: var(--transition-camera); will-change: transform; }
 
 .canvas-overlay { position: absolute; inset: 0; pointer-events: none; z-index: var(--z-overlay); }
 .canvas-overlay > * { pointer-events: auto; }
@@ -302,6 +311,24 @@ textarea.input { min-height: 90px; resize: vertical; }
 .node.is-external  { background: transparent; border: 1px dashed var(--node-external); box-shadow: none; }
 .node.is-external .node-kicker { color: var(--color-text-muted); }
 .node.is-external .node-title  { color: var(--color-text-muted); }
+
+/* Deployment (ADR-0018) — the physical world, rounded rather than square, so
+   an infrastructure box never reads as a logical one at a glance. Instances
+   keep the container spine: they *are* containers, just running somewhere. */
+.node.is-environment      { border-width: 2px; border-radius: calc(var(--radius) * 3); }
+.node.is-deployment-node  { border-radius: calc(var(--radius) * 3); }
+.node.is-container-instance { border-left-width: 3px; background: var(--color-neutral-200); }
+
+/* Group boundaries (spec §3c). Deliberately not a `.node`: a group is one
+   label over many elements, sized to its members and drawn behind them, so it
+   shares none of the node contract. */
+.group-box { position: absolute; z-index: var(--z-group);
+  border: 1px dashed var(--group-border); border-radius: calc(var(--radius) * 2);
+  background: var(--group-fill); pointer-events: none; }
+.group-label { position: absolute; top: 6px; left: 10px;
+  font-family: var(--font-body); font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-label); text-transform: uppercase;
+  color: var(--color-text-muted); }
 
 /* Git diff + validation. Every state pairs a colour with a glyph badge, so the
    model stays readable in greyscale, in print, and for colour-blind users. */

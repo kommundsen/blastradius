@@ -554,17 +554,33 @@ impl SyncEngine {
                 Ok(vec![self.change(&rel, after)])
             }
             None => {
-                let scope = scope.ok_or("cannot pin at L1 without a scope element")?;
-                let last = scope.rsplit('.').next().unwrap_or(scope);
-                let view_id = format!("{last}-{}", level.to_lowercase());
+                // No view file yet, so pinning writes one. L1 and the
+                // deployment overview have no scope element to name — their
+                // subject is the whole model, or every environment — so they
+                // get a scope-less view and absolute pin keys. Requiring a
+                // scope here is why dragging any node at L1 failed outright in
+                // a workspace with no L1 view file, which is most of them.
+                let (view_id, scope_line, key) = match scope {
+                    Some(s) => {
+                        let last = s.rsplit('.').next().unwrap_or(s);
+                        (
+                            format!("{last}-{}", level.to_lowercase()),
+                            format!("scope: {s}\n"),
+                            pin_key(s, id),
+                        )
+                    }
+                    None if level == "L1" || level == "LD" => {
+                        let name = if level == "L1" { "context" } else { "deployment" };
+                        (name.to_string(), String::new(), id.to_string())
+                    }
+                    None => return Err(format!("cannot pin at {level} without a scope element")),
+                };
                 let rel = format!("views/{view_id}.yaml");
                 if self.files.contains_key(&rel) {
                     return Err(format!("{rel} exists but defines no matching view"));
                 }
-                let key = pin_key(scope, id);
-                let text = format!(
-                    "view: {view_id}\nscope: {scope}\nlevel: {level}\nlayout:\n  {key}: {value}\n"
-                );
+                let text =
+                    format!("view: {view_id}\n{scope_line}level: {level}\nlayout:\n  {key}: {value}\n");
                 Ok(vec![FileChange { rel, before: None, after: Some(text) }])
             }
         }

@@ -443,3 +443,42 @@ test('dropping a node onto another nudges it to clear space (min distance)', asy
   });
   expect(overlapping).toEqual([]);
 });
+
+// The dot sheet is endless (0.7.1). It used to be painted on .canvas-camera,
+// which is viewport-sized and *translated*, so the dotted area slid away with
+// the drawing and the model appeared to sit in a corner of a finite rectangle
+// of dots. It now lives on .canvas — which fills the pane and never moves —
+// with its size and offset driven from the camera, so it still belongs to the
+// drawing rather than to the screen.
+test('the dot grid fills the canvas and travels with the drawing', async ({ page }) => {
+  const bg = (sel, prop) =>
+    page.locator(sel).evaluate((el, p) => getComputedStyle(el)[p], prop);
+
+  // The grid is on the canvas, not on the thing that moves.
+  expect(await bg('#canvas', 'backgroundImage')).toContain('radial-gradient');
+  expect(await bg('#camera', 'backgroundImage')).toBe('none');
+
+  // It covers the whole pane, at every scroll position, by construction: the
+  // element it is painted on is the pane.
+  const covers = await page.locator('#canvas').evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && getComputedStyle(el).overflow === 'hidden';
+  });
+  expect(covers).toBe(true);
+
+  // Panning moves the dots with the model rather than leaving them behind.
+  const before = await bg('#canvas', 'backgroundPosition');
+  await page.mouse.move(400, 300);
+  await page.mouse.down();
+  await page.mouse.move(480, 360, { steps: 8 });
+  await page.mouse.up();
+  const after = await bg('#canvas', 'backgroundPosition');
+  expect(after).not.toBe(before);
+
+  // Zooming changes the pitch, so the grid is part of the drawing's scale.
+  const pitchBefore = await bg('#canvas', 'backgroundSize');
+  await page.locator('#zoom-in').click();
+  await page.locator('#zoom-in').click();
+  expect(await bg('#canvas', 'backgroundSize')).not.toBe(pitchBefore);
+  expect(page.errors).toEqual([]);
+});

@@ -188,6 +188,14 @@
     const cam = $('camera');
     cam.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
     cam.style.setProperty('--camera-scale', scale);
+    // The dot sheet is painted on the canvas, which never moves, and aligned
+    // to the camera here — same as the app, or an export would show the model
+    // sitting in the corner of a finite rectangle of dots.
+    const pitch = GRID * scale * (scale < 0.5 ? 4 : 1);
+    const at = (v) => (((v % pitch) + pitch) % pitch).toFixed(2);
+    const canvas = $('canvas');
+    canvas.style.backgroundSize = `${pitch}px ${pitch}px`;
+    canvas.style.backgroundPosition = `${at(tx)}px ${at(ty)}px`;
     $('zoom-reset').textContent = Math.round(scale * 100) + '%';
   }
 

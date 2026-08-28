@@ -950,6 +950,80 @@ given, so nobody's existing automation silently relocates its workspace.
 Locations are validated — relative, no `..`, no absolute paths — and the
 starter model is named after the project rather than the folder it lands in.
 
+## 0.7.1 — in progress (2026-08-28)
+
+Owner testing of the 0.7.0 build, plus a question about the onboarding
+hand-off that turned out to be a real drift.
+
+### The hand-off had drifted past its own workflows
+
+Asked whether the suggested prompt was still correct. It was not, and nothing
+pinned it — the only assertion was that the dialog contained the phrase "model
+its architecture". It told the agent to read the repository and model it
+through `apply_operations`, which is exactly what `/blastradius:model` exists
+to replace: **being asked what to cover first is the point**, and the hand-off
+walked straight past it. It also assumed MCP was registered, though MCP and
+skills are independent checkboxes, so a skills-only setup was handed a prompt
+naming tools that did not exist.
+
+The prompt is now built from what was actually selected, and both surfaces —
+the app dialog and `blastradius init` — additionally list all three workflows
+and how to start each one in each agent chosen. `sync` and `review` were being
+written to disk and never mentioned to the person who had just installed them
+(owner's point). `workflows::CATALOGUE` and `workflows::invocation` are the
+single source for which workflows exist and how each agent starts them, and a
+test derives the file each quoted invocation implies and asserts `files_for`
+really writes it: a wrong invocation is worse than none, because it sends
+someone to a command that does not exist.
+
+### Dragging a node at L1 could not work
+
+Reported from the released build: moving an L1 element warned "cannot pin at
+L1 without a scope element" and left the node detached from its own relations.
+
+Two faults. Pinning writes a view file when none exists, and it derived the
+file name and the `scope:` key from a scope element — but **L1 has no scope**;
+its subject is the whole model, exactly like the deployment overview. So in
+any workspace without an L1 view file, which is most of them including this
+one, dragging at L1 failed outright. L1 now writes a scope-less
+`views/context.yaml` with absolute pin keys, the way `LD` already did, and
+`views.rs` accepts a scope-less L1 view.
+
+The second fault is worse than the first, because it was not specific to L1: a
+refused operation left the canvas lying. A drag moves the node's own
+`style.left/top` for feedback while its edges stay where layout left them, and
+`applyOp` toasted the error and returned without re-rendering — so *any*
+rejected edit left a node parked away from its relations until something else
+forced a render. It now puts the canvas back.
+
+### The dotted canvas is endless again
+
+Reported alongside it: the model looked like it sat in a corner of the canvas
+rather than on an infinite sheet. The grid was painted on `.canvas-camera`,
+which is viewport-sized and *translated* — so the dotted rectangle slid away
+with the drawing and ran out. It now lives on `.canvas`, which fills the pane
+and never moves, with `background-size` and `background-position` driven from
+the camera so it still pans and zooms with the model and the dot at model
+(0,0) stays under the model's origin. Below half scale the pitch steps up to
+four grid units, which the design system had always described and nothing had
+ever implemented. The exported viewer does the same, or a shared file would
+disagree with the app.
+
+### `tools/sync-ds.py` was a landmine
+
+Found while making that change. `design-system/` is documented as the source
+of truth and `ui/ds/` as generated — but `ui/ds/` had been edited directly and
+was **ahead**: deployment node styles, group boundaries, `--group-border`,
+`--group-fill` and `--z-group` existed only there. The script deletes the
+destination before copying, so running it silently removed shipped styles and
+broke the headless renderer, which reads tokens out of `ui/ds/`.
+
+Both halves fixed: the drifted rules are reconciled into `design-system/`, so
+the two agree again, and the script now **refuses** rather than clobbering —
+before overwriting any CSS file it checks that every selector and custom
+property already in the destination still exists in the source, names what
+would be lost, and writes nothing.
+
 ## 0.7.0 — released (2026-08-28)
 
 **Cut 2026-08-28.** Store submission `1152921505701761076` reached

@@ -22,6 +22,7 @@
 
   /* Stacking order. The canvas has real layers; DOM order is not a specification. */
   --z-canvas:       0;
+  --z-group: 5;   /* group boundaries sit behind edges — context, not content */
   --z-edge:        10;
   --z-node:        20;
   --z-node-active: 30;

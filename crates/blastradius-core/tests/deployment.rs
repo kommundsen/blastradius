@@ -386,3 +386,70 @@ fn nesting_outside_deployment_is_a_warning_not_a_silent_no_op() {
     let v = ws.views.iter().find(|v| v.id == "containers").expect("view");
     assert!(!v.nested, "nesting leaked onto an L2 view");
 }
+
+// ---- pinning where there is no scope (0.7.1) -------------------------------
+// Dragging a node at L1 failed outright with "cannot pin at L1 without a
+// scope element" in any workspace that had no L1 view file yet — which is
+// most of them, including this repository's own. L1's subject is the whole
+// model, so it has no scope element to name, and pinning has to write a
+// scope-less view the same way the deployment overview does.
+
+fn pin_at(dir: &Path, level: &str, scope: Option<&str>, id: &str) -> Result<(), String> {
+    let mut engine = SyncEngine::open(dir);
+    engine.apply(Operation::Pin {
+        view: None,
+        level: level.to_string(),
+        scope: scope.map(str::to_string),
+        id: id.to_string(),
+        x: 4,
+        y: 2,
+    })?;
+    Ok(())
+}
+
+#[test]
+fn pinning_at_l1_writes_a_scopeless_view() {
+    let t = temp("pin-l1");
+    write(&t.dir, "blastradius.yaml", MANIFEST);
+    write(&t.dir, "model/shop.yaml", SYSTEM);
+    write(&t.dir, "model/deployment.yaml", DEPLOYMENT);
+
+    pin_at(&t.dir, "L1", None, "shop").expect("L1 pin must not need a scope");
+
+    let view = fs::read_to_string(t.dir.join("views/context.yaml")).expect("no view written");
+    assert!(view.contains("level: L1"), "{view}");
+    assert!(!view.contains("scope:"), "L1 has no scope element to name: {view}");
+    // Absolute id, since there is nothing to be relative to.
+    assert!(view.contains("shop: [4, 2]"), "{view}");
+
+    // And the workspace it just wrote is valid.
+    let (_ws, diags) = blastradius_core::load_workspace(&t.dir);
+    assert!(!has_errors(&diags), "{diags:?}");
+}
+
+#[test]
+fn pinning_on_the_deployment_overview_works_the_same_way() {
+    let t = temp("pin-ld");
+    write(&t.dir, "blastradius.yaml", MANIFEST);
+    write(&t.dir, "model/shop.yaml", SYSTEM);
+    write(&t.dir, "model/deployment.yaml", DEPLOYMENT);
+
+    pin_at(&t.dir, "LD", None, "production").expect("overview pin");
+    let view = fs::read_to_string(t.dir.join("views/deployment.yaml")).expect("no view written");
+    assert!(view.contains("level: LD"), "{view}");
+    assert!(!view.contains("scope:"), "{view}");
+    let (_ws, diags) = blastradius_core::load_workspace(&t.dir);
+    assert!(!has_errors(&diags), "{diags:?}");
+}
+
+#[test]
+fn a_scoped_level_still_demands_a_scope() {
+    let t = temp("pin-l3-noscope");
+    write(&t.dir, "blastradius.yaml", MANIFEST);
+    write(&t.dir, "model/shop.yaml", SYSTEM);
+    write(&t.dir, "model/deployment.yaml", DEPLOYMENT);
+    // L3 without a scope has no view it could belong to — still an error, and
+    // one that names the level rather than always saying L1.
+    let err = pin_at(&t.dir, "L3", None, "shop.api").unwrap_err();
+    assert!(err.contains("L3"), "{err}");
+}

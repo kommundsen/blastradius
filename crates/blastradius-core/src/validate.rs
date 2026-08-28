@@ -64,9 +64,9 @@ pub fn cross_validate(ws: &Workspace, diags: &mut Vec<Diagnostic>) {
 
     // --- views: scope + pin targets ------------------------------------------
     for v in &ws.views {
-        // The deployment overview has no scope — its subject is every
-        // environment, so its pins are absolute ids (ADR-0018).
-        let overview = v.scope.is_empty() && v.level == "LD";
+        // A view with no scope — the deployment overview (ADR-0018) or L1 — has
+        // no element to be relative to, so its pins are absolute ids.
+        let overview = v.scope.is_empty();
         if !overview && !ws.elements.contains_key(&v.scope) {
             diags.push(Diagnostic::error(
                 &v.file as &str,

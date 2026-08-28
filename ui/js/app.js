@@ -567,7 +567,28 @@ function applyCamera() {
   const ty = (c.height - l.height * scale) / 2 + state.pan.y;
   els.camera.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
   els.camera.style.setProperty('--camera-scale', scale);
+  paintGrid(tx, ty, scale);
   $('zoom-reset').textContent = Math.round(scale * 100) + '%';
+}
+
+/**
+ * Align the endless dot sheet with the camera.
+ *
+ * The grid is painted on `.canvas`, which fills the viewport and never moves,
+ * so it covers everything at every pan and zoom; these two properties are what
+ * keep it part of the *drawing* rather than of the screen. The dot at model
+ * (0,0) lands under the model's origin, and the pitch tracks the zoom.
+ *
+ * Below half scale the dots would collapse into a wash, so the pitch steps up
+ * to four grid units — the behaviour the design system has always described.
+ */
+function paintGrid(tx, ty, scale) {
+  const pitch = GRID * scale * (scale < 0.5 ? 4 : 1);
+  els.canvas.style.backgroundSize = `${pitch}px ${pitch}px`;
+  // Modulo keeps the offset small, which avoids losing sub-pixel accuracy in
+  // the background-position once a diagram has been panned a long way.
+  const at = (v) => (((v % pitch) + pitch) % pitch).toFixed(2);
+  els.canvas.style.backgroundPosition = `${at(tx)}px ${at(ty)}px`;
 }
 
 // ---- navigation -------------------------------------------------------------
@@ -688,6 +709,9 @@ function cameraTransform(m = 1) {
   const scale = fit * state.zoom * m;
   const tx = (c.width - l.width * scale) / 2 + state.pan.x;
   const ty = (c.height - l.height * scale) / 2 + state.pan.y;
+  // The grid follows through its own CSS transition rather than the camera's
+  // keyframes, which is close enough for a flight and exact once it lands.
+  paintGrid(tx, ty, scale);
   return `translate(${tx}px, ${ty}px) scale(${scale})`;
 }
 
@@ -1879,6 +1903,11 @@ async function applyOp(op) {
     await invoke('apply_operation', { op });
   } catch (e) {
     toast(String(e));
+    // Put the canvas back. A drag moves the node's own style.left/top for
+    // feedback while the edges stay where the layout left them, so a refused
+    // operation used to leave the node parked away from its own relations
+    // until something else forced a render.
+    await renderCanvas({ animate: false });
     return false;
   }
   if (!tauri) {
