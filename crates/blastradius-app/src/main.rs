@@ -82,6 +82,26 @@ fn apply_operation(state: State<AppState>, op: serde_json::Value) -> Result<serd
     Ok(serde_json::json!({ "label": tx.label }))
 }
 
+/// Several operations as one transaction, so one undo takes all of them back.
+/// The canvas needs this for the first drag in a view: pinning one node makes
+/// every other node move, so the drag also pins where the others already are
+/// (core::sync::apply_batch).
+#[tauri::command]
+fn apply_operations(
+    state: State<AppState>,
+    ops: Vec<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let ops: Vec<Operation> = ops
+        .into_iter()
+        .map(|o| serde_json::from_value(o).map_err(|e| format!("bad operation: {e}")))
+        .collect::<Result<_, _>>()?;
+    let root = root_of(&state)?;
+    let mut guard = state.engine.lock().unwrap();
+    let engine = guard.get_or_insert_with(|| SyncEngine::open(&root));
+    let tx = engine.apply_batch(ops)?;
+    Ok(serde_json::json!({ "label": tx.label }))
+}
+
 #[tauri::command]
 fn undo_op(state: State<AppState>) -> Result<Option<String>, String> {
     let root = root_of(&state)?;
@@ -506,6 +526,7 @@ fn main() {
             workspace_root,
             sync_status,
             apply_operation,
+            apply_operations,
             undo_op,
             redo_op,
             file_text,

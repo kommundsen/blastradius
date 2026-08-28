@@ -145,6 +145,19 @@ function mockSync(cmd, args) {
     URL.revokeObjectURL(a.href);
     return '(browser download)';
   }
+  // A batch is one transaction with one undo entry — the same contract as
+  // core::sync::apply_batch, which is what the canvas relies on when the first
+  // drag in a view settles every other node too.
+  if (cmd === 'apply_operations') {
+    const before = clone();
+    let label = '';
+    for (const op of args.ops) label = mockSync('apply_operation', { op }).label;
+    // Collapse the per-op history the loop just built into one entry.
+    mockState.undo.length = Math.max(0, mockState.undo.length - args.ops.length);
+    mockState.undo.push({ label: `${args.ops.length} operations`, snap: before });
+    mockState.redo.length = 0;
+    return { label };
+  }
   if (cmd !== 'apply_operation') throw new Error('unknown command ' + cmd);
 
   const before = clone();
@@ -1920,6 +1933,26 @@ async function applyOp(op) {
   return true;
 }
 
+/** Several operations as one transaction — one undo takes all of them back.
+ *  Falls back to one-at-a-time only in the mock harness, which has no batch. */
+async function applyOps(ops) {
+  if (ops.length === 1) return applyOp(ops[0]);
+  try {
+    await invoke('apply_operations', { ops });
+  } catch (e) {
+    toast(String(e));
+    await renderCanvas({ animate: false });
+    return false;
+  }
+  if (!tauri) {
+    await refreshSync();
+    renderTree();
+    await renderCanvas({ animate: false });
+    renderSide();
+  }
+  return true;
+}
+
 async function doUndo() {
   try { await invoke('undo_op'); } catch (e) { toast(String(e)); }
   if (!tauri) { await refreshSync(); renderTree(); await renderCanvas({ animate: false }); renderSide(); }
@@ -1977,11 +2010,27 @@ function beginNodeDrag(ev, node, div) {
     // own coordinates however far the drawing grows in any direction.
     const origin = state.layout.origin ?? { x: 0, y: 0 };
     const viewDef = findViewDef(effectiveSnapshot(), state.level, state.scope);
-    await applyOp({ op: 'pin', view: viewDef?.id ?? null, level: state.level,
-      scope: state.scope,
-      id: node.id,
-      x: fx - Math.round(origin.x / GRID),
-      y: fy - Math.round(origin.y / GRID) });
+    // resolvePins only reads node ids, and the laid-out nodes carry them.
+    const pinned = new Set(Object.keys(resolvePins(viewDef, { nodes: state.layout.nodes })));
+    const pin = (id, gx, gy) => ({
+      op: 'pin', view: viewDef?.id ?? null, level: state.level, scope: state.scope,
+      id, x: gx - Math.round(origin.x / GRID), y: gy - Math.round(origin.y / GRID),
+    });
+    // Moving one node used to move every other one: a pinned node leaves the
+    // ELK graph, so what is left is a *different* graph and gets re-laid out.
+    // On this repo's own L3 view, dragging one component moved all eight
+    // others by 325-425px each, which is not "the layout settled", it is the
+    // diagram rearranging itself under your hands.
+    //
+    // So the first drag in a view settles the whole view: the dragged node
+    // where you put it, everything else exactly where it already is. Nothing
+    // appears to move at all, which is the point. Later drags find the others
+    // already pinned and send one operation, and it is one transaction, so one
+    // undo puts the view back to auto.
+    const settle = state.layout.nodes
+      .filter((n) => n.id !== node.id && !n.contains && !pinned.has(n.id))
+      .map((n) => pin(n.id, Math.round(n.x / GRID), Math.round(n.y / GRID)));
+    await applyOps([pin(node.id, fx, fy), ...settle]);
   };
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);

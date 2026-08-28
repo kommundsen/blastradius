@@ -52,7 +52,7 @@ into a name field types an R.
 | Double-click a node | Dive into it |
 | Drag empty canvas | Pan |
 | Scroll / pinch | Zoom about the pointer |
-| Drag a node | Pin it at that position |
+| Drag a node | Pin it there (the first drag in a view pins the rest where they are) |
 | Click an edge | Inspect the relation |
 
 ## Panels

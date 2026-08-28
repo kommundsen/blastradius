@@ -482,3 +482,75 @@ test('the dot grid fills the canvas and travels with the drawing', async ({ page
   expect(await bg('#canvas', 'backgroundSize')).not.toBe(pitchBefore);
   expect(page.errors).toEqual([]);
 });
+
+// Dragging one node used to move every other node (0.7.1). A pinned node
+// leaves the ELK graph, so what remains is a *different* graph and gets
+// re-laid out: on this repo's own L3 view, one drag moved all eight other
+// components by 325-425px each. The first drag in a view now settles the
+// whole view — the dragged node where you put it, everything else exactly
+// where it already was — so nothing but the dragged node appears to move.
+test('dragging one node leaves every other node where it was', async ({ page }) => {
+  // Land on a view with enough nodes for "everything moved" to be visible.
+  // The level button picks the nearest candidate container, which may be a
+  // three-component one; the palette goes exactly where we mean.
+  await page.keyboard.press('Control+k');
+  await page.locator('#palette-q').fill('git-service');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#breadcrumb')).toContainText('Components');
+  await expect(page.locator('#nodes .node')).not.toHaveCount(0);
+
+  // Screen positions divided by the camera scale, i.e. model space. A drop
+  // that extends the drawing re-fits the camera, which both slides and
+  // *shrinks* everything on screen without rearranging anything.
+  const boxes = async () =>
+    page.locator('#nodes .node').evaluateAll((els) => {
+      // The live matrix, not --camera-scale: the variable holds the camera's
+      // *destination* while the transition is still flying, so dividing by it
+      // mid-flight scales every reading wrongly and fakes a rearrangement.
+      const m = new DOMMatrix(getComputedStyle(document.getElementById('camera')).transform);
+      const scale = m.a || 1;
+      return Object.fromEntries(els.map((e) => {
+        const r = e.getBoundingClientRect();
+        return [e.dataset.id, [r.left / scale, r.top / scale]];
+      }));
+    });
+  const before = await boxes();
+  const ids = Object.keys(before);
+  expect(ids.length).toBeGreaterThan(3);
+
+  const target = page.locator(`#nodes .node[data-id="${ids[0]}"]`);
+  const box = await target.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 90, box.y + box.height / 2 + 60, { steps: 10 });
+  await page.mouse.up();
+  await expect
+    .poll(async () => Math.round((await boxes())[ids[0]][0]))
+    .not.toBe(Math.round(before[ids[0]][0]));
+
+  const after = await boxes();
+
+  // Compare the *arrangement*, not absolute screen positions: a drop that
+  // extends the drawing re-fits the camera, which slides everything equally
+  // and is not the complaint. The distance between any two nodes that were
+  // not dragged is what must not change — that is what "everything jumps
+  // around" actually means.
+  //
+  // Tolerance: settling rounds each node to the 26px grid, so an endpoint can
+  // shift by at most half a unit on each axis — hypot(13, 13) = 18.4px — and a
+  // *pair* by twice that, 37px. 40 covers it and still catches the old
+  // behaviour by a factor of ten, which moved nodes 325-425px each.
+  const others = ids.slice(1).filter((id) => after[id] && before[id]);
+  expect(others.length).toBeGreaterThan(3);
+  const gap = (m, a, b) => Math.hypot(m[a][0] - m[b][0], m[a][1] - m[b][1]);
+  for (let i = 0; i < others.length; i++) {
+    for (let j = i + 1; j < others.length; j++) {
+      const [a, b] = [others[i], others[j]];
+      expect(
+        Math.abs(gap(after, a, b) - gap(before, a, b)),
+        `${a} and ${b} moved relative to each other`
+      ).toBeLessThan(40);
+    }
+  }
+  expect(page.errors).toEqual([]);
+});

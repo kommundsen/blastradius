@@ -996,6 +996,35 @@ refused operation left the canvas lying. A drag moves the node's own
 rejected edit left a node parked away from its relations until something else
 forced a render. It now puts the canvas back.
 
+### Moving one node moved all of them
+
+Owner report: pinning one element made the rest jump. Measured before agreeing,
+and it was worse than described — on this repository's own L3 view, dragging
+one component moved **all eight** others, by 325-425px each. That is not a
+layout settling, it is the diagram rearranging itself under your hands.
+
+The cause is structural: a pinned node leaves the ELK graph, so what remains is
+a different graph — different nodes, and the edges touching the pinned one
+dropped too — and ELK lays it out afresh. ADR-0006 anticipated needing
+stability here and specified soft interactive hints; that half was never built.
+
+The owner's suggestion was to pin everything once you pin one, and it is the
+right call, so that is what the first drag in a view now does: the dragged node
+where you put it, every other node exactly where it already was. Nothing but
+the dragged node appears to move. It goes through `apply_operations` as **one
+transaction**, so a single undo returns the whole view to auto-layout — and
+because it only pins what is not already pinned, later drags send one
+operation. New elements added afterwards are still auto-placed, in clear space
+rather than reshuffling what you arranged.
+
+The residue is grid rounding and nothing else: settling rounds each node to the
+26px grid, so a node can shift up to 14px (measured worst case). The e2e
+asserts the *arrangement* — pairwise distances in model space — rather than
+screen positions, because a drop that extends the drawing re-fits the camera
+and slides and shrinks everything without rearranging anything. Getting that
+measurement right took three attempts, each of which looked like a real
+regression and was not.
+
 ### The dotted canvas is endless again
 
 Reported alongside it: the model looked like it sat in a corner of the canvas

@@ -29,6 +29,18 @@ back as soft "interactive" hints, so unpinned nodes prefer staying near where
 they were. Pinning remains the guaranteed escape hatch — "pin what you care
 about" is a documented workflow, not a workaround.
 
+**Amendment, 2026-08-28.** The soft-hints half was never built, and its absence
+was felt exactly where predicted. A pinned node leaves the ELK graph, so
+pinning one node hands ELK a *different* graph and it lays the rest out afresh:
+on this repository's own L3 view, dragging one component moved all eight
+others by 325-425px each (owner report, measured). Stability is now bought a
+blunter way — the first drag in a view **settles** it, pinning every other
+node where it already sits, as one transaction that one undo reverts. The
+diagram stops moving the moment you start arranging it, which is what the
+hints were for; "pin what you care about" becomes "the view is yours once you
+touch it". Interactive hints remain the subtler answer if this proves too
+blunt, and would replace this rather than sit beside it.
+
 ## Consequences
 - Layout runs in the WebView, not the Rust core — elkjs is the only mature ELK
   binding, and layout is a rendering concern. The core stays layout-ignorant;

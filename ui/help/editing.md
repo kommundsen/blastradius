@@ -53,14 +53,22 @@ Layout is not stored in model files. Positions live in view files under
 `views/`, so a diagram rearrangement never mixes into a semantic diff.
 
 - **Drag a node** to pin it. It stays exactly there.
+- **The first drag in a view settles that view.** Every other node is pinned
+  where it already sits, so nothing but the node you moved appears to move.
+  Without this, moving one node rearranged the diagram around it: a pinned
+  node leaves the auto-layout, so what is left is a different graph and gets
+  laid out afresh. It is one undo away — undo puts the whole view back to
+  auto-layout, not just the node you dragged.
 - Everything you have not pinned is **auto-laid-out**, deterministically —
-  the same model produces the same diagram on every machine and in CI.
+  the same model produces the same diagram on every machine and in CI. After a
+  view has settled, that applies to whatever you add next: a new element
+  appears in clear space rather than reshuffling what you have arranged.
 - Pins are grid units, not pixels, so they survive zoom and density changes.
 - Dropping a node onto a neighbour nudges it to the nearest clear cell rather
   than overlapping.
 
-Pin what you care about, and let the rest arrange itself. That is the intended
-balance: hand-placement where it communicates, determinism everywhere else.
+Pin what you care about, and let the rest arrange itself — until you start
+arranging, at which point that view is yours and stops moving under you.
 
 ## Validation
 
