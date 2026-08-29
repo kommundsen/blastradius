@@ -1488,6 +1488,53 @@ no way back inside the app except undo while it is still on the stack. Ships:
 reachable from the box and from the view panel (D); pinned boxes readable as
 pinned. Small, and it closes a trap we shipped ourselves.
 
+### B — shipped 2026-08-29: a context menu that can model
+
+Right-clicking a box now offers everything the canvas can do to it: **Connect
+to…**, **Rename…**, show or hide its description (or write one), **Add a …
+inside…**, release its pin or the whole view's, and **Delete…**. Before this,
+drawing a relation was bound to `R` and advertised in no menu, tooltip or
+button; delete was the `Delete` key; and the menu itself carried exactly one
+item. Every one of those operations already existed — a user who had not read
+the shortcuts page simply could not reach them.
+
+Two of the items are new behaviour rather than a new route to old behaviour.
+**Add a … inside…** creates a child of the box you clicked rather than of the
+current scope, names the kind when the model format allows only one (a
+container in a system, a component in a container) and defers to the dialog
+when it allows two (a deployment node holds either more nodes or the containers
+that run on them) — and then **dives**, because the new element lives one
+altitude below the view you are looking at and reporting success into thin air
+is not a result. **Rename…** hands over to the inspector's name field the way
+"Add a description…" already handed over to the description field: the name is
+a model field, and the field is where it is edited.
+
+The rules live in `ui/js/menu.js`, a pure module with no DOM and no state, so
+what appears and when is testable in node while `app.js` only binds actions to
+ids. That is what makes the exit's gate possible.
+
+*Exit met.* `ui/tests/menu.test.mjs` reads `pub enum Operation` straight out of
+`crates/blastradius-core/src/sync.rs`, and asserts every variant is either
+offered by the menu in some context or listed in `NOT_ON_THE_BOX` **with a
+reason** — plus the converse, that nothing is both offered and excused, and
+that no excuse names an operation that no longer exists. Adding a variant to
+the engine now fails a test until someone decides whether the diagram offers
+it. Four operations are deliberately excused: `pin` (dragging the box *is* the
+pin), `set-field` (the inspector edits fields, beside the text), and the two
+relation operations (a relation is chosen by clicking the edge, and is not a
+box). The e2e side drives connect, rename, add-a-child, and delete with the
+mouse alone, and asserts a leaf is not offered children it cannot have.
+
+The menu also grew the things a seven-item menu needs and a one-item menu did
+not: separators between what the element *is*, where it *sits*, and removing
+it; arrow-key navigation; and a position of its own when raised from the
+keyboard, where there is no pointer and 0,0 is the corner of the window rather
+than an answer.
+
+**Not on the box, deliberately: derived L4 elements get no menu at all.** They
+accept no operations — the code is the source of truth — and a menu of things
+that would all be refused is worse than none.
+
 **B — A context menu that can model.** The app's only context menu carries one
 item (`openNodeMenu`, 0.8.0) — show/hide description — while the operations
 for the rest already exist. Drawing a relation is bound to the `R` key on a

@@ -5,18 +5,32 @@ Both write the same files, and the app and your editor stay in step.
 
 ## On the canvas
 
+**Right-click a box** and everything the canvas can do to it is on the menu:
+
+- **Connect to…** then click a target, to draw a relation. Give it a label and
+  a protocol so the line means something — the label reads on the line, the
+  protocol under it in brackets, `calls` / `[JSON/HTTPS]`.
+- **Rename…** puts the cursor in the inspector's name field, which is where the
+  name lives. Same for **Add a description…** when there is none yet.
+- **Show / Hide description** draws the description inside the box, in this view
+  only. See *Descriptions on the box* below.
+- **Add a … inside…** creates a child — a container in a system, a component in
+  a container, a node or an instance in a deployment node — and dives in after
+  it, since it lives one altitude below the one you are looking at.
+- **Unpin this element** and **Back to auto-layout** release layout. See
+  *Layout and pinning*.
+- **Delete…** removes it, telling you first what else goes with it: relations
+  that pointed at it, and any layout pins.
+
+The rest of the canvas:
+
 - **`+ Element`** adds something at the current altitude — a system, person or
   external system at L1, a container at L2, a component at L3, and environments
   or deployment nodes in the **D** view.
-- **Rename and describe** in the inspector: name, technology, and description
-  are editable in place.
-- **Right-click a box** to draw its description inside it, or take it off
-  again. See *Descriptions on the box* below.
-- **`R`**, then click a target, draws a relation from the selected element.
-  Give it a label and a protocol so the line means something — the label reads
-  on the line, the protocol under it in brackets, `calls` / `[JSON/HTTPS]`.
-- **`Delete`** removes the selected element. You are told first what else goes
-  with it — relations that pointed at it, and any layout pins.
+- **The inspector** edits the element's own fields: name, technology, and
+  description, in place.
+- **`R`** and **`Delete`** are the keyboard versions of Connect and Delete, on
+  the selected element.
 - **`Ctrl+Z` / `Ctrl+Y`** undo and redo, including across a restart.
 
 There is no save button. Every operation is written immediately, and the file

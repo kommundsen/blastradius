@@ -170,3 +170,84 @@ test('source editor wraps instead of forcing a horizontal scrollbar', async ({ p
   await noHOverflow('#src-editor .CodeMirror-scroll');
   expect(page.errors).toEqual([]);
 });
+
+// 0.9.0 B: the operations were all there and the surface was not. Drawing a
+// relation was bound to `R` and advertised nowhere, delete was the `Delete`
+// key, rename was a field in another panel — so a user who did not read the
+// shortcuts page could rename, and nothing else. These four exercise the box
+// menu with the mouse alone.
+test('the box menu connects two elements, with no keystroke', async ({ page }) => {
+  await node(page, 'Blastradius').dblclick(); // L2
+  await expect(page.locator('#breadcrumb')).toContainText('Containers');
+  await node(page, 'App Shell').first().click({ button: 'right' });
+  await page.locator('.ctx-menu .ctx-item', { hasText: 'Connect to…' }).click();
+  await expect(page.locator('#hint')).toContainText('Click a target element');
+  await node(page, 'CLI').first().click();
+  await page.locator('#dlg-label').fill('spawns');
+  await page.locator('#dlg-ok').click();
+  await node(page, 'App Shell').first().click();
+  await expect(page.locator('.insp-rel', { hasText: 'CLI' })).toContainText('spawns');
+  expect(page.errors).toEqual([]);
+});
+
+test('the box menu renames, by handing over to the field that does it', async ({ page }) => {
+  await node(page, 'Blastradius').first().click({ button: 'right' });
+  await page.locator('.ctx-menu .ctx-item', { hasText: 'Rename…' }).click();
+  const input = page.locator('#insp-name');
+  await expect(input).toBeFocused();
+  await input.fill('Blast Radius Pro');
+  await input.press('Enter');
+  await expect(node(page, 'Blast Radius Pro').first()).toBeVisible();
+  expect(page.errors).toEqual([]);
+});
+
+test('the box menu adds a child, and goes in after it', async ({ page }) => {
+  await node(page, 'Blastradius').dblclick(); // L2
+  await expect(page.locator('#breadcrumb')).toContainText('Containers');
+  await node(page, 'CLI').first().click({ button: 'right' });
+  // The kind is the one a container may hold, named rather than asked for.
+  await page.locator('.ctx-menu .ctx-item', { hasText: 'Add a component inside…' }).click();
+  await page.locator('#dlg-name').fill('Arg Parser');
+  await expect(page.locator('#dlg-id-full')).toHaveText('blastradius.cli.arg-parser');
+  await page.locator('#dlg-ok').click();
+  // A component is invisible from the container level it was created at, so
+  // the canvas follows it down rather than reporting success into thin air.
+  await expect(page.locator('#breadcrumb')).toContainText('CLI');
+  await expect(node(page, 'Arg Parser').first()).toBeVisible();
+  expect(page.errors).toEqual([]);
+});
+
+test('the box menu deletes, through the same confirmation as the key', async ({ page }) => {
+  await node(page, 'Blastradius').dblclick(); // L2
+  await node(page, 'CLI').first().click({ button: 'right' });
+  await page.locator('.ctx-menu .ctx-item', { hasText: 'Delete…' }).click();
+  const dlg = page.locator('#app-dialog');
+  await expect(dlg).toContainText('Delete CLI?');
+  await dlg.locator('#dlg-ok').click();
+  await expect(node(page, 'CLI')).toHaveCount(0);
+  expect(page.errors).toEqual([]);
+});
+
+test('a leaf is not offered children it cannot have', async ({ page }) => {
+  await node(page, 'Blastradius').dblclick();
+  await node(page, 'Core').first().dblclick(); // L3: components
+  await expect(page.locator('#breadcrumb')).toContainText('Components');
+  // Named rather than `.first()`: an L3 view also draws the outside containers
+  // whose relations reach into the scope, and a container may hold components.
+  await node(page, 'Git Service').first().click({ button: 'right' });
+  await expect(page.locator('.ctx-menu')).toBeVisible();
+  // Below a component is code, derived from source — not something to add here.
+  await expect(page.locator('.ctx-menu .ctx-item', { hasText: 'inside…' })).toHaveCount(0);
+  expect(page.errors).toEqual([]);
+});
+
+test('the menu walks with the arrow keys', async ({ page }) => {
+  await node(page, 'Blastradius').first().click({ button: 'right' });
+  const items = page.locator('.ctx-menu .ctx-item');
+  await expect(items.first()).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(items.nth(1)).toBeFocused();
+  await page.keyboard.press('ArrowUp');
+  await expect(items.first()).toBeFocused();
+  expect(page.errors).toEqual([]);
+});

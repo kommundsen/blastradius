@@ -7,6 +7,7 @@ import { viewSvg, kicker, metaLine } from './svg.js';
 import { edgeLabelLines, multiplicity } from './labels.js';
 import { HELP_PAGES, helpBody, helpLinkTarget } from './help.js';
 import { searchModel } from './search.js';
+import { boxMenuItems, canvasMenuItems, CHILD_KINDS } from './menu.js';
 
 // ---- shell bridge -----------------------------------------------------------
 // Real IPC under Tauri; mock (fetch of a committed snapshot) in a plain
@@ -2217,31 +2218,34 @@ function openNodeMenu(ev, id) {
 
   const viewDef = findViewDef(effectiveSnapshot(), state.level, state.scope);
   const shown = state.layout?.nodes.find((n) => n.id === id)?.describe ?? false;
-  const items = el.description
-    ? [[
-        shown ? 'Hide description' : 'Show description',
-        () => applyOp({
-          op: 'show-description',
-          view: viewDef?.id ?? null,
-          level: state.level,
-          scope: state.scope,
-          id,
-          show: !shown,
-        }),
-      ]]
-    : [['Add a description…', () => focusDescriptionField()]];
-  // A pinned box says where it is; releasing it hands the decision back to the
-  // layout engine. Since 0.8.0 the first drag in a view pins every node, so
-  // "back to auto-layout" is the other half of that and belongs next to it.
   const pins = pinnedIds();
-  if (canPin() && pins.has(id)) {
-    items.unshift(['Unpin this element', () => unpin(id)]);
-  }
-  if (canPin() && pins.size) {
-    items.push([`Back to auto-layout (${pins.size} pinned)`, () => unpin(null)]);
-  }
-
-  showMenu(ev, items);
+  const items = boxMenuItems({
+    canEdit: canEdit(),
+    canPin: canPin(),
+    kind: el.kind,
+    pinned: pins.has(id),
+    pinnedCount: pins.size,
+    hasDescription: Boolean(el.description),
+    described: shown,
+  });
+  // menu.js decides what is offered; here is what each one does.
+  showMenu(ev, items, {
+    connect: () => startConnect(id),
+    rename: () => focusInspectorField('insp-name'),
+    'add-description': () => focusInspectorField('insp-desc'),
+    describe: () => applyOp({
+      op: 'show-description',
+      view: viewDef?.id ?? null,
+      level: state.level,
+      scope: state.scope,
+      id,
+      show: !shown,
+    }),
+    child: () => openCreateDialog({ parent: id, kinds: CHILD_KINDS[el.kind], into: true }),
+    unpin: () => unpin(id),
+    'reset-layout': () => unpin(null),
+    delete: () => openDeleteDialog(id),
+  });
 }
 
 /** Ids pinned in the view on screen — layout's own answer, so a pin naming an
@@ -2268,42 +2272,73 @@ function unpin(id) {
 /** Right-click on the canvas itself, where there is no box to talk about: the
  *  view's own layout is the only thing left to say something about. */
 function openCanvasMenu(ev) {
-  if (ev.target.closest('.node') || !canPin()) return;
+  if (ev.target.closest('.node')) return;
   closeNodeMenu();
-  const pins = pinnedIds();
-  if (!pins.size) return; // nothing pinned, nothing to release
-  showMenu(ev, [[`Back to auto-layout (${pins.size} pinned)`, () => unpin(null)]]);
+  const items = canvasMenuItems({ canPin: canPin(), pinnedCount: pinnedIds().size });
+  showMenu(ev, items, { 'reset-layout': () => unpin(null) });
 }
 
-function showMenu(ev, items) {
+/** Build and place a menu from menu.js items, binding each id to its action. */
+function showMenu(ev, items, run) {
   ev.preventDefault();
+  if (!items.length) return; // nothing to offer is not an empty menu
   const menu = document.createElement('div');
   menu.className = 'ctx-menu';
   menu.setAttribute('role', 'menu');
-  for (const [label, run] of items) {
+  for (const item of items) {
+    if (item.sep) {
+      const sep = document.createElement('div');
+      sep.className = 'ctx-sep';
+      sep.setAttribute('role', 'separator');
+      menu.appendChild(sep);
+      continue;
+    }
     const btn = document.createElement('button');
     btn.className = 'ctx-item';
     btn.setAttribute('role', 'menuitem');
-    btn.textContent = label;
-    btn.addEventListener('click', () => { closeNodeMenu(); run(); });
+    btn.dataset.item = item.id;
+    btn.textContent = item.label;
+    btn.addEventListener('click', () => { closeNodeMenu(); run[item.id](); });
     menu.appendChild(btn);
   }
+  // Arrows walk it. One item answered to Tab and nothing else; a menu with
+  // seven has to be navigable by the key people reach for.
+  menu.addEventListener('keydown', (kev) => {
+    if (kev.key !== 'ArrowDown' && kev.key !== 'ArrowUp') return;
+    kev.preventDefault();
+    const opts = [...menu.querySelectorAll('.ctx-item')];
+    const at = opts.indexOf(document.activeElement);
+    const step = kev.key === 'ArrowDown' ? 1 : opts.length - 1;
+    opts[(Math.max(at, 0) + step) % opts.length].focus();
+  });
   document.body.appendChild(menu);
   // Placed after appending so the real size is known: a menu opened near the
   // right or bottom edge folds back instead of hanging off the window.
   const box = menu.getBoundingClientRect();
-  const x = Math.min(ev.clientX, window.innerWidth - box.width - 8);
-  const y = Math.min(ev.clientY, window.innerHeight - box.height - 8);
+  // A menu raised from the keyboard (the menu key, Shift+F10) carries no
+  // pointer position, and 0,0 is the corner of the window rather than an
+  // answer — so it opens on the thing it is about.
+  const from = ev.clientX || ev.clientY
+    ? { x: ev.clientX, y: ev.clientY }
+    : anchorOf(ev.target);
+  const x = Math.min(from.x, window.innerWidth - box.width - 8);
+  const y = Math.min(from.y, window.innerHeight - box.height - 8);
   menu.style.left = `${Math.max(8, x)}px`;
   menu.style.top = `${Math.max(8, y)}px`;
   ctxMenu = menu;
   menu.querySelector('.ctx-item')?.focus();
 }
 
-/** Put the cursor in the inspector's description box — where "add a
- *  description" from the canvas has to end up, since the text is a model
- *  field and this is the field. */
-function focusDescriptionField() {
+/** Top-left of the box a keyboard-raised menu is about, for want of a cursor. */
+function anchorOf(target) {
+  const box = (target.closest?.('.node') ?? target).getBoundingClientRect();
+  return { x: box.left + 8, y: box.top + 8 };
+}
+
+/** Put the cursor in one of the inspector's fields — where "rename" and "add a
+ *  description" from the canvas have to end up, since a name and a description
+ *  are model fields and these are the fields. */
+function focusInspectorField(fieldId) {
   if (state.sideMode === 'source') {
     state.sideMode = 'inspect';
     for (const opt of els.sideMode.querySelectorAll('.seg-opt')) {
@@ -2311,7 +2346,9 @@ function focusDescriptionField() {
     }
   }
   renderSide();
-  document.getElementById('insp-desc')?.focus();
+  const input = document.getElementById(fieldId);
+  input?.focus();
+  input?.select?.();
 }
 
 // --- dialogs -----------------------------------------------------------------
@@ -2346,15 +2383,22 @@ function slugify(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
 }
 
-function openCreateDialog() {
+/**
+ * The New-element dialog. Called bare from the toolbar, where the altitude
+ * decides what may be created and the current scope is the parent; called with
+ * a parent and kinds from a box's "add something inside", where the box itself
+ * decides both — and then `into` follows the new element down, since it lives
+ * one altitude below the one you are looking at.
+ */
+function openCreateDialog({ parent: intoParent, kinds: intoKinds, into = false } = {}) {
   const level = state.level;
-  const kinds = level === 'L1' ? ['system', 'person', 'external']
+  const kinds = intoKinds ?? (level === 'L1' ? ['system', 'person', 'external']
     : level === 'L2' ? ['container']
     // Deployment (ADR-0018): environments at the overview, and below one
     // either more infrastructure or a container running on it.
     : level === 'LD' ? (state.scope ? ['deployment-node', 'container-instance'] : ['environment'])
-    : ['component'];
-  const parent = level === 'L1' || (level === 'LD' && !state.scope) ? null : state.scope;
+    : ['component']);
+  const parent = intoParent ?? (level === 'L1' || (level === 'LD' && !state.scope) ? null : state.scope);
   const kindOptions = kinds.map((k) => `<option value="${k}">${k}</option>`).join('');
   openDialog({
     title: 'New element',
@@ -2370,7 +2414,11 @@ function openCreateDialog() {
       const id = document.getElementById('dlg-id').value.trim();
       if (!name || !id) { toast('name and id are required'); return false; }
       const useParent = (kind === 'person' || kind === 'external' || kind === 'system') ? null : parent;
-      return applyOp({ op: 'create', parent: useParent, id, name, kind });
+      const ok = await applyOp({ op: 'create', parent: useParent, id, name, kind });
+      // Asking for a component inside a container is asking to see inside it:
+      // the new element is one altitude down and invisible from here.
+      if (ok && into && useParent && state.scope !== useParent) await dive(useParent);
+      return ok;
     },
   });
   const nameInput = document.getElementById('dlg-name');

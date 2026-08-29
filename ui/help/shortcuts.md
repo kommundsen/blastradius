@@ -39,6 +39,10 @@ Only in an editable workspace, with something selected.
 | `R` | Start drawing a relation from the selected element |
 | `Esc` | Cancel drawing a relation |
 
+Neither key is the only way in: right-clicking a box offers the same two, and
+the rest of what the canvas can do to it. See
+[Editing the model](editing.md).
+
 There is no save shortcut: edits are written to disk as you make them. See
 [Editing the model](editing.md).
 
