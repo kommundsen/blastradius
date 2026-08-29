@@ -786,6 +786,15 @@ fn operation_schema() -> Value {
                     "scope": id("id of the element being looked inside; omit at L1"),
                     "id": id("element to release; omit to release every pin in the view"),
                 }), vec!["level"]),
+            variant("set-view-flag", "Turn one of a view's own flags on or off. Setting a flag to its default removes it; the view file is written if the level and scope have none yet.",
+                json!({
+                    "view": id("view id; omit for the default view at this level and scope"),
+                    "level": {"type": "string", "enum": ["L1", "L2", "L3", "LD"]},
+                    "scope": id("id of the element being looked inside; omit at L1"),
+                    "flag": {"type": "string", "enum": ["show-groups", "include-context", "nested"],
+                             "description": "show-groups draws `group:` boundaries (default false); include-context shows the people and external systems related to the scope (default true); nested draws a deployment view as boxes inside boxes (LD only, default false)"},
+                    "value": {"type": "boolean"},
+                }), vec!["level", "flag", "value"]),
             variant("show-description", "Draw an element's description inside its box in one view, or stop drawing it. Per view, not per element: set the description itself with set-field.",
                 json!({
                     "view": id("view id; omit for the default view at this level and scope"),

@@ -55,6 +55,11 @@ pub enum Operation {
     /// not a scalar. It writes only the mapping: the facts it governs are
     /// `introspect`'s to write, and stay read-only here.
     SetSource { id: String, source: Option<SourceInput> },
+    /// Turn one of a view's own flags on or off (spec §4): `show-groups`,
+    /// `include-context`, `nested`. Setting a flag to its default removes the
+    /// key rather than writing what the absence already says. Authors the view
+    /// file when the level+scope has none, exactly as pinning does.
+    SetViewFlag { view: Option<String>, level: String, scope: Option<String>, flag: String, value: bool },
     /// Rename = set `name:` — the id is immutable (ADR-0003).
     Rename { id: String, name: String },
     /// Set a scalar field on an element (whitelisted: name, description,
@@ -76,6 +81,8 @@ fn op_target_ids(op: &Operation) -> Vec<&str> {
     match op {
         // `id: None` is the whole view, which names no element to guard.
         Operation::Unpin { id, .. } => id.as_deref().into_iter().collect(),
+        // A view flag is about the diagram, not about anything in it.
+        Operation::SetViewFlag { .. } => Vec::new(),
         Operation::Pin { id, .. }
         | Operation::ShowDescription { id, .. }
         | Operation::Rename { id, .. }
@@ -112,6 +119,14 @@ enum ViewTarget {
     /// No view file covers this level+scope yet, so one has to be authored.
     /// `header` is everything above the section the caller is about to write.
     New { rel: String, header: String, key: String },
+}
+
+/// The same question without an element in hand: which file does a view-level
+/// edit land in? A flag belongs to the diagram rather than to anything drawn on
+/// it, so it has no key to name.
+enum ViewFileTarget {
+    Existing { rel: String, scope: String },
+    New { rel: String, header: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -368,6 +383,7 @@ impl SyncEngine {
         let writes_view = match &op {
             Operation::Pin { view, level, scope, .. }
             | Operation::Unpin { view, level, scope, .. }
+            | Operation::SetViewFlag { view, level, scope, .. }
             | Operation::ShowDescription { view, level, scope, .. } => Some((view, level, scope)),
             _ => None,
         };
@@ -537,6 +553,9 @@ impl SyncEngine {
             Operation::Unpin { view, level, scope, id } => {
                 self.compute_unpin(view.as_deref(), level, scope.as_deref(), id.as_deref())
             }
+            Operation::SetViewFlag { view, level, scope, flag, value } => {
+                self.compute_set_view_flag(view.as_deref(), level, scope.as_deref(), flag, *value)
+            }
             Operation::Rename { id, name } => {
                 let (rel, chain) = self.element_chain(id)?;
                 let text = self.files.get(&rel).ok_or("file not cached")?;
@@ -599,45 +618,113 @@ impl SyncEngine {
         id: &str,
         verb: &str,
     ) -> Result<ViewTarget, String> {
-        let existing = self.find_view(view, level, scope);
         // keys are written scope-relative when inside the scope (spec §4 style)
         let view_key = |scope: &str, id: &str| -> String {
             id.strip_prefix(&format!("{scope}."))
                 .map(str::to_string)
                 .unwrap_or_else(|| id.to_string())
         };
-        match existing {
-            Some(v) => {
-                Ok(ViewTarget::Existing { rel: v.file.clone(), key: view_key(&v.scope, id) })
+        match self.view_file_target(view, level, scope, verb)? {
+            ViewFileTarget::Existing { rel, scope } => {
+                Ok(ViewTarget::Existing { rel, key: view_key(&scope, id) })
             }
-            None => {
-                // No view file yet, so this writes one. L1 and the deployment
-                // overview have no scope element to name — their subject is
-                // the whole model, or every environment — so they get a
-                // scope-less view and absolute keys. Requiring a scope here is
-                // why dragging any node at L1 failed outright in a workspace
-                // with no L1 view file, which is most of them.
-                let (view_id, scope_line, key) = match scope {
-                    Some(s) => {
-                        let last = s.rsplit('.').next().unwrap_or(s);
-                        (
-                            format!("{last}-{}", level.to_lowercase()),
-                            format!("scope: {s}\n"),
-                            view_key(s, id),
-                        )
-                    }
-                    None if level == "L1" || level == "LD" => {
-                        let name = if level == "L1" { "context" } else { "deployment" };
-                        (name.to_string(), String::new(), id.to_string())
-                    }
-                    None => return Err(format!("cannot {verb} at {level} without a scope element")),
-                };
-                let rel = format!("views/{view_id}.yaml");
-                if self.files.contains_key(&rel) {
-                    return Err(format!("{rel} exists but defines no matching view"));
-                }
-                let header = format!("view: {view_id}\n{scope_line}level: {level}\n");
+            ViewFileTarget::New { rel, header } => {
+                // Absolute keys where the authored view has no scope to be
+                // relative to — L1 and the deployment overview.
+                let key = scope.map(|s| view_key(s, id)).unwrap_or_else(|| id.to_string());
                 Ok(ViewTarget::New { rel, header, key })
+            }
+        }
+    }
+
+    /// Which file a view-level edit writes into, authoring one when the
+    /// level+scope has none. `verb` names the operation in the one error this
+    /// can raise.
+    fn view_file_target(
+        &self,
+        view: Option<&str>,
+        level: &str,
+        scope: Option<&str>,
+        verb: &str,
+    ) -> Result<ViewFileTarget, String> {
+        if let Some(v) = self.find_view(view, level, scope) {
+            return Ok(ViewFileTarget::Existing { rel: v.file.clone(), scope: v.scope.clone() });
+        }
+        // No view file yet, so this writes one. L1 and the deployment overview
+        // have no scope element to name — their subject is the whole model, or
+        // every environment — so they get a scope-less view. Requiring a scope
+        // here is why dragging any node at L1 failed outright in a workspace
+        // with no L1 view file, which is most of them.
+        let (view_id, scope_line) = match scope {
+            Some(s) => {
+                let last = s.rsplit('.').next().unwrap_or(s);
+                (format!("{last}-{}", level.to_lowercase()), format!("scope: {s}\n"))
+            }
+            None if level == "L1" || level == "LD" => {
+                let name = if level == "L1" { "context" } else { "deployment" };
+                (name.to_string(), String::new())
+            }
+            None => return Err(format!("cannot {verb} at {level} without a scope element")),
+        };
+        let rel = format!("views/{view_id}.yaml");
+        if self.files.contains_key(&rel) {
+            return Err(format!("{rel} exists but defines no matching view"));
+        }
+        let header = format!("view: {view_id}\n{scope_line}level: {level}\n");
+        Ok(ViewFileTarget::New { rel, header })
+    }
+
+    /// Turn one of a view's own flags on or off (spec §4).
+    ///
+    /// Every flag has a default, and setting one *to* its default removes the
+    /// key: `show-groups: false` and `include-context: true` say exactly what
+    /// their absence says, and a file that states them is a file to keep in
+    /// step with a default that might move.
+    fn compute_set_view_flag(
+        &self,
+        view: Option<&str>,
+        level: &str,
+        scope: Option<&str>,
+        flag: &str,
+        value: bool,
+    ) -> Result<Vec<FileChange>, String> {
+        // Defaults per spec §4. `include-context` is the one that is on.
+        let default = match flag {
+            "show-groups" => false,
+            "include-context" => true,
+            "nested" => {
+                // ADR-0018: deployment is the one place a reader may want the
+                // physical picture in one frame. Everywhere else the answer to
+                // "what is inside this" is to dive, and the loader warns.
+                if level != "LD" {
+                    return Err(format!(
+                        "`nested` draws a deployment view as boxes inside boxes; {level} dives instead"
+                    ));
+                }
+                false
+            }
+            _ => return Err(format!("{flag:?} is not a view flag — expected show-groups, include-context or nested")),
+        };
+        match self.view_file_target(view, level, scope, "set a view flag")? {
+            ViewFileTarget::Existing { rel, .. } => {
+                let text = self.files.get(&rel).ok_or("view file not cached")?;
+                let after = if value == default {
+                    match splice::remove_field(text, &[], flag)? {
+                        Some(after) => after,
+                        None => return Ok(Vec::new()),
+                    }
+                } else {
+                    splice::set_field(text, &[], flag, &value.to_string())?
+                };
+                Ok(vec![self.change(&rel, after)])
+            }
+            ViewFileTarget::New { rel, header } => {
+                // A file saying only what the default already says is not worth
+                // creating, so the default writes nothing at all.
+                if value == default {
+                    return Ok(Vec::new());
+                }
+                Ok(vec![FileChange { rel, before: None, after: Some(format!("{header}{flag}: {value}\n")) }])
             }
         }
     }
@@ -1553,6 +1640,9 @@ fn push_replayed(history: &mut Vec<Transaction>, cursor: &mut usize, tx: Transac
 fn op_label(op: &Operation) -> String {
     match op {
         Operation::Pin { id, x, y, .. } => format!("pin {id} at [{x}, {y}]"),
+        Operation::SetViewFlag { flag, value, level, .. } => {
+            format!("{} {flag} on the {level} view", if *value { "turn on" } else { "turn off" })
+        }
         Operation::Unpin { id, level, scope, .. } => match id {
             Some(id) => format!("unpin {id}"),
             None => match scope {

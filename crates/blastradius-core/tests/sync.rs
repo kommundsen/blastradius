@@ -484,6 +484,78 @@ fn a_source_mapping_is_refused_before_it_reaches_the_file() {
     assert_eq!(read(&t.dir, "model/depot.yaml"), DEPOT, "nothing reached the file");
 }
 
+fn flag(e: &mut SyncEngine, level: &str, scope: Option<&str>, flag: &str, value: bool) -> Result<(), String> {
+    e.apply(Operation::SetViewFlag {
+        view: None,
+        level: level.into(),
+        scope: scope.map(str::to_string),
+        flag: flag.into(),
+        value,
+    })
+    .map(|_| ())
+}
+
+#[test]
+fn a_view_flag_authors_the_file_it_needs() {
+    let (t, mut e) = setup("view-flag-new");
+    // Nothing in views/ at all: turning a flag on writes the view, the way
+    // pinning does — and with the same shape, so the two cannot disagree.
+    flag(&mut e, "L2", Some("shop"), "show-groups", true).unwrap();
+    assert_eq!(
+        read(&t.dir, "views/shop-l2.yaml"),
+        "view: shop-l2\nscope: shop\nlevel: L2\nshow-groups: true\n"
+    );
+    assert!(e.model.views.iter().any(|v| v.id == "shop-l2" && v.show_groups));
+
+    // Turning it back off removes the key rather than writing the default.
+    flag(&mut e, "L2", Some("shop"), "show-groups", false).unwrap();
+    assert_eq!(read(&t.dir, "views/shop-l2.yaml"), "view: shop-l2\nscope: shop\nlevel: L2\n");
+}
+
+#[test]
+fn a_default_is_never_written_and_never_creates_a_file() {
+    let (t, mut e) = setup("view-flag-default");
+    // `show-groups: false` and `include-context: true` say exactly what their
+    // absence says, so a file stating them is a file to keep in step with a
+    // default that might move.
+    let tx = e
+        .apply(Operation::SetViewFlag {
+            view: None, level: "L2".into(), scope: Some("shop".into()),
+            flag: "show-groups".into(), value: false,
+        })
+        .unwrap();
+    assert!(tx.changes.is_empty());
+    assert!(!t.dir.join("views/shop-l2.yaml").exists(), "no file authored to say nothing");
+
+    // The one that is on by default writes only when turned off.
+    flag(&mut e, "L2", Some("shop"), "include-context", false).unwrap();
+    assert!(read(&t.dir, "views/shop-l2.yaml").contains("include-context: false"));
+    flag(&mut e, "L2", Some("shop"), "include-context", true).unwrap();
+    assert!(!read(&t.dir, "views/shop-l2.yaml").contains("include-context"));
+}
+
+#[test]
+fn a_view_flag_lands_in_the_file_that_exists_keeping_its_comments() {
+    let (t, mut e) = setup("view-flag-existing");
+    write(&t.dir, "views/shop-l2.yaml", SHOP_VIEW);
+    assert!(e.external_scan());
+    flag(&mut e, "L2", Some("shop"), "show-groups", true).unwrap();
+    let text = read(&t.dir, "views/shop-l2.yaml");
+    assert!(text.starts_with("# L2 — the shop's containers.\n"), "{text}");
+    assert!(text.contains("show-groups: true"), "{text}");
+    assert!(text.contains("web: [4, 2]     # the front door"), "pins and comments untouched: {text}");
+}
+
+#[test]
+fn nested_is_a_deployment_view_flag_and_says_so() {
+    let (t, mut e) = setup("view-flag-nested");
+    let err = flag(&mut e, "L2", Some("shop"), "nested", true).unwrap_err();
+    assert!(err.contains("dives instead"), "{err}");
+    let err = flag(&mut e, "L2", Some("shop"), "show-descriptions", true).unwrap_err();
+    assert!(err.contains("not a view flag"), "{err}");
+    assert!(!t.dir.join("views/shop-l2.yaml").exists(), "nothing reached a file");
+}
+
 #[test]
 fn stale_blocks_operations_and_recovers() {
     let (t, mut e) = setup("stale");

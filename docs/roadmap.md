@@ -1626,6 +1626,51 @@ for. Ships: the whitelist extended, inspector fields for each, and a `source:`
 editor that can run `introspect` when it is saved. Medium, and the highest
 ratio of format-we-document to format-you-can-reach.
 
+### D — shipped 2026-08-29: view settings you can see
+
+A third panel mode beside *Inspect* and *Source*. Inspect is about an element,
+Source is about a file, and **View** is about the diagram — which had no home at
+all: nothing in the app said a view file existed, what was in it, or how to turn
+on any of the three flags §4 defines. `descriptions:` had gained a right-click
+in 0.8.0 and that was the whole of it.
+
+It holds what the diagram says rather than what the model says: **draw group
+boundaries**, **include context**, and — in a deployment view — **nested
+boxes**, plus the list of what is pinned and what is drawing a description, each
+releasable in place, with **Back to auto-layout** under the pins. When the level
+and scope have no view file yet, the first setting changed writes one, the way
+pinning has since 0.8.0 — the same `view_file_target`, so the two cannot
+disagree about the file name or the header.
+
+`SetViewFlag` follows the rule C established for element fields: **setting a
+flag to its default removes the key**. `show-groups: false` and
+`include-context: true` say precisely what their absence says, and a file
+stating them is a file to keep in step with a default that might move — so
+turning a flag off again leaves the file as it was, and turning one *to* its
+default in a workspace with no view file writes nothing at all rather than
+authoring a file to say nothing. `nested` outside `LD` is refused with the
+reason ADR-0018 gives: everywhere else, the answer to "what is inside this" is
+to dive.
+
+The panel redraws from `renderCanvas`, not from the selection: its subject is
+whatever is on screen, and that changes on a dive, a level button, or an edit —
+where the inspector's subject only changes when the selection does. That was a
+real bug for exactly one test cycle: switching altitude with the level segment
+left the panel describing the view you had left.
+
+*Exit met*: the e2e writes `group: People` onto two L1 elements through the
+inspector — where before C there was no way to write one at all — confirms
+nothing is drawn, then ticks **Draw group boundaries** in the View panel and
+watches the boundary appear. L1 has no view file in this workspace, so the flag
+authors one, and the panel stops saying "no view file yet" and starts naming the
+file it wrote. Rust-side, four tests pin the file bytes: authoring, removal on
+return-to-default, landing in an existing file with its pins and comments
+untouched, and the two refusals.
+
+**The B gate fired again**, as designed: `SetViewFlag` failed `menu.test.mjs`
+until the box had an answer. It is excused — a flag belongs to the whole
+diagram, not to the box you happen to be right-clicking.
+
 **D — View settings you can see.** `show-groups`, `include-context`, `nested`
 and `descriptions` are per-view keys (§4); only `descriptions` has an
 affordance, and only since 0.8.0. Nothing in the app says a view file exists,

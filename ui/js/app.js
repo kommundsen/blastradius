@@ -206,6 +206,19 @@ function mockSync(cmd, args) {
       const key = op.scope && op.id.startsWith(op.scope + '.') ? op.id.slice(op.scope.length + 1) : op.id;
       v.layout[key] = [op.x, op.y];
     }
+  } else if (op.op === 'set-view-flag') {
+    const key = { 'show-groups': 'show_groups', 'include-context': 'include_context', nested: 'nested' }[op.flag];
+    let v = snap.views.find((v) => op.view ? v.id === op.view :
+      (v.level === op.level && (op.level === 'L1' || v.scope === op.scope)));
+    if (!v) {
+      // The engine authors the file here; the mock has no filesystem, so it
+      // authors the view the file would have declared.
+      v = { id: (op.scope ?? op.level).split('.').pop() + '-' + op.level.toLowerCase(),
+        scope: op.scope ?? '', level: op.level, layout: {}, descriptions: [],
+        include_context: true, show_groups: false, nested: false };
+      snap.views.push(v);
+    }
+    v[key] = op.value;
   } else if (op.op === 'set-source') {
     const el = snap.elements.find((e) => e.id === op.id);
     if (!el) throw new Error('unknown element');
@@ -532,6 +545,10 @@ async function renderCanvas({ animate = true } = {}) {
   applyCamera();
   renderBreadcrumb();
   syncLevelSeg();
+  // The view panel is about whatever is on screen, and what is on screen has
+  // just changed — by a dive, a level button, or an edit. The inspector needs
+  // no such thing: its subject only changes when the selection does.
+  if (state.sideMode === 'view') renderViewPanel();
 }
 
 /** The size each node will actually render at.
@@ -1522,6 +1539,7 @@ async function focusElement(id) {
 function renderSide() {
   if (state.sideMode === 'source') { renderSource(); return; }
   els.srcStatus.hidden = true;
+  if (state.sideMode === 'view') return renderViewPanel();
   if (state.help !== null) return renderHelp(state.help);
   if (state.history) return renderHistory();
   if (state.doc) return renderDoc(state.doc);
@@ -1801,6 +1819,121 @@ async function runIntrospection(id) {
   await renderCanvas({ animate: false });
   renderSide();
 }
+
+/**
+ * The view panel: what *this diagram* says, as opposed to what the model says.
+ *
+ * Every one of these settings existed in the file format and only one of them
+ * (descriptions, and only from a box's right-click) had any affordance at all.
+ * Nothing in the app said a view file existed, what was in it, or how to turn
+ * the rest on — so `show-groups` in particular was a key you could only reach
+ * by opening YAML, which made the `group:` labels the inspector can now write
+ * invisible in practice.
+ */
+function renderViewPanel() {
+  els.sideBack.hidden = true;
+  els.sideTitle.textContent = 'View';
+  const snap = effectiveSnapshot();
+  const viewDef = findViewDef(snap, state.level, state.scope);
+  const nameOf = (id) => snap.elements.find((e) => e.id === id)?.name ?? id;
+  const editable = canPin(); // the same gate pinning uses: stale view, no edit
+
+  let html = `<div class="insp">`;
+  html += `<span class="insp-kicker">${esc(LEVEL_NAMES[state.level] ?? state.level)}</span>`;
+  html += `<span class="insp-title">${esc(viewDef?.name ?? viewDef?.id ?? 'Unsaved view')}</span>`;
+  html += `<span class="mono text-muted" style="font-family:var(--font-mono);font-size:var(--text-2xs)">` +
+    `${esc(state.scope ? nameOf(state.scope) : 'the whole model')}</span>`;
+
+  if (state.level === 'L4') {
+    // Derived layouts are pure auto-layout (spec/l4-introspection.md): there is
+    // no view file to have settings in, and nothing here to decide.
+    html += `<p class="insp-hint">Code level is derived from source and laid out
+      automatically — it has no view file and nothing to set.</p></div>`;
+    els.sideBody.innerHTML = html;
+    return;
+  }
+
+  html += viewDef
+    ? `<p class="insp-hint">Written to <button class="doc-link" data-editfile="${esc(viewDef.file ?? '')}">${esc(viewDef.file ?? viewDef.id)}</button></p>`
+    : `<p class="insp-hint">No view file yet. The first setting you change writes one.</p>`;
+
+  html += `<div class="insp-section">Drawing</div>`;
+  const check = (flag, label, on, hint) =>
+    `<label class="insp-check"><input type="checkbox" data-flag="${flag}"${on ? ' checked' : ''}` +
+    `${editable ? '' : ' disabled'}> ${esc(label)}</label>` +
+    `<span class="insp-hint">${esc(hint)}</span>`;
+  html += check('show-groups', 'Draw group boundaries', Boolean(viewDef?.show_groups),
+    'Elements sharing a group: label are drawn inside one box.');
+  html += check('include-context', 'Include context',
+    viewDef ? viewDef.include_context !== false : true,
+    'People and external systems related to what this view is about.');
+  if (state.level === 'LD') {
+    html += check('nested', 'Nested boxes', Boolean(viewDef?.nested),
+      'Draw the whole subtree in one frame instead of diving into it.');
+  }
+
+  const pins = pinnedIds();
+  html += `<div class="insp-section">Pinned (${pins.size})</div>`;
+  if (pins.size) {
+    for (const id of [...pins].sort()) {
+      html += `<div class="insp-rel">${esc(nameOf(id))}` +
+        (editable ? ` <button class="btn btn-ghost" data-unpin="${esc(id)}">release</button>` : '') +
+        `</div>`;
+    }
+    if (editable) {
+      html += `<div class="insp-actions"><button class="btn btn-secondary" id="view-reset">Back to auto-layout</button></div>`;
+    }
+  } else {
+    html += `<span class="text-muted" style="font-size:var(--text-sm)">Nothing pinned — every box is placed by the layout engine.</span>`;
+  }
+
+  const described = state.layout?.nodes.filter((n) => n.describe) ?? [];
+  html += `<div class="insp-section">Descriptions on the box (${described.length})</div>`;
+  if (described.length) {
+    for (const n of described) {
+      html += `<div class="insp-rel">${esc(nameOf(n.id))}` +
+        (editable ? ` <button class="btn btn-ghost" data-undescribe="${esc(n.id)}">hide</button>` : '') +
+        `</div>`;
+    }
+  } else {
+    html += `<span class="text-muted" style="font-size:var(--text-sm)">None. Right-click a box to draw its description.</span>`;
+  }
+  html += `</div>`;
+  els.sideBody.innerHTML = html;
+
+  for (const box of els.sideBody.querySelectorAll('[data-flag]')) {
+    box.addEventListener('change', () => applyOp({
+      op: 'set-view-flag',
+      view: viewDef?.id ?? null,
+      level: state.level,
+      scope: state.scope,
+      flag: box.dataset.flag,
+      value: box.checked,
+    }));
+  }
+  for (const btn of els.sideBody.querySelectorAll('[data-unpin]')) {
+    btn.addEventListener('click', () => unpin(btn.dataset.unpin));
+  }
+  for (const btn of els.sideBody.querySelectorAll('[data-undescribe]')) {
+    btn.addEventListener('click', () => applyOp({
+      op: 'show-description',
+      view: viewDef?.id ?? null,
+      level: state.level,
+      scope: state.scope,
+      id: btn.dataset.undescribe,
+      show: false,
+    }));
+  }
+  document.getElementById('view-reset')?.addEventListener('click', () => unpin(null));
+  for (const btn of els.sideBody.querySelectorAll('[data-editfile]')) {
+    btn.addEventListener('click', () => invoke('open_in_editor', { rel: btn.dataset.editfile }).catch(() => {}));
+  }
+}
+
+/** What each altitude is called, for the panel's kicker. */
+const LEVEL_NAMES = {
+  L1: 'Context', L2: 'Containers', L3: 'Components', L4: 'Code', LD: 'Deployment',
+};
 
 /** Inspector for a derived (L4) element: read-only by nature — the source
  * file is the thing to edit (spec/l4-introspection.md). */

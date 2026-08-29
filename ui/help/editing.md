@@ -37,6 +37,13 @@ The rest of the canvas:
   [Code-level detail](code-level.md).
 - **`R`** and **`Delete`** are the keyboard versions of Connect and Delete, on
   the selected element.
+- **The View panel** (beside *Inspect* in the side panel) holds what the
+  *diagram* says rather than what the model says: whether it draws group
+  boundaries, whether it includes the people and external systems related to
+  its subject, and — in a deployment view — whether it draws the whole subtree
+  as boxes inside boxes. It also lists what is pinned and what is drawing a
+  description, and releases either. Changing any of them writes the view file,
+  creating one if this altitude and scope had none.
 - **`Ctrl+Z` / `Ctrl+Y`** undo and redo, including across a restart.
 
 There is no save button. Every operation is written immediately, and the file
@@ -94,6 +101,17 @@ Layout is not stored in model files. Positions live in view files under
 
 Pin what you care about, and let the rest arrange itself — until you start
 arranging, at which point that view is yours and stops moving under you.
+
+## Groups
+
+A `group:` label on an element is **presentation, not structure**: ids do not
+change, nothing gains a parent, and no relation is affected. Elements group with
+their **siblings** — the same label under two different parents is two different
+boundaries, because a boundary is drawn inside one scene.
+
+Write the label in the inspector, then turn **Draw group boundaries** on in the
+View panel for the diagrams that should show it. It is off by default so that
+labelling something never silently changes a diagram you were happy with.
 
 ## Descriptions on the box
 

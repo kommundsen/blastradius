@@ -361,3 +361,76 @@ test('a mapped component offers to run the extractor', async ({ page }) => {
   await expect(page.locator('.travel-banner.is-toast')).toContainText('0 code elements derived · mock harness: introspection needs the real app');
   expect(page.errors).toEqual([]);
 });
+
+// 0.9.0 D: `show-groups`, `include-context` and `nested` are view-file keys
+// (spec §4) that nothing in the app could reach — so a `group:` label written
+// in the inspector stayed invisible, and no screen said a view file existed at
+// all. The View panel is where a diagram's own settings live.
+const viewPanel = (page) => page.locator('#side-mode .seg-opt', { hasText: 'View' });
+
+test('groups written on elements become visible from the view panel', async ({ page }) => {
+  // L1 has no view file in this workspace — which is the point: the first
+  // setting changed writes one.
+  await node(page, 'Platform Architect').first().click();
+  await page.locator('#insp-group').fill('People');
+  await page.locator('#insp-group').press('Enter');
+  await node(page, 'Reviewer').first().click();
+  await page.locator('#insp-group').fill('People');
+  await page.locator('#insp-group').press('Enter');
+
+  // Written, and drawn nowhere: grouping is presentation, opt-in per view.
+  await expect(page.locator('.group-box')).toHaveCount(0);
+
+  await viewPanel(page).click();
+  await expect(page.locator('#side-body')).toContainText('No view file yet');
+  await page.locator('[data-flag="show-groups"]').check();
+  await expect(page.locator('.group-box')).toHaveCount(1);
+  await expect(page.locator('.group-box')).toContainText('People');
+
+  // And the panel now knows which file it wrote into.
+  await expect(page.locator('#side-body')).not.toContainText('No view file yet');
+  expect(page.errors).toEqual([]);
+});
+
+test('the view panel turns context off and on', async ({ page }) => {
+  await node(page, 'Blastradius').dblclick(); // L2, which has pins and context
+  await expect(page.locator('#breadcrumb')).toContainText('Containers');
+  const people = page.locator('.node.is-person');
+  await expect(people).not.toHaveCount(0);
+
+  await viewPanel(page).click();
+  await page.locator('[data-flag="include-context"]').uncheck();
+  await expect(people).toHaveCount(0);
+  await page.locator('[data-flag="include-context"]').check();
+  await expect(people).not.toHaveCount(0);
+  expect(page.errors).toEqual([]);
+});
+
+test('the view panel lists the pins and releases them', async ({ page }) => {
+  await node(page, 'Blastradius').dblclick(); // the L2 view is pinned in the fixture
+  await viewPanel(page).click();
+  const pins = page.locator('#side-body [data-unpin]');
+  await expect(pins).not.toHaveCount(0);
+  const before = await pins.count();
+
+  await pins.first().click();
+  await expect(page.locator('#side-body [data-unpin]')).toHaveCount(before - 1);
+
+  await page.locator('#view-reset').click();
+  await expect(page.locator('#side-body')).toContainText('Nothing pinned');
+  expect(page.errors).toEqual([]);
+});
+
+test('nested boxes are offered where they mean something', async ({ page }) => {
+  await viewPanel(page).click();
+  // L1 dives; only a deployment view draws containment (ADR-0018).
+  await expect(page.locator('[data-flag="nested"]')).toHaveCount(0);
+  await page.locator('#level-seg .seg-opt', { hasText: 'D' }).click();
+  await expect(page.locator('[data-flag="nested"]')).toHaveCount(1);
+
+  // And code level has no view file to have settings in at all.
+  await page.locator('#level-seg .seg-opt', { hasText: 'L4' }).click();
+  await expect(page.locator('#side-body')).toContainText('no view file');
+  await expect(page.locator('[data-flag]')).toHaveCount(0);
+  expect(page.errors).toEqual([]);
+});

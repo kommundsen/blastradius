@@ -29,6 +29,7 @@ export const NOT_ON_THE_BOX = {
   pin: 'dragging the box is the pin; a menu item meaning "now drag me" is not one',
   'set-field': "an element's own fields are edited in the inspector, beside the text",
   'set-source': "a mapping is several fields at once: the box offers to start one, the inspector edits it",
+  'set-view-flag': 'a flag belongs to the whole diagram, not to the box you happen to be over — the View panel has them',
   'delete-relation': 'a relation is chosen by clicking the edge, and has its own inspector',
   'set-relation-field': 'same: a relation is not a box',
 };

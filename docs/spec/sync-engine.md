@@ -68,6 +68,7 @@ text directly via markers, so no parser replacement was needed.
 | Canvas operation | File touched | Edit |
 | --- | --- | --- |
 | Drag node to pin | views/*.yaml | upsert `layout.<id>: [x, y]` |
+| Set a view flag | views/*.yaml | set `show-groups`, `include-context` or `nested`; setting a flag to its default **removes** the key, and never authors a file just to state a default. `nested` is refused outside `LD` |
 | Unpin | views/*.yaml | remove `layout.<id>`, or every pin in the view; the last one out removes `layout:` itself. Never authors a view file — nothing is pinned in a view that has no file |
 | Rename element | model file | set `name:` (id immutable, ADR-0003) |
 | Set a field | model file | set `name`, `description`, `tech`, `group`, `replicas` or `external`; an empty value **removes** the key, in a block mapping or inside a one-line flow mapping |
