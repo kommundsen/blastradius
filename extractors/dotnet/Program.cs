@@ -127,6 +127,19 @@ var byName = types.Values
 
 var edges = new SortedSet<string>(StringComparer.Ordinal);
 var deps = new SortedSet<string>(StringComparer.Ordinal);
+// References that leave this mapping's corpus but stay inside the repository,
+// as "<element id>\0<repo-relative file>" (ADR-0019). Drift detection resolves
+// the file to whichever component owns it, which is a question only the whole
+// workspace can answer.
+//
+// Semantic mode only, and that is the honest limit ADR-0019 already recorded:
+// at syntax level C# resolves namespaces rather than paths, so there is no
+// file to point at. Semantic mode has the symbol, and a symbol declared in
+// source knows the file it was declared in.
+var outbound = new SortedSet<string>(StringComparer.Ordinal);
+// Absolute paths of the files this mapping covers, so a reference back into
+// one of them is never called outbound.
+var mappedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
 // Namespace roots this corpus owns; a using outside them is external.
 var corpusRoots = new HashSet<string>(
@@ -339,6 +352,7 @@ SortedSet<string>? SemanticEdgesCore(out string why)
     // element set pass 1 built.
     var wanted = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     foreach (var rel in files) wanted[Path.GetFullPath(Path.Combine(rootDir, rel))] = rel;
+    foreach (var full in wanted.Keys) mappedFiles.Add(full);
 
     var idBySymbol = new Dictionary<ISymbol, string>(SymbolEqualityComparer.Default);
     var models = new List<(SemanticModel Model, SyntaxNode Root)>();
@@ -378,7 +392,7 @@ SortedSet<string>? SemanticEdgesCore(out string why)
                 {
                     if (model.GetSymbolInfo(b.Type).Symbol is not INamedTypeSymbol target) continue;
                     var id = FactIdOf(target);
-                    if (id is null) { AddDependency(result, self, target); continue; }
+                    if (id is null) { NoteOutbound(self, target); AddDependency(result, self, target); continue; }
                     if (id == selfId) continue;
                     result.Add($"{selfId}\0{id}\0{(target.TypeKind == TypeKind.Interface ? "implements" : "extends")}");
                 }
@@ -390,7 +404,7 @@ SortedSet<string>? SemanticEdgesCore(out string why)
                 var named = sym as INamedTypeSymbol ?? sym?.ContainingType;
                 if (named is null) continue;
                 var id = FactIdOf(named);
-                if (id is null) { AddDependency(result, self, named); continue; }
+                if (id is null) { NoteOutbound(self, named); AddDependency(result, self, named); continue; }
                 if (id == selfId) continue;
                 result.Add($"{selfId}\0{id}\0references");
             }
@@ -415,6 +429,37 @@ SortedSet<string>? SemanticEdgesCore(out string why)
 // there and as `dep.Newtonsoft.Json` here (spec/l4-introspection.md, recorded
 // follow-up). A reference into the *same* assembly is your own code that this
 // mapping simply does not cover; calling that a dependency would be a lie.
+// A reference out of the corpus that is nonetheless *in the repository*: the
+// type is declared in source, in a file this mapping does not cover. That is
+// the raw material drift detection needs, and the C# extractor produced none
+// of it until 0.10.0 — so the product's central claim, documentation that
+// cannot quietly rot, was inert on the stack ADR-0016 named first.
+//
+// Both shapes count. A sibling project in the same solution is the common one,
+// because different components usually are different projects. Same-assembly
+// is the other: your own code, in a file this mapping simply does not cover.
+//
+// A symbol from metadata — the framework, a NuGet package — declares no syntax
+// and records nothing here. `dep.<Assembly>` already says that, and it is not
+// something a component in this repository could own.
+void NoteOutbound(INamedTypeSymbol from, INamedTypeSymbol target)
+{
+    var fromId = FactIdOf(from);
+    if (fromId is null) return;
+    foreach (var reference in target.DeclaringSyntaxReferences)
+    {
+        var path = reference.SyntaxTree?.FilePath;
+        if (string.IsNullOrEmpty(path)) continue;
+        string full;
+        try { full = Path.GetFullPath(path); } catch { continue; }
+        if (mappedFiles.Contains(full)) continue;
+        var rel = Path.GetRelativePath(repoRoot, full).Replace('\\', '/');
+        // Outside the repository is nobody's component.
+        if (rel.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(rel)) continue;
+        outbound.Add($"{fromId}\0{rel}");
+    }
+}
+
 void AddDependency(SortedSet<string> into, INamedTypeSymbol from, INamedTypeSymbol target)
 {
     var assembly = target.ContainingAssembly?.Name;
@@ -495,6 +540,16 @@ var facts = new Dictionary<string, object?>
         return new Dictionary<string, object?> { ["from"] = p[0], ["to"] = p[1], ["kind"] = p[2] };
     }).ToList(),
 };
+// Omitted when empty, which is every syntax-mode run: the key's absence is
+// what facts written before this said, and the fixture gate is byte-exact.
+if (outbound.Count > 0)
+{
+    facts["outbound"] = outbound.Select(o =>
+    {
+        var p = o.Split('\0');
+        return new Dictionary<string, object?> { ["from"] = p[0], ["path"] = p[1] };
+    }).ToList();
+}
 
 var json = JsonSerializer.Serialize(facts, new JsonSerializerOptions
 {

@@ -1856,6 +1856,51 @@ Draft exits:
   reports the same undeclared and unbacked findings it reports for Rust; the
   canvas draws them with no C#-specific code, because there is none to write.
 
+### 2 — shipped 2026-08-30: drift can see C#
+
+`extractors/dotnet/` recorded no `outbound` entries at all. The field has been
+in the facts schema since 0.5.0, Rust and TypeScript fill it, and the C# one
+never had — so the product's central claim, documentation that cannot quietly
+rot, was inert on the stack ADR-0016 named *first*. Nothing in 0.9.0's drift
+work — ghost edges, declare, reverse — did anything for a C# user.
+
+ADR-0019 recorded the reason honestly and it was half right: at syntax level
+C# resolves namespaces rather than paths, so there is no file to point at.
+Semantic mode has the symbol, and a symbol declared in source knows the file it
+was declared in. That is nine lines of Roslyn at the two places a reference
+already fails to resolve inside the corpus, plus the emit.
+
+Both shapes count. A sibling project in the same solution is the common one,
+because different components usually *are* different projects; same-assembly is
+the other, your own code in a file the mapping does not cover. A symbol from
+metadata declares no syntax and records nothing — `dep.<Assembly>` already
+says that, and no component in this repository owns it.
+
+**Nothing downstream knows what C# is**, which was the whole bet: the
+extractor names a file, `owner_of` resolves it against every `source:`
+mapping, and the canvas draws the ghost with code written for Rust. There is
+no C#-specific line anywhere past the extractor.
+
+*Exit met*: the extractor gate grew a sixth check — the two-project fixture
+where `Beta/Consumer.cs` reaches `Alpha/Widget.cs` now records
+`{from: Gamma.Consumer, path: Alpha/Widget.cs}`, and a file the mapping *does*
+cover is never called outbound. Four Rust tests take that extractor's real
+output as a committed fixture and assert the workspace turns it into the same
+Undeclared and Unbacked findings it reports for Rust, including the backwards
+relation that produces both at once.
+
+**A latent bug fell out, and it was never about C#**: a mapping rooted at the
+repository itself (`root: .`) could never own a file, because `owner_of`
+stripped the root as a literal prefix. Drift was silently impossible for any
+single-project repository in every language. Fixed, and the test fails without
+the fix.
+
+**The cost, stated rather than hidden**: drift on C# needs `mode: semantic`,
+which needs a .NET SDK and a solution that loads. Syntax mode still reports
+every element and edge it always did — it simply cannot see across the corpus
+boundary, and now says so by recording nothing rather than guessing. The help
+page and the spec both say it in those words.
+
 ### 3 — shipped 2026-08-30: the app runs from an install now, and something watches it
 
 `tools/smoke-install.ps1` takes a finished CLI and puts it through a new

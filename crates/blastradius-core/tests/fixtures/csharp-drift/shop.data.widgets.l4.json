@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "language": "csharp",
+  "extractor": "blastradius-extract-cs 0.4.0 (semantic)",
+  "component": "shop.data.widgets",
+  "root": "Alpha",
+  "sourceDigest": "sha256:63b9e803c8399d064f7903ec106376857ab522c0c328605b3e3d66e9bee2fcda",
+  "elements": [
+    {
+      "id": "Alpha",
+      "kind": "namespace",
+      "name": "Alpha",
+      "path": "Alpha/Widget.cs"
+    },
+    {
+      "id": "Alpha.Widget",
+      "kind": "class",
+      "name": "Widget",
+      "parent": "Alpha",
+      "path": "Alpha/Widget.cs",
+      "line": 3
+    }
+  ],
+  "edges": []
+}

@@ -49,7 +49,18 @@ fn owner_of(ws: &Workspace, path: &str) -> Option<ElementId> {
     for el in ws.elements.values() {
         let Some(m) = &el.source else { continue };
         let root = m.root.trim_end_matches('/');
-        let Some(rest) = path.strip_prefix(root).and_then(|r| r.strip_prefix('/')) else { continue };
+        // A mapping rooted at the repository itself owns every path as it
+        // stands. Without this, `root: .` — the natural mapping for a
+        // single-project repository — could never own a file, so drift was
+        // silently impossible there in every language.
+        let rest = if root.is_empty() || root == "." {
+            path
+        } else {
+            let Some(rest) = path.strip_prefix(root).and_then(|r| r.strip_prefix('/')) else {
+                continue;
+            };
+            rest
+        };
         if let Ok(Some(set)) = crate::introspect::glob_set(&m.include, "include") {
             if !set.is_match(rest) {
                 continue;

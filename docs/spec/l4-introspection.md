@@ -117,8 +117,20 @@ dependency between components — the input to drift detection.
 - **TypeScript** records anything the compiler resolves to a real file outside
   the mapped root but inside the repository — the resolver already knows the
   exact path, so there is no inference.
-- **C#** records nothing yet: at syntax level it resolves namespaces, not
-  paths, so there is no file to name. Recorded, not solved.
+- **C#** records them in **semantic mode only**. At syntax level it resolves
+  namespaces rather than paths, so there is no file to name; semantic mode has
+  the symbol, and a symbol declared in source knows the file it was declared
+  in (`DeclaringSyntaxReferences`). Both shapes count — a sibling project in
+  the same solution, which is the common one because different components
+  usually are different projects, and same-assembly code the mapping simply
+  does not cover. A symbol from metadata declares no syntax and records
+  nothing: `dep.<Assembly>` already says that, and no component in this
+  repository owns it.
+
+  So drift on a C# codebase needs `mode: semantic` in the mapping, which also
+  needs an SDK and a loadable solution. Syntax mode still reports every
+  element and edge it always did; it simply cannot see across the corpus
+  boundary, and says so by recording nothing rather than guessing.
 
 Empty is omitted, and facts written before 0.5.0 simply have none.
 

@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "language": "csharp",
+  "extractor": "blastradius-extract-cs 0.4.0 (semantic)",
+  "component": "shop.api.consumer",
+  "root": "Beta",
+  "sourceDigest": "sha256:7cf1d476d3175784f3d220a28951b4f43e68cda71ada87b77eff18881dc7dd0a",
+  "elements": [
+    {
+      "id": "Beta",
+      "kind": "namespace",
+      "name": "Beta",
+      "path": "Beta/Widget.cs"
+    },
+    {
+      "id": "Beta.Widget",
+      "kind": "class",
+      "name": "Widget",
+      "parent": "Beta",
+      "path": "Beta/Widget.cs",
+      "line": 5
+    },
+    {
+      "id": "Gamma",
+      "kind": "namespace",
+      "name": "Gamma",
+      "path": "Beta/Consumer.cs"
+    },
+    {
+      "id": "Gamma.Consumer",
+      "kind": "class",
+      "name": "Consumer",
+      "parent": "Gamma",
+      "path": "Beta/Consumer.cs",
+      "line": 3
+    },
+    {
+      "id": "dep.Alpha",
+      "kind": "dependency",
+      "name": "Alpha",
+      "path": ""
+    }
+  ],
+  "edges": [
+    {
+      "from": "Gamma.Consumer",
+      "to": "dep.Alpha",
+      "kind": "imports"
+    }
+  ],
+  "outbound": [
+    {
+      "from": "Gamma.Consumer",
+      "path": "Alpha/Widget.cs"
+    }
+  ]
+}

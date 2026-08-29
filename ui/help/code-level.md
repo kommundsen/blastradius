@@ -83,6 +83,11 @@ where you are looking:
 Neither is shown while you are diffing or time-travelling: drift is a fact
 about the code as it is now.
 
+Drift needs both components introspected. For **C#** it additionally needs
+`mode: semantic` in the mapping: at syntax level C# resolves namespaces
+rather than files, and a dependency you cannot name a file for is one this
+cannot prove.
+
 In CI, `blastradius validate --strict-drift` turns the same findings into a
 failing build. They are warnings by default, so adopting this on an existing
 repository does not hand you a red build on day one.

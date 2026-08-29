@@ -197,3 +197,120 @@ fn the_snapshot_carries_drift_as_structure_not_prose() {
     let json = serde_json::to_string(&snap2).unwrap();
     assert!(!json.contains("\"drift\""), "an empty finding list is not a field");
 }
+
+// --- C# (0.10.0 item 2) ------------------------------------------------------
+
+/// The two committed C# facts files, as the real extractor produced them.
+///
+/// They are not hand-written: `extractors/dotnet/fixtures/semantic` is a
+/// two-project solution where `Beta/Consumer.cs` references a type defined in
+/// `Alpha/Widget.cs`, and these are what semantic mode emits for it. That
+/// extractor's own gate (`extractors/dotnet/test.sh`) keeps them honest; this
+/// test is about what the *workspace* does with them, which is the half a
+/// fixture cannot fake.
+fn csharp_fixture(tag: &str, relations: &str) -> (TempDir, blastradius_core::Workspace) {
+    let t = temp(tag);
+    let model = format!(
+        r#"system: shop
+name: Shop
+containers:
+  api:
+    name: API
+    components:
+      consumer:
+        name: Consumer
+        source:
+          language: csharp
+          root: Beta
+          mode: semantic
+  data:
+    name: Data
+    components:
+      widgets:
+        name: Widgets
+        source:
+          language: csharp
+          root: Alpha
+          mode: semantic
+{relations}"#
+    );
+    write(&t.dir, "docs/model/shop.yaml", &model);
+    write(&t.dir, "docs/blastradius.yaml", MANIFEST);
+    let here = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/csharp-drift");
+    for id in ["shop.api.consumer", "shop.data.widgets"] {
+        let facts = fs::read_to_string(here.join(format!("{id}.l4.json"))).unwrap();
+        write(&t.dir, &format!("docs/model/derived/{id}.l4.json"), &facts);
+    }
+    let (ws, _) = blastradius_core::load_workspace(&t.dir.join("docs"));
+    (t, ws)
+}
+
+/// The claim ADR-0019 could not make for C# until now: a cross-project
+/// reference is a code dependency between components, and the model has to
+/// declare it or hear about it.
+///
+/// Nothing in `drift.rs` knows what C# is — which is the point. The extractor
+/// records the file a reference resolves to, and everything downstream is the
+/// same code that reports Rust.
+#[test]
+fn csharp_cross_project_references_are_drift_like_any_other() {
+    let (_t, ws) = csharp_fixture("csharp-undeclared", "");
+    let found = detect(&ws);
+    assert_eq!(found.len(), 1, "one undeclared dependency, got {found:?}");
+    assert_eq!(found[0].from, "shop.api.consumer");
+    assert_eq!(found[0].to, "shop.data.widgets");
+    assert_eq!(found[0].kind, DriftKind::Undeclared);
+    // The evidence is the file that defines the type, which is the thing
+    // syntax-level C# cannot name and the reason this was blind until 0.10.0.
+    assert_eq!(found[0].via.as_deref(), Some("Alpha/Widget.cs"));
+}
+
+#[test]
+fn declaring_the_csharp_dependency_clears_it() {
+    let (_t, ws) = csharp_fixture(
+        "csharp-declared",
+        "relations:\n  - from: api.consumer\n    to: data.widgets\n    label: uses\n",
+    );
+    assert!(detect(&ws).is_empty(), "{:?}", detect(&ws));
+}
+
+/// And the other direction, which is the finding this repository's own first
+/// drift run needed: a relation written the wrong way round.
+#[test]
+fn a_backwards_csharp_relation_is_unbacked_and_undeclared_at_once() {
+    let (_t, ws) = csharp_fixture(
+        "csharp-backwards",
+        "relations:\n  - from: data.widgets\n    to: api.consumer\n    label: feeds\n",
+    );
+    let found = detect(&ws);
+    let kinds: Vec<_> = found.iter().map(|d| (d.from.as_str(), d.to.as_str(), d.kind)).collect();
+    assert!(
+        kinds.contains(&("shop.api.consumer", "shop.data.widgets", DriftKind::Undeclared)),
+        "{kinds:?}"
+    );
+    assert!(
+        kinds.contains(&("shop.data.widgets", "shop.api.consumer", DriftKind::Unbacked)),
+        "{kinds:?}"
+    );
+}
+
+/// A mapping rooted at the repository itself — the natural one for a
+/// single-project repo — could never own a file, so drift was silently
+/// impossible there. Found while wiring C# up, and it was never about C#.
+#[test]
+fn a_mapping_rooted_at_the_repository_still_owns_its_files() {
+    let (_t, ws) = fixture("root-dot", "");
+    let mut ws = ws;
+    for el in ws.elements.values_mut() {
+        if let Some(m) = el.source.as_mut() {
+            // Same files, named from the repository root instead of src/.
+            m.include = m.include.iter().map(|i| format!("src/{i}")).collect();
+            m.root = ".".into();
+        }
+    }
+    // The facts still say `src/ledger.rs`, which is what the outbound entry
+    // carries; only the mapping's shape changed.
+    let found = detect(&ws);
+    assert_eq!(found.len(), 1, "the dependency is still owned, got {found:?}");
+    assert_eq!(found[0].to, "shop.data.ledger");
+}

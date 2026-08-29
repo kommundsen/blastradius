@@ -80,6 +80,15 @@ the existing contract and is additive to the schema.
   relation marks the edge it is about and offers to reverse it — the fix its own
   first run needed. `diagnose` still flattens the same findings into warnings
   for `validate`, which is what CI reads.
-- Only Rust and TypeScript record outbound references today. C# resolves
-  namespaces rather than paths at syntax level, so it has no file to record
-  until semantic mode is involved — recorded, not solved.
+- **C# records them since 0.10.0, in semantic mode only.** At syntax level C#
+  resolves namespaces rather than paths, so there is no file to point at;
+  semantic mode has the symbol, and a symbol declared in source knows its
+  file. Nothing in this ADR's implementation knows what C# is, which is the
+  point: the extractor names a file, and `owner_of` resolves it the same way
+  it resolves a Rust one. Drift on C# therefore needs `mode: semantic`, which
+  needs an SDK and a loadable solution — the honest cost, stated rather than
+  hidden.
+- Found while wiring that up: a mapping rooted at the repository itself
+  (`root: .`) could never own a file, so drift was silently impossible for a
+  single-project repo **in every language**. Fixed with the C# work; it was
+  never about C#.

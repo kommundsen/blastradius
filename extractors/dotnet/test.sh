@@ -9,7 +9,9 @@
 #   3. semantic mode falls back to syntax when there is no solution to load.
 #
 # Plus 2b: semantic dependencies are named by the assembly they live in
-# rather than by a using directive's first segment.
+# rather than by a using directive's first segment, and 2c: a reference to a
+# type defined elsewhere *in the repository* records the file that defines it,
+# which is the whole input to drift detection (ADR-0019).
 #
 # Check 2 asserts the resolved edge rather than byte-comparing a frozen file:
 # semantic output depends on whichever SDK resolves the symbols, and pinning
@@ -31,6 +33,8 @@ trap 'rm -f "$actual" "$semantic" "$fallback" "$fallback_err" "$absolute" "$asse
 echo '{"component":"shop.backend.billing","repoRoot":"fixtures","root":"src","include":[],"exclude":[]}' \
   | dotnet run -c Release > "$actual"
 
+# Byte-exactness also pins the absence of `outbound`: syntax mode records
+# none, and a key that appears there would change every committed facts file.
 if diff -u fixtures/expected.l4.json "$actual"; then
   echo "csharp extractor: fixture facts byte-exact"
 else
@@ -114,6 +118,27 @@ if any(e[1] == 'Beta.Widget' for e in edges):
   exit 1
 fi
 echo "csharp extractor: semantic dependencies are named by assembly"
+
+# ---- 2c. outbound: the file a cross-project reference actually points at ----
+# The same run. Drift detection compares what the code does against what the
+# model declares, and it needs a *file* to resolve to an owning component.
+# Syntax mode cannot supply one — C# resolves namespaces, not paths — so the
+# C# extractor recorded no outbound entries at all until 0.10.0, and the
+# product's central claim was inert on the stack ADR-0016 named first.
+if ! python -c "
+import json, sys
+d = json.load(open(sys.argv[1]))
+out = [(o['from'], o['path']) for o in d.get('outbound', [])]
+want = ('Gamma.Consumer', 'Alpha/Widget.cs')
+if want not in out:
+    sys.exit(print('missing', want, 'in', out) or 1)
+if any(p.startswith('Beta/') for _, p in out):
+    sys.exit(print('a mapped file was called outbound:', out) or 1)
+" "$assemblies"; then
+  echo "csharp extractor: no outbound reference to the defining file" >&2
+  exit 1
+fi
+echo "csharp extractor: outbound names the file the reference resolves to"
 
 # ---- 3. semantic mode degrades to syntax, never worse -----------------------
 # The plain corpus has no solution, so semantic mode must fall back and emit
