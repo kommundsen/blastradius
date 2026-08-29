@@ -68,6 +68,7 @@ text directly via markers, so no parser replacement was needed.
 | Canvas operation | File touched | Edit |
 | --- | --- | --- |
 | Drag node to pin | views/*.yaml | upsert `layout.<id>: [x, y]` |
+| Unpin | views/*.yaml | remove `layout.<id>`, or every pin in the view; the last one out removes `layout:` itself. Never authors a view file — nothing is pinned in a view that has no file |
 | Rename element | model file | set `name:` (id immutable, ADR-0003) |
 | Create element | model file | insert mapping under parent, id from dialog |
 | Delete element | model + views | remove node; remove layout entry; relations referencing it are removed **in the same transaction** and listed in the confirm dialog |

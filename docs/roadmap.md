@@ -1378,6 +1378,200 @@ deployment block swallowed the `deploymentNode` that follows a `tags` line.
 `aws-s3-upload.dsl` went red; the corpus is back at 10/10, and a test now
 asserts every corpus DSL declaring an environment produces a deployment file.
 
+## 0.9.0 — planned (2026-08-28): the modelling experience
+
+Written after an audit of what the app can actually *write*, rather
+than from the wish list: every item below names the code that proves the gap.
+
+The through-line is that Phase 3 shipped editing as a set of operations, and
+the surfaces on top of them stopped growing at the point where the operations
+did. `sync::Operation` has nine variants; the canvas reaches six of them, the
+inspector two fields, and the parts of the model format the product documents
+in `spec/model-format.md` §3–§4 are, for the most part, only writable by hand.
+A user who follows our own onboarding is told to model in the app, and then
+has to open the YAML to do half of it.
+
+**Picked 2026-08-28** (owner): all four of A–D, plus **F** as the theme. Five
+items, but four of them are surface over operations that already exist, and
+the two smallest are traps this project shipped itself. Sequence: **A → B → C
+→ D → F**, which is the dependency order — B needs A's unpin to have something
+to offer, D shows toggles for the keys C teaches the app to write, and F's
+second remedy leans on the relation work E would generalise. **E was not
+picked**, so F gets the narrow version of it: reverse an unbacked relation,
+without the general endpoint-repair surface.
+
+Draft exits, one per item:
+
+- **A** — a view pinned by a single drag returns to auto-layout in one action
+  and one undo, and the view file is left with no `layout:` key rather than an
+  empty one; e2e asserts the arrangement matches a never-pinned view.
+- **B** — every operation the canvas can perform is reachable from the box
+  without knowing a keystroke; the `R` binding stays, and a test derives the
+  menu's items from `sync::Operation` so a new op cannot be added without
+  deciding whether the box offers it.
+- **C** — a workspace gains a group, a `replicas` count, a `tech` and a
+  `source:` mapping without the YAML being opened, and the mapping's save runs
+  `introspect` and lands a real derived graph.
+- **D** — the groups written in C become visible from the view panel, on a view
+  that had no file until the toggle was flipped.
+- **F** — a seeded undeclared dependency in this repository draws a ghost edge
+  on the canvas and is declared with one click, leaving the model drift-free
+  under `validate --strict-drift`; a seeded backwards relation is reversed the
+  same way. The dogfood model itself must end the release drift-free, as
+  `conformance.rs` already asserts.
+
+### A — shipped 2026-08-29: unpin, and a view back to auto-layout
+
+`Unpin` is a new `sync::Operation`: one element, or — with `id` omitted —
+every pin in the view, which is the way back to auto-layout. It is deliberately
+not pin's mirror image in two ways. It **never authors a view file**: nothing is
+pinned in a view that has no file, so the answer is no changes rather than a
+new file saying nothing, and `apply` already treats an empty change set as a
+non-edit that leaves no undo entry behind. And the **last pin takes `layout:`
+with it** rather than leaving the key standing over nothing — the rule
+`descriptions:` has followed since 0.8.0. Releasing a whole view is one
+operation and therefore one undo, not one per node.
+
+Sharing one view lookup between pinning and unpinning fixed a small thing on
+the way: the staleness guard's own copy of it compared a deployment overview's
+empty `scope:` against the canvas's `None` and matched neither, so a stale
+overview file was never the reason an operation was refused. It is now.
+
+Both halves are on the diagram, because that is where the pinning happened:
+the box's menu releases the box, and the canvas's own menu — right-click on
+empty space, a surface that did not exist — releases the view, counting what it
+is about to release. Agents get the variant too, so the schema branch and the
+enum stay in step (`tests/mcp.rs` asserts the count).
+
+*Exit met*: `unpinning_everything_removes_the_layout_key` asserts the whole
+file byte-for-byte after the reset — comments and `include-context:` intact,
+no `layout:` — and that one undo restores it exactly; the e2e drags a node on
+this repo's own L3 view, takes **Back to auto-layout**, and asserts the
+arrangement returns to the never-pinned one by pairwise distance, to within two
+pixels rather than the grid cell the settle test has to allow.
+
+**Found on the way, and worth more than the feature: 0.8.0's settle test never
+dragged anything — for two independent reasons.** It performed a canvas **pan**,
+and a pan moves every node equally, which satisfies both of its assertions (the
+dragged node moved; no two other nodes moved relative to each other). It could
+not have failed for the reason it exists.
+
+The first reason is the fixture: `canvas.spec.mjs` loads `/index.html`, whose
+mock git fixture carries a merge conflict, and a conflicted workspace is
+read-only — `canPin()` is false and `beginNodeDrag` returns on the first
+pointer event. Proven rather than assumed: on `/index.html` the app carries no
+`can-edit` class and the Add button is hidden; on `/index.html?nogit` both flip.
+
+The second only appeared once the first was fixed, and only when the file ran
+as a file rather than the test alone: the test navigated by typing into the
+command palette and pressing Enter, which reaches the intended L3 view when the
+result list is quick enough and stays at **L1** when it is not. L1 has no view
+file in the mock, and the mock's `pin` — unlike the engine — cannot author one,
+so the pins were dropped on the floor and the drag was a pan again. Both tests
+now dive to the view instead of searching for it.
+
+What makes either of them fail now is a guard rather than a comment: after the
+drop, the undo button must be enabled. A pan produces no transaction, so a test
+that panned instead of dragging says so. With that in place the 0.8.0
+behaviour is proven real — only its proof was not. Two lessons worth keeping:
+a test that edits must say `?nogit`, and a test that asserts *nothing moved*
+has to prove something happened first.
+
+**A — Unpin, and get a view back to auto-layout.** There is no `Unpin`
+operation: `sync::Operation` has none, and nothing in `ui/` mentions one. That
+was survivable while pinning was per-node and rare (ADR-0006: "pinning is the
+exception"), and 0.8.0 ended it — the first drag in a view now pins *every*
+node, deliberately, so that nothing else moves. The consequence was not
+recorded at the time: one drag converts a view to fully manual, and there is
+no way back inside the app except undo while it is still on the stack. Ships:
+`unpin` (single) and a view-level "back to auto-layout" as one transaction,
+reachable from the box and from the view panel (D); pinned boxes readable as
+pinned. Small, and it closes a trap we shipped ourselves.
+
+**B — A context menu that can model.** The app's only context menu carries one
+item (`openNodeMenu`, 0.8.0) — show/hide description — while the operations
+for the rest already exist. Drawing a relation is bound to the `R` key on a
+selected element and appears nowhere else in the UI; delete is the `Delete`
+key; rename is an inspector field. Every one of those is a modelling action a
+user looks for on the box. Ships: connect, rename, delete, pin/unpin (A),
+show/hide description, add a child, open the source file — same ops, a surface
+that admits they exist. Small.
+
+**C — An inspector that can write the whole element.** `SetField` whitelists
+`name | description | tech` (`sync.rs:513`) and the inspector exposes two of
+them. `tech:` is unreachable from the app although every box in the product
+renders it — `[Container: Rust]` — since 0.6.0. Worse, four keys have no
+operation at all: `group:` (§3c, 0.5.0), `replicas:` (§3b, 0.7.0),
+`external: true`, and `source:` — the L4 opt-in. So grouping is reachable only
+by hand-editing or by importing a Structurizr workspace that already had it,
+and turning on code-level detail means reading `spec/l4-introspection.md` and
+writing YAML, which is precisely the step a first-time user is least equipped
+for. Ships: the whitelist extended, inspector fields for each, and a `source:`
+editor that can run `introspect` when it is saved. Medium, and the highest
+ratio of format-we-document to format-you-can-reach.
+
+**D — View settings you can see.** `show-groups`, `include-context`, `nested`
+and `descriptions` are per-view keys (§4); only `descriptions` has an
+affordance, and only since 0.8.0. Nothing in the app says a view file exists,
+what is in it, or how to turn the rest on — so C's groups would be written and
+still invisible. Ships: a view panel — level, scope, the three toggles, the
+pin list with per-pin and whole-view release (A), and authoring the file when
+the level+scope has none, which the sync engine already does for pins and
+descriptions. Small-to-medium, and it is what makes C visible.
+
+**E — Relations you can repair without deleting them.** The relation inspector
+edits `label` and `protocol` and offers delete. `direction: both | none` is a
+model field (§3, `model.rs`) with no operation. Changing either endpoint means
+delete-and-recreate, which loses the label, the protocol and the direction.
+And the one relation mistake this project has documented on itself is a
+*backwards* relation — `model-service -> sync-engine`, written as a data flow,
+caught by drift detection in 0.5.0 — for which the app's answer is: delete it,
+find both boxes again, redraw it the other way, retype both fields. Ships:
+`direction` on `set-relation-field`, "reverse this relation" as one
+transaction, re-point an endpoint, and add-a-relation from the inspector with
+the `search.js` ranker doing the picking instead of hunting for a box.
+
+**F — Drift on the canvas, with the fix one click away.** `drift::detect`
+returns structured findings — from, to, kind, and the file that evidences it —
+and `drift::diagnose` immediately flattens each one into a warning string
+(`drift.rs:135`). The app shows the count as a chip and the strings as a plain
+list with no jump and no action (`renderDiagnostics`). The canvas draws
+nothing. Yet the remedy for an *undeclared* dependency is one existing
+operation (`add-relation`), and the remedy for an *unbacked* one is usually
+the reverse action from E. Ships: drift carried structurally into the
+snapshot; undeclared dependencies drawn as ghost edges with "declare this";
+unbacked relations marked with "reverse" and "delete"; the diagnostics list
+made clickable while we are in there. Medium. This is the product thesis —
+documentation checked against reality — turned from a CI warning into
+something you can act on where you are looking.
+
+**G — Documents and ADRs from inside the app.** The inspector's Documents
+section is read-only links. Doc frontmatter (`elements:`) is the link, the
+skill teaches "attach ADRs to the elements they govern", and there is no
+operation for docs of any kind — so recording a decision means leaving the
+app. Ships: "new ADR for this element" scaffolded with correct frontmatter,
+and attach/detach an existing doc as a frontmatter splice. Medium: markdown
+frontmatter is a new splice surface, though `docs.rs` already parses it.
+
+**H — Move an element (needs an ADR).** Ids are immutable (ADR-0003) and
+there is no reparent operation, so when the understanding improves and a
+component belongs in a different container, the route is delete and recreate —
+losing its relations, its pins, its description, its `descriptions:` entries
+and its doc links. Restructuring is the normal course of modelling, and it is
+the one thing the product punishes. Ships: a `move` that rewrites the id and
+every reference in one transaction, `blast_radius` shown before it runs.
+Large, and it needs ADR-0003 amended rather than ignored: a move changes an
+element's *path*, and the honest question is whether identity was ever the
+path.
+
+**Carried, not picked: E, G and H.** E's general endpoint repair loses to the
+narrow reverse F needs; G and H stay in the pool for the release after this
+one, H behind the ADR-0003 amendment it requires.
+
+**Not in this release, and deliberately**: the PRD five-minute-stranger run
+(still owed, carried), macOS distribution (deferred five times), and the
+`writable()` open question from 0.7.0.
+
 ## 0.7.0 — candidate pool (2026-08-25)
 
 **The hold resolved itself.** This pool was 0.6.0's, held (2026-08-25)

@@ -760,6 +760,13 @@ fn operation_schema() -> Value {
                     "id": id("element to place"),
                     "x": {"type": "integer"}, "y": {"type": "integer"},
                 }), vec!["level", "id", "x", "y"]),
+            variant("unpin", "Release pinned coordinates in one view: one element, or every pin in the view when `id` is omitted — which puts the view back to auto-layout.",
+                json!({
+                    "view": id("view id; omit for the default view at this level and scope"),
+                    "level": {"type": "string", "enum": ["L1", "L2", "L3", "LD"]},
+                    "scope": id("id of the element being looked inside; omit at L1"),
+                    "id": id("element to release; omit to release every pin in the view"),
+                }), vec!["level"]),
             variant("show-description", "Draw an element's description inside its box in one view, or stop drawing it. Per view, not per element: set the description itself with set-field.",
                 json!({
                     "view": id("view id; omit for the default view at this level and scope"),

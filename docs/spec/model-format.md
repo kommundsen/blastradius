@@ -292,7 +292,9 @@ include-context: true       # show people/externals related to scope (default tr
   stays in the model's own coordinates. Pins were clamped to the positive
   quadrant until 0.6.3, which made the origin a wall to pile things against.
 - A workspace with zero view files is valid — every level renders fully
-  auto-laid-out.
+  auto-laid-out. So is a view file with no `layout:` key: releasing the last
+  pin removes the key rather than leaving it standing over nothing, which is
+  the rule `descriptions:` follows too.
 - `scope:` is required except on an `LD` overview, the one view whose subject
   is the whole deployment rather than one element.
 

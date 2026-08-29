@@ -65,6 +65,9 @@ Layout is not stored in model files. Positions live in view files under
   the same model produces the same diagram on every machine and in CI. After a
   view has settled, that applies to whatever you add next: a new element
   appears in clear space rather than reshuffling what you have arranged.
+- **Right-click a pinned box** to release just that one, or the canvas itself
+  for **Back to auto-layout**, which releases every pin in the view in one
+  action. One undo brings the whole arrangement back.
 - Pins are grid units, not pixels, so they survive zoom and density changes.
 - Dropping a node onto a neighbour nudges it to the nearest clear cell rather
   than overlapping.

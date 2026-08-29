@@ -522,13 +522,27 @@ test('the dot grid fills the canvas and travels with the drawing', async ({ page
 // whole view — the dragged node where you put it, everything else exactly
 // where it already was — so nothing but the dragged node appears to move.
 test('dragging one node leaves every other node where it was', async ({ page }) => {
-  // Land on a view with enough nodes for "everything moved" to be visible.
-  // The level button picks the nearest candidate container, which may be a
-  // three-component one; the palette goes exactly where we mean.
-  await page.keyboard.press('Control+k');
-  await page.locator('#palette-q').fill('git-service');
-  await page.keyboard.press('Enter');
+  // `?nogit`, and not by taste: the mock's git fixture carries a merge
+  // conflict, and a conflicted workspace is read-only — `canPin()` is false,
+  // `beginNodeDrag` returns immediately, and what looks like a drag is a
+  // canvas pan. A pan moves every node equally, so every assertion below
+  // passes without a pin ever being written. Found 2026-08-29, while adding
+  // the unpin tests below.
+  await page.goto('/index.html?nogit');
+  await expect(page.locator('#nodes .node')).not.toHaveCount(0);
+  // Land on a view with enough nodes for "everything moved" to be visible,
+  // by diving. This used to go through the command palette, which reaches the
+  // same place when it is quick enough and stays at L1 when Enter beats the
+  // result list — and L1 has no view file in the mock, whose `pin` cannot
+  // author one, so the pins vanished and the drag became a pan. The guard
+  // below now catches that; the dive stops it happening.
+  const node = (title) =>
+    page.locator('#nodes .node', { has: page.locator('.node-title', { hasText: title }) });
+  await node('Blastradius').first().dblclick();
+  await expect(page.locator('#breadcrumb')).toContainText('Containers');
+  await node('Core').first().dblclick();
   await expect(page.locator('#breadcrumb')).toContainText('Components');
+  await expect(page.locator('#app')).toHaveClass(/can-edit/);
   await expect(page.locator('#nodes .node')).not.toHaveCount(0);
 
   // Screen positions divided by the camera scale, i.e. model space. A drop
@@ -559,6 +573,9 @@ test('dragging one node leaves every other node where it was', async ({ page }) 
   await expect
     .poll(async () => Math.round((await boxes())[ids[0]][0]))
     .not.toBe(Math.round(before[ids[0]][0]));
+  // A pin actually reached the engine: without this the test passes on a
+  // canvas *pan*, which moves the dragged node and every other node equally.
+  await expect(page.locator('#undo-btn')).toBeEnabled();
 
   const after = await boxes();
 
@@ -584,5 +601,110 @@ test('dragging one node leaves every other node where it was', async ({ page }) 
       ).toBeLessThan(40);
     }
   }
+  expect(page.errors).toEqual([]);
+});
+
+// 0.8.0 made the first drag in a view pin every node, so one drag converts a
+// view to fully manual — and until 0.9.0 there was no unpin operation at all,
+// in the engine or anywhere else, so the only way back was an undo that was
+// still on the stack. The way out is where the pinning happened: on the
+// diagram.
+test('a view pinned by one drag returns to auto-layout in one action', async ({ page }) => {
+  await page.goto('/index.html?nogit'); // editing is off in a conflicted workspace
+  const node = (title) =>
+    page.locator('#nodes .node', { has: page.locator('.node-title', { hasText: title }) });
+  // Dived rather than searched: the palette can land on a derived L4 element,
+  // where nothing is pinnable and a drag is a pan — which looks like a drag to
+  // any assertion about the node having moved.
+  await node('Blastradius').first().dblclick();
+  await expect(page.locator('#breadcrumb')).toContainText('Containers');
+  await node('Core').first().dblclick();
+  await expect(page.locator('#breadcrumb')).toContainText('Components');
+  await expect(page.locator('#app')).toHaveClass(/can-edit/);
+  await expect(page.locator('#nodes .node')).not.toHaveCount(0);
+
+  // Model space, for the reason the settle test gives: a drop that extends the
+  // drawing re-fits the camera, which slides and shrinks everything on screen
+  // without rearranging anything.
+  const boxes = async () =>
+    page.locator('#nodes .node').evaluateAll((els) => {
+      const m = new DOMMatrix(getComputedStyle(document.getElementById('camera')).transform);
+      const scale = m.a || 1;
+      return Object.fromEntries(els.map((e) => {
+        const r = e.getBoundingClientRect();
+        return [e.dataset.id, [r.left / scale, r.top / scale]];
+      }));
+    });
+  const before = await boxes();
+  const ids = Object.keys(before);
+  expect(ids.length).toBeGreaterThan(3);
+
+  const target = page.locator(`#nodes .node[data-id="${ids[0]}"]`);
+  const box = await target.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 90, box.y + box.height / 2 + 60, { steps: 10 });
+  await page.mouse.up();
+  await expect
+    .poll(async () => Math.round((await boxes())[ids[0]][0]))
+    .not.toBe(Math.round(before[ids[0]][0]));
+  // The node moves on pointerdown, for feedback, well before the pins reach
+  // the engine — so wait for the transaction rather than for the picture, or
+  // the right-click below can arrive at a view with nothing pinned in it yet.
+  await expect(page.locator('#undo-btn')).toBeEnabled();
+
+  // One drag pinned the whole view, and the canvas says so where it happened.
+  await page.locator('#canvas').click({ button: 'right', position: { x: 6, y: 6 } });
+  const reset = page.locator('.ctx-menu .ctx-item', { hasText: 'Back to auto-layout' });
+  await expect(reset).toContainText(`${ids.length} pinned`);
+  await reset.click();
+
+  // And the arrangement is the one the layout engine produced before anything
+  // was pinned. Pairwise distances rather than positions, for the reason the
+  // settle test gives: releasing the pins shrinks the drawing back and re-fits
+  // the camera, which slides everything without rearranging it. Auto-layout is
+  // deterministic (ADR-0006), so the tolerance here is a pixel, not a grid
+  // cell — this is the same arrangement, not a similar one.
+  const gap = (m, a, b) => Math.hypot(m[a][0] - m[b][0], m[a][1] - m[b][1]);
+  await expect.poll(async () => {
+    const after = await boxes();
+    if (!ids.every((id) => after[id])) return false;
+    return ids.every((a) => ids.every((b) => Math.abs(gap(after, a, b) - gap(before, a, b)) < 2));
+  }, { message: 'the released view returns to its auto-layout arrangement' }).toBe(true);
+
+  // Nothing is pinned now, so the canvas has nothing to offer.
+  await page.locator('#canvas').click({ button: 'right', position: { x: 6, y: 6 } });
+  await expect(page.locator('.ctx-menu')).toHaveCount(0);
+
+  // It was one operation, so one undo brings the whole arrangement back.
+  await page.keyboard.press('Control+z');
+  await expect
+    .poll(async () => Math.round((await boxes())[ids[0]][0]))
+    .not.toBe(Math.round(before[ids[0]][0]));
+  expect(page.errors).toEqual([]);
+});
+
+// The box carries the single-element half of the same idea.
+test('a pinned box offers to release just itself', async ({ page }) => {
+  await page.goto('/index.html?nogit'); // editing is off in a conflicted workspace
+  const node = (title) =>
+    page.locator('#nodes .node', { has: page.locator('.node-title', { hasText: title }) });
+  await node('Blastradius').dblclick();
+  await expect(page.locator('#breadcrumb')).toContainText('Containers');
+  // The L2 view is pinned in the fixture, so the boxes here are pinned ones.
+  const core = node('Core').first();
+  await core.click({ button: 'right' });
+  const count = await page.locator('.ctx-menu .ctx-item', { hasText: 'Back to auto-layout' }).textContent();
+  const pinnedBefore = Number(count.match(/([0-9]+) pinned/)[1]);
+  expect(pinnedBefore).toBeGreaterThan(1);
+  await page.locator('.ctx-menu .ctx-item', { hasText: 'Unpin this element' }).click();
+
+  // That box alone is released: the others keep their pins, so the menu still
+  // offers the view-wide reset, counting one fewer.
+  await core.click({ button: 'right' });
+  await expect(page.locator('.ctx-menu .ctx-item', { hasText: 'Back to auto-layout' }))
+    .toContainText(`${pinnedBefore - 1} pinned`);
+  // And with its pin gone, the box is not offered a release it no longer needs.
+  await expect(page.locator('.ctx-menu .ctx-item', { hasText: 'Unpin this element' })).toHaveCount(0);
   expect(page.errors).toEqual([]);
 });

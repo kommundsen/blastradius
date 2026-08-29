@@ -24,6 +24,12 @@ pub enum Operation {
     /// pin, and written to the same file — what a diagram says about a box is
     /// the diagram's business, not the element's.
     ShowDescription { view: Option<String>, level: String, scope: Option<String>, id: String, show: bool },
+    /// Remove pins from a view: one element, or — with `id: None` — every pin
+    /// in it, which is the way back to auto-layout. Never authors a view file:
+    /// a level+scope with no file has nothing pinned, so there is nothing to
+    /// write. 0.8.0 made the first drag in a view pin every node, so a view
+    /// becomes fully manual after one drag; this is the way out of that.
+    Unpin { view: Option<String>, level: String, scope: Option<String>, id: Option<String> },
     /// Rename = set `name:` — the id is immutable (ADR-0003).
     Rename { id: String, name: String },
     /// Set a scalar field on an element (whitelisted: name, description,
@@ -43,6 +49,8 @@ pub enum Operation {
 /// write guard in `apply`.
 fn op_target_ids(op: &Operation) -> Vec<&str> {
     match op {
+        // `id: None` is the whole view, which names no element to guard.
+        Operation::Unpin { id, .. } => id.as_deref().into_iter().collect(),
         Operation::Pin { id, .. }
         | Operation::ShowDescription { id, .. }
         | Operation::Rename { id, .. }
@@ -333,14 +341,12 @@ impl SyncEngine {
         // target must be resolved before compute (its text does not parse).
         let writes_view = match &op {
             Operation::Pin { view, level, scope, .. }
+            | Operation::Unpin { view, level, scope, .. }
             | Operation::ShowDescription { view, level, scope, .. } => Some((view, level, scope)),
             _ => None,
         };
         if let Some((view, level, scope)) = writes_view {
-            let target = self.model.views.iter().find(|v| match view {
-                Some(vid) => &v.id == vid,
-                None => v.level == *level && (level == "L1" || Some(v.scope.as_str()) == scope.as_deref()),
-            });
+            let target = self.find_view(view.as_deref(), level, scope.as_deref());
             if let Some(v) = target {
                 if self.stale.contains(&v.file) {
                     return Err(format!(
@@ -502,6 +508,9 @@ impl SyncEngine {
             Operation::ShowDescription { view, level, scope, id, show } => {
                 self.compute_show_description(view.as_deref(), level, scope.as_deref(), id, *show)
             }
+            Operation::Unpin { view, level, scope, id } => {
+                self.compute_unpin(view.as_deref(), level, scope.as_deref(), id.as_deref())
+            }
             Operation::Rename { id, name } => {
                 let (rel, chain) = self.element_chain(id)?;
                 let text = self.files.get(&rel).ok_or("file not cached")?;
@@ -572,15 +581,7 @@ impl SyncEngine {
         id: &str,
         verb: &str,
     ) -> Result<ViewTarget, String> {
-        // An empty scope is the deployment overview, which the canvas
-        // addresses as no scope at all (ADR-0018).
-        fn view_scope(v: &crate::model::View) -> Option<&str> {
-            (!v.scope.is_empty()).then_some(v.scope.as_str())
-        }
-        let existing = self.model.views.iter().find(|v| match view {
-            Some(vid) => v.id == vid,
-            None => v.level == level && (level == "L1" || view_scope(v) == scope),
-        });
+        let existing = self.find_view(view, level, scope);
         // keys are written scope-relative when inside the scope (spec §4 style)
         let view_key = |scope: &str, id: &str| -> String {
             id.strip_prefix(&format!("{scope}."))
@@ -623,6 +624,26 @@ impl SyncEngine {
         }
     }
 
+    /// The view a per-view operation addresses, if there is one. `view_target`
+    /// answers `None` by authoring a file; `compute_unpin` answers it by doing
+    /// nothing, which is why the lookup is shared rather than repeated.
+    fn find_view(
+        &self,
+        view: Option<&str>,
+        level: &str,
+        scope: Option<&str>,
+    ) -> Option<&crate::model::View> {
+        // An empty scope is the deployment overview, which the canvas
+        // addresses as no scope at all (ADR-0018).
+        fn view_scope(v: &crate::model::View) -> Option<&str> {
+            (!v.scope.is_empty()).then_some(v.scope.as_str())
+        }
+        self.model.views.iter().find(|v| match view {
+            Some(vid) => v.id == vid,
+            None => v.level == level && (level == "L1" || view_scope(v) == scope),
+        })
+    }
+
     fn compute_pin(
         &self,
         view: Option<&str>,
@@ -644,6 +665,56 @@ impl SyncEngine {
                 Ok(vec![FileChange { rel, before: None, after: Some(text) }])
             }
         }
+    }
+
+    /// Remove one pin, or every pin in the view (`id: None`) — the way back to
+    /// auto-layout.
+    ///
+    /// Unlike pinning this never authors a view file: nothing is pinned in a
+    /// view that has no file, so the answer is no changes rather than a new
+    /// file saying nothing. And emptying `layout:` removes the key itself
+    /// rather than leaving `layout:` standing over nothing, which is the rule
+    /// `descriptions:` already follows.
+    fn compute_unpin(
+        &self,
+        view: Option<&str>,
+        level: &str,
+        scope: Option<&str>,
+        id: Option<&str>,
+    ) -> Result<Vec<FileChange>, String> {
+        let Some(v) = self.find_view(view, level, scope) else {
+            return Ok(Vec::new());
+        };
+        // Pin keys are written scope-relative or absolute (spec §4), and an
+        // id may arrive as either — so both spellings are candidates, the
+        // same rule the delete cascade follows.
+        let keys: BTreeSet<String> = match id {
+            None => v.layout.keys().cloned().collect(),
+            Some(id) => {
+                let scoped = id.strip_prefix(&format!("{}.", v.scope)).unwrap_or(id);
+                [scoped, id]
+                    .into_iter()
+                    .filter(|k| v.layout.contains_key(*k))
+                    .map(str::to_string)
+                    .collect()
+            }
+        };
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
+        let rel = v.file.clone();
+        let all = keys.len() == v.layout.len();
+        let text = self.files.get(&rel).ok_or("view file not cached")?.clone();
+        let after = if all {
+            splice::remove_entry(&text, &["layout"])?
+        } else {
+            let mut out = text;
+            for key in &keys {
+                out = splice::remove_entry(&out, &["layout", key])?;
+            }
+            out
+        };
+        Ok(vec![self.change(&rel, after)])
     }
 
     /// Add or remove the element from the view's `descriptions:` list.
@@ -1305,6 +1376,13 @@ fn push_replayed(history: &mut Vec<Transaction>, cursor: &mut usize, tx: Transac
 fn op_label(op: &Operation) -> String {
     match op {
         Operation::Pin { id, x, y, .. } => format!("pin {id} at [{x}, {y}]"),
+        Operation::Unpin { id, level, scope, .. } => match id {
+            Some(id) => format!("unpin {id}"),
+            None => match scope {
+                Some(s) => format!("reset the {level} layout of {s}"),
+                None => format!("reset the {level} layout"),
+            },
+        },
         Operation::Rename { id, name } => format!("rename {id} to {name:?}"),
         Operation::ShowDescription { id, show, .. } => {
             format!("{} description on {id}", if *show { "show" } else { "hide" })

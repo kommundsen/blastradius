@@ -195,6 +195,16 @@ function mockSync(cmd, args) {
       const key = op.scope && op.id.startsWith(op.scope + '.') ? op.id.slice(op.scope.length + 1) : op.id;
       v.layout[key] = [op.x, op.y];
     }
+  } else if (op.op === 'unpin') {
+    const v = snap.views.find((v) => op.view ? v.id === op.view :
+      (v.level === op.level && (op.level === 'L1' || v.scope === op.scope)));
+    if (v && op.id == null) {
+      v.layout = {};
+    } else if (v) {
+      const key = op.scope && op.id.startsWith(op.scope + '.') ? op.id.slice(op.scope.length + 1) : op.id;
+      delete v.layout[key];
+      delete v.layout[op.id];
+    }
   } else if (op.op === 'show-description') {
     // The real engine writes a view file when there is none; the mock has no
     // filesystem, so it can only edit a view the fixture already declares.
@@ -914,6 +924,8 @@ function wireChrome() {
     if (ev.key === 'Escape') closeNodeMenu();
   }, true);
   els.canvas.addEventListener('scroll', closeNodeMenu, true);
+  // Right-click on empty canvas talks about the view rather than a box.
+  els.canvas.addEventListener('contextmenu', openCanvasMenu);
 
   // theme cycle: auto -> light -> dark
   let theme = 'auto';
@@ -2180,12 +2192,12 @@ function selectRelation(edge) {
   renderSide();
 }
 
-// --- node context menu -------------------------------------------------------
-// The only per-box thing that is a property of *this diagram* rather than of
-// the element: whether the description is drawn (spec §4). It belongs on the
-// box for the same reason a pin does — you decide it while looking at the
-// picture — so right-click is where it lives, and the text itself stays in
-// the inspector with the other fields.
+// --- context menus -----------------------------------------------------------
+// What belongs here is what is a property of *this diagram* rather than of the
+// element: whether the description is drawn (spec §4), and whether the box sits
+// where you put it or where the layout engine puts it. Both are decided while
+// looking at the picture, which is what right-click is for; the element's own
+// fields stay in the inspector.
 
 let ctxMenu = null;
 
@@ -2218,7 +2230,53 @@ function openNodeMenu(ev, id) {
         }),
       ]]
     : [['Add a description…', () => focusDescriptionField()]];
+  // A pinned box says where it is; releasing it hands the decision back to the
+  // layout engine. Since 0.8.0 the first drag in a view pins every node, so
+  // "back to auto-layout" is the other half of that and belongs next to it.
+  const pins = pinnedIds();
+  if (canPin() && pins.has(id)) {
+    items.unshift(['Unpin this element', () => unpin(id)]);
+  }
+  if (canPin() && pins.size) {
+    items.push([`Back to auto-layout (${pins.size} pinned)`, () => unpin(null)]);
+  }
 
+  showMenu(ev, items);
+}
+
+/** Ids pinned in the view on screen — layout's own answer, so a pin naming an
+ *  element this view does not show does not count as one. */
+function pinnedIds() {
+  if (!state.layout) return new Set();
+  const viewDef = findViewDef(effectiveSnapshot(), state.level, state.scope);
+  return new Set(Object.keys(resolvePins(viewDef, { nodes: state.layout.nodes })));
+}
+
+/** Release one pin, or every pin in this view (`id === null`) — one operation
+ *  either way, so one undo puts the arrangement back. */
+function unpin(id) {
+  const viewDef = findViewDef(effectiveSnapshot(), state.level, state.scope);
+  return applyOp({
+    op: 'unpin',
+    view: viewDef?.id ?? null,
+    level: state.level,
+    scope: state.scope,
+    id,
+  });
+}
+
+/** Right-click on the canvas itself, where there is no box to talk about: the
+ *  view's own layout is the only thing left to say something about. */
+function openCanvasMenu(ev) {
+  if (ev.target.closest('.node') || !canPin()) return;
+  closeNodeMenu();
+  const pins = pinnedIds();
+  if (!pins.size) return; // nothing pinned, nothing to release
+  showMenu(ev, [[`Back to auto-layout (${pins.size} pinned)`, () => unpin(null)]]);
+}
+
+function showMenu(ev, items) {
+  ev.preventDefault();
   const menu = document.createElement('div');
   menu.className = 'ctx-menu';
   menu.setAttribute('role', 'menu');

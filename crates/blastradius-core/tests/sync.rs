@@ -152,6 +152,107 @@ fn pin_creates_and_updates_view_file() {
     assert!(text.contains("web: [5, 3]") && !text.contains("[4, 2]"), "{text}");
 }
 
+/// A hand-written view file, commented like a real one: unpinning must leave
+/// everything it did not remove byte-identical.
+const SHOP_VIEW: &str = "\
+# L2 — the shop's containers.
+view: shop-l2
+scope: shop
+level: L2
+layout:
+  web: [4, 2]     # the front door
+  api: [8, 2]
+  db: [12, 2]
+include-context: true
+";
+
+#[test]
+fn unpin_removes_one_pin_and_leaves_the_rest_alone() {
+    let (t, mut e) = setup("unpin-one");
+    write(&t.dir, "views/shop-l2.yaml", SHOP_VIEW);
+    assert!(e.external_scan());
+    e.apply(Operation::Unpin {
+        view: None, level: "L2".into(), scope: Some("shop".into()),
+        id: Some("shop.api".into()),
+    })
+    .unwrap();
+    let text = read(&t.dir, "views/shop-l2.yaml");
+    assert_eq!(text, SHOP_VIEW.replace("  api: [8, 2]\n", ""), "only that line goes");
+}
+
+/// The last pin takes `layout:` with it: a key standing over nothing is worse
+/// than no key, which is the rule `descriptions:` already follows.
+#[test]
+fn unpinning_everything_removes_the_layout_key() {
+    let (t, mut e) = setup("unpin-all");
+    write(&t.dir, "views/shop-l2.yaml", SHOP_VIEW);
+    assert!(e.external_scan());
+    let tx = e
+        .apply(Operation::Unpin {
+            view: None, level: "L2".into(), scope: Some("shop".into()), id: None,
+        })
+        .unwrap();
+    assert_eq!(tx.changes.len(), 1, "one file touched");
+    assert_eq!(tx.label, "reset the L2 layout of shop");
+    let text = read(&t.dir, "views/shop-l2.yaml");
+    assert!(!text.contains("layout"), "{text}");
+    assert_eq!(
+        text,
+        "# L2 — the shop's containers.\nview: shop-l2\nscope: shop\nlevel: L2\ninclude-context: true\n",
+        "the view survives; only its pins do not"
+    );
+    // The view still parses, and is now fully auto-laid-out.
+    assert!(e.model.views.iter().any(|v| v.id == "shop-l2" && v.layout.is_empty()));
+
+    // And one undo brings the whole arrangement back.
+    e.undo().unwrap();
+    assert_eq!(read(&t.dir, "views/shop-l2.yaml"), SHOP_VIEW);
+}
+
+/// Removing the pins one at a time reaches the same place as removing them
+/// all at once — the last one out turns off the light.
+#[test]
+fn the_last_single_unpin_also_takes_the_key() {
+    let (t, mut e) = setup("unpin-last");
+    write(&t.dir, "views/shop-l2.yaml", SHOP_VIEW);
+    assert!(e.external_scan());
+    for id in ["shop.web", "shop.api", "shop.db"] {
+        e.apply(Operation::Unpin {
+            view: None, level: "L2".into(), scope: Some("shop".into()), id: Some(id.into()),
+        })
+        .unwrap();
+    }
+    let text = read(&t.dir, "views/shop-l2.yaml");
+    assert!(!text.contains("layout"), "{text}");
+}
+
+/// Nothing is pinned in a view with no file, so there is nothing to write —
+/// and in particular no file to author, which is where this differs from pin.
+#[test]
+fn unpinning_what_is_not_pinned_is_not_an_edit() {
+    let (t, mut e) = setup("unpin-nothing");
+    let tx = e
+        .apply(Operation::Unpin {
+            view: None, level: "L2".into(), scope: Some("shop".into()), id: None,
+        })
+        .unwrap();
+    assert!(tx.changes.is_empty());
+    assert!(!t.dir.join("views/shop-l2.yaml").exists(), "no view file authored");
+    assert_eq!(e.undo().unwrap(), None, "and no empty undo entry on the stack");
+
+    // Same for an element the view does not pin.
+    write(&t.dir, "views/shop-l2.yaml", SHOP_VIEW);
+    assert!(e.external_scan());
+    let tx = e
+        .apply(Operation::Unpin {
+            view: None, level: "L2".into(), scope: Some("shop".into()),
+            id: Some("shop.checkout".into()),
+        })
+        .unwrap();
+    assert!(tx.changes.is_empty());
+    assert_eq!(read(&t.dir, "views/shop-l2.yaml"), SHOP_VIEW);
+}
+
 #[test]
 fn stale_blocks_operations_and_recovers() {
     let (t, mut e) = setup("stale");
