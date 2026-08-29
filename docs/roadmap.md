@@ -1895,6 +1895,15 @@ stripped the root as a literal prefix. Drift was silently impossible for any
 single-project repository in every language. Fixed, and the test fails without
 the fix.
 
+**Noticed, not fixed**: `extractors/dotnet/Program.cs` carries eleven *raw
+NUL bytes* in its source, used as a field separator inside char and string
+literals, alongside ten ordinary `\0` escapes doing the same job. It compiles
+and the output is correct, but the file is binary to `grep`, and any tool that
+strips control characters silently corrupts it. Replacing them with the escape
+is behaviour-neutral and touches the byte-exact fixture gate's inputs, so it is
+a separate change with its own diff to read — not a rider on this one. The new
+code here uses the escape.
+
 **The cost, stated rather than hidden**: drift on C# needs `mode: semantic`,
 which needs a .NET SDK and a solution that loads. Syntax mode still reports
 every element and edge it always did — it simply cannot see across the corpus
