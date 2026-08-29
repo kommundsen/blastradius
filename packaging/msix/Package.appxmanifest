@@ -14,7 +14,7 @@
   <Identity
     Name="25829KimOmmundsen.Blastradius"
     Publisher="CN=A40AEA0F-B99D-44A6-81AF-C093FE362C50"
-    Version="0.8.0.0" />
+    Version="0.9.0.0" />
 
   <Properties>
     <DisplayName>Blastradius</DisplayName>

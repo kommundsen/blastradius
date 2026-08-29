@@ -1378,7 +1378,35 @@ deployment block swallowed the `deploymentNode` that follows a `tags` line.
 `aws-s3-upload.dsl` went red; the corpus is back at 10/10, and a test now
 asserts every corpus DSL declaring an environment produces a deployment file.
 
-## 0.9.0 — planned (2026-08-28): the modelling experience
+## 0.9.0 — released (2026-08-29): the modelling experience
+
+**Cut 2026-08-29.** All five picked items shipped — A, B, C, D and F — and the
+release is one theme rather than five: the app can now *write* the model it has
+always been able to draw. Before it, half of the format this project documents
+was reachable only by opening YAML, one drag made a view permanently manual with
+no way back, the operations the canvas owned were bound to keystrokes nothing
+advertised, and the one feature that checks the model against reality reported
+its findings as strings in a chip.
+
+Three things fell out that were older than the work and are worth keeping
+together, because they are the same shape: **a documented behaviour nothing
+exercised**. `external: true` on a system could never be loaded. A system's
+`group:` was read as `None` and drew nothing. And 0.8.0's settle test never
+dragged anything, for two independent reasons — so the feature it guarded was
+real and its proof was not. Each was found by writing a test for something
+else.
+
+Version bumped across the three surfaces (`Cargo.toml`, `tauri.conf.json`,
+`packaging/msix/Package.appxmanifest`, which the release workflow cross-checks
+against the tag) and tagged `v0.9.0`, which drives the Store submission and the
+portable archives.
+
+**Carried, unpicked from this release's own pool**: E (general relation repair —
+`direction` as a writable field, re-pointing an endpoint, add-a-relation from
+the inspector), G (documents and ADRs from inside the app), and H (moving an
+element, which needs ADR-0003 amended rather than ignored). Carried from
+further back: the PRD five-minute-stranger run, macOS distribution, and the
+`writable()` open question from 0.7.0.
 
 Written after an audit of what the app can actually *write*, rather
 than from the wish list: every item below names the code that proves the gap.
