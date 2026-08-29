@@ -102,7 +102,7 @@ function computeDerivedView(snapshot, scope) {
  * lifted to the deepest visible ancestor of each endpoint and deduplicated;
  * self-loops after lifting are dropped.
  */
-export function computeView(snapshot, level, scope, includeContext = true, nested = false) {
+export function computeView(snapshot, level, scope, includeContext = true, nested = false, drift = []) {
   if (level === 'L4') return computeDerivedView(snapshot, scope);
   const els = byId(snapshot);
   const visible = new Map(); // id -> element
@@ -206,6 +206,35 @@ export function computeView(snapshot, level, scope, includeContext = true, neste
       exact: from === r.from && to === r.to, // false = aggregated from deeper relations
     };
     seen.set(key, edge);
+    edges.push(edge);
+  }
+
+  // Drift (ADR-0019): where the code and the model disagree. An **undeclared**
+  // dependency joins the picture as a ghost edge — it is evidence rather than a
+  // relation, and it must look unlike one until somebody declares it. An
+  // **unbacked** relation is the opposite case, so it marks the edge that is
+  // already there. Both carry the ids the finding was made at, which is the
+  // altitude any fix has to be written at: lifting is for drawing.
+  for (const d of drift) {
+    const from = liftEndpoint(d.from);
+    const to = liftEndpoint(d.to);
+    if (!from || !to || from === to) continue;
+    if (d.kind === 'unbacked') {
+      const edge = seen.get(from + '|' + to) ?? seen.get(to + '|' + from);
+      if (edge) edge.unbacked = { from: d.from, to: d.to };
+      continue;
+    }
+    // Only a declaration in the *same direction* answers the finding. A
+    // relation drawn the other way between the same two boxes is exactly the
+    // case worth seeing — the model connects them, and not the way the code
+    // does — so the ghost is drawn alongside it rather than swallowed by it.
+    if (seen.has(from + '|' + to)) continue;
+    const edge = {
+      from, to, label: null, protocol: null, direction: 'forward',
+      exact: from === d.from && to === d.to,
+      drift: { from: d.from, to: d.to, via: d.via ?? null },
+    };
+    seen.set(from + '|' + to, edge);
     edges.push(edge);
   }
 

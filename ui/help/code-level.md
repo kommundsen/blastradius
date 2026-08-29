@@ -67,6 +67,26 @@ every file and say nothing about your architecture.
 Derived elements are **read-only** in the app. The source is the truth; edit
 the code and re-run `introspect`.
 
+## Drift: the model checked against the code
+
+Once two components are introspected, Blastradius can compare what their code
+actually does against what the model declares, and show you the disagreements
+where you are looking:
+
+- **A dashed ghost line** is a dependency the code has and the model does not
+  declare. Click it: the inspector names the file that proves it, and
+  **Declare this relation** turns it into a real one.
+- **A marked line** is the opposite — a relation you declared with no code
+  reference behind it. Most often the dependency runs the other way, so the
+  inspector offers **Reverse it**, which is one action and one undo.
+
+Neither is shown while you are diffing or time-travelling: drift is a fact
+about the code as it is now.
+
+In CI, `blastradius validate --strict-drift` turns the same findings into a
+failing build. They are warnings by default, so adopting this on an existing
+repository does not hand you a red build on day one.
+
 ## Languages
 
 - **TypeScript / JavaScript** — the TypeScript compiler's own module

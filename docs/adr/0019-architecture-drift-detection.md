@@ -74,6 +74,12 @@ the existing contract and is additive to the schema.
   dependency runs the other way. The model described a data flow where a
   relation means a dependency. All three are now corrected, which is the
   behaviour the feature is supposed to produce.
+- **Surfaced on the canvas since 0.9.0.** The findings ride in the snapshot as
+  structure rather than as warning strings, so an undeclared dependency draws as
+  a ghost edge you can select and declare in one operation, and an unbacked
+  relation marks the edge it is about and offers to reverse it — the fix its own
+  first run needed. `diagnose` still flattens the same findings into warnings
+  for `validate`, which is what CI reads.
 - Only Rust and TypeScript record outbound references today. C# resolves
   namespaces rather than paths at syntax level, so it has no file to record
   until semantic mode is involved — recorded, not solved.

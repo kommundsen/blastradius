@@ -434,3 +434,77 @@ test('nested boxes are offered where they mean something', async ({ page }) => {
   await expect(page.locator('[data-flag]')).toHaveCount(0);
   expect(page.errors).toEqual([]);
 });
+
+// 0.9.0 F: drift detection (ADR-0019) found three real problems in this repo's
+// own model on its first run — and then reported them as warning strings in a
+// chip. `drift::detect` returns structure (from, to, kind, and the file that
+// evidences it) and `drift::diagnose` threw all of it away. The remedy for an
+// undeclared dependency is one operation the app already had.
+//
+// `?drift` seeds two findings, one of each kind: the dogfood model is
+// drift-free by policy — conformance.rs fails the build otherwise — so there
+// is nothing real to draw.
+const edgeHit = (page, from, to) =>
+  page.locator(`#edges path.edge-hit[data-from="${from}"][data-to="${to}"]`);
+
+test('an undeclared dependency is drawn as a ghost, and declaring it clears it', async ({ page }) => {
+  await page.goto('/index.html?nogit&drift');
+  await expect(page.locator('#nodes .node')).not.toHaveCount(0);
+  await node(page, 'Blastradius').dblclick();
+  await node(page, 'Core').first().dblclick(); // L3, where the finding lives
+  await expect(page.locator('#breadcrumb')).toContainText('Components');
+
+  // Drawn unlike a relation, because it is not one: nothing in the model says
+  // this yet.
+  await expect(page.locator('#edges path.edge.is-drift')).toHaveCount(1);
+
+  await edgeHit(page, 'blastradius.core.exporter', 'blastradius.core.git-service')
+    .dispatchEvent('click');
+  const side = page.locator('#side-body');
+  await expect(side).toContainText('Undeclared dependency');
+  await expect(side).toContainText('crates/blastradius-core/src/export.rs');
+
+  await page.locator('#drift-declare').click();
+  await page.locator('#dlg-label').fill('writes through');
+  await page.locator('#dlg-ok').click();
+
+  // Declared: the ghost is gone and a real relation stands in its place.
+  await expect(page.locator('#edges path.edge.is-drift')).toHaveCount(0);
+  await node(page, 'Exporter').first().click();
+  await expect(page.locator('.insp-rel', { hasText: 'Git Service' })).toContainText('writes through');
+  expect(page.errors).toEqual([]);
+});
+
+test('an unbacked relation is marked, and reverses in one action', async ({ page }) => {
+  await page.goto('/index.html?nogit&drift');
+  await expect(page.locator('#nodes .node')).not.toHaveCount(0);
+  await node(page, 'Blastradius').dblclick();
+  await node(page, 'Core').first().dblclick();
+
+  await expect(page.locator('#edges path.edge.is-unbacked')).toHaveCount(1);
+  await edgeHit(page, 'blastradius.core.exporter', 'blastradius.core.model-service')
+    .dispatchEvent('click');
+  await expect(page.locator('#side-body')).toContainText('no code reference supports it');
+
+  // The most common cause, and the one this repo's own model hit: the
+  // dependency runs the other way.
+  await page.locator('#rel-reverse').click();
+  await expect(page.locator('#edges path.edge.is-unbacked')).toHaveCount(0);
+  await node(page, 'Model Service').first().click();
+  await expect(page.locator('.insp-rel', { hasText: 'Exporter' })).toHaveText(/^→ Exporter/);
+  // One transaction: a single undo puts the original relation back.
+  await page.locator('#undo-btn').click();
+  await expect(page.locator('#edges path.edge.is-unbacked')).toHaveCount(1);
+  expect(page.errors).toEqual([]);
+});
+
+test('drift is not drawn over a diff, where it would be about another tree', async ({ page }) => {
+  await page.goto('/index.html?drift'); // git fixture present, so diff is available
+  await expect(page.locator('#nodes .node')).not.toHaveCount(0);
+  await node(page, 'Blastradius').dblclick();
+  await node(page, 'Core').first().dblclick();
+  await expect(page.locator('#edges path.edge.is-drift')).toHaveCount(1);
+  await page.locator('#diff-btn').click();
+  await expect(page.locator('#edges path.edge.is-drift')).toHaveCount(0);
+  expect(page.errors).toEqual([]);
+});

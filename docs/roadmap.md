@@ -1692,6 +1692,58 @@ find both boxes again, redraw it the other way, retype both fields. Ships:
 transaction, re-point an endpoint, and add-a-relation from the inspector with
 the `search.js` ranker doing the picking instead of hunting for a box.
 
+### F — shipped 2026-08-29: drift on the canvas, with the fix one click away
+
+Drift detection found three real problems in this repository's own model the
+first time it ran (0.5.0), and then reported them the way it has ever since: as
+warning strings in a chip. `drift::detect` returns structure — from, to, kind,
+and the file that evidences it — and `drift::diagnose` flattened every one of
+them into a sentence. A sentence cannot carry the arguments its own remedy
+needs, and the remedy for an undeclared dependency is one `add-relation` call
+the app has had since Phase 3.
+
+The findings now ride in the snapshot as structure (`drift`, omitted entirely
+when there are none, so every clean snapshot is byte-identical to before). On
+the canvas:
+
+- **An undeclared dependency is a ghost edge** — dashed, warning-coloured, and
+  deliberately unlike a relation, because it is not one: nothing in the model
+  says this yet. Selecting it gives evidence rather than fields — the file the
+  reference was found in, openable — and one button, **Declare this relation**,
+  which asks for a label and writes it at the ids the *finding* carries rather
+  than the ids it happens to be drawn between.
+- **An unbacked relation marks the edge it is about**, and the inspector offers
+  **Reverse it**: delete and re-add the other way round in one transaction, with
+  the label and protocol carried across, so one undo puts it back. That is the
+  fix this project's own first run needed — `model-service -> sync-engine` had
+  been written as a data flow while the code dependency ran the other way.
+
+Two rendering decisions worth recording. A finding whose endpoints lift into
+the *same* box is not drawn: there is no line between a box and itself, and
+nothing about that picture is wrong. But a finding whose direction the model
+contradicts **is** drawn, alongside the declaration it disagrees with — the
+first cut suppressed a ghost whenever any edge joined those two boxes, which
+hid exactly the case worth seeing. And drift is not drawn while diffing or
+time-travelling: it is a fact about the code as it is now, and a revision's
+ghosts would be about a tree nobody has.
+
+The diagnostics list became clickable while we were in there. Every diagnostic
+has named a file and a line since Phase 0, and none of them went anywhere.
+
+*Exit met*: `?drift` seeds one finding of each kind — the dogfood model is
+drift-free by policy and `conformance.rs` fails the build otherwise, so seeding
+is the only honest way to exercise the canvas side — and the e2e declares the
+undeclared one, watches the ghost turn into a relation, reverses the unbacked
+one, and undoes it in a single step. Six node tests pin the lifting rules, and
+a Rust test asserts the snapshot carries the findings whole.
+
+**Deliberately not done**: the exported viewer draws no ghosts. It shares
+`computeView`, which takes the findings as an argument that the export does not
+pass, so an export is unchanged — an export is a picture of the model, and
+whether it should also carry a live claim about code is a question rather than
+an oversight. The snapshot it embeds does carry the field, so the answer can be
+yes later without a format change.
+
 **F — Drift on the canvas, with the fix one click away.** `drift::detect`
 returns structured findings — from, to, kind, and the file that evidences it —
 and `drift::diagnose` immediately flattens each one into a warning string

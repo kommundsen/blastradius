@@ -185,6 +185,9 @@ select.input { appearance: auto; }
 .insp-check { display: flex; align-items: center; gap: var(--space-2);
   margin-top: var(--space-2); font-size: var(--text-sm); }
 .insp-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.diag-row { display: block; width: 100%; text-align: left; appearance: none;
+  background: none; border: 0; padding: 2px 0; font: inherit; color: inherit; cursor: pointer; }
+.diag-row:hover { text-decoration: underline; }
 .insp-rel.is-selected { background: var(--color-accent-100); }
 .insp-rel .btn { margin-left: var(--space-2); }
 

@@ -168,3 +168,32 @@ fn a_cross_language_relation_is_never_called_unbacked() {
         detect(&ws)
     );
 }
+
+/// The renderer needs the findings whole. `diagnose` flattens each into a
+/// warning string, which is why the canvas could only ever have shown a count:
+/// the remedy for an undeclared dependency is one `add-relation` call, and a
+/// sentence cannot carry its arguments.
+#[test]
+fn the_snapshot_carries_drift_as_structure_not_prose() {
+    let (t, ws) = fixture("snapshot", "");
+    let vfs = blastradius_core::vfs::DiskVfs::new(&t.dir.join("docs"));
+    let snap = blastradius_core::snapshot::snapshot(&vfs, &ws, &[]);
+    assert_eq!(snap.drift.len(), 1, "one seeded finding");
+    let d = &snap.drift[0];
+    assert_eq!(d.kind, "undeclared");
+    assert_eq!(d.from, "shop.api.store");
+    assert_eq!(d.to, "shop.data.ledger");
+    assert_eq!(d.via.as_deref(), Some("src/ledger.rs"));
+
+    // And a clean model says nothing rather than an empty list — the field is
+    // skipped entirely, which keeps every existing snapshot byte-identical.
+    let (t2, clean) = fixture(
+        "snapshot-clean",
+        "relations:\n  - from: api.store\n    to: data.ledger\n    label: reads entries\n",
+    );
+    let vfs2 = blastradius_core::vfs::DiskVfs::new(&t2.dir.join("docs"));
+    let snap2 = blastradius_core::snapshot::snapshot(&vfs2, &clean, &[]);
+    assert!(snap2.drift.is_empty());
+    let json = serde_json::to_string(&snap2).unwrap();
+    assert!(!json.contains("\"drift\""), "an empty finding list is not a field");
+}

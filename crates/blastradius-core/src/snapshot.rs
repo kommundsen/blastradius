@@ -24,6 +24,24 @@ pub struct Snapshot {
     /// (spec/l4-introspection.md). Read-only by nature, not just by contract.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub derived: Vec<SnapDerived>,
+    /// Where the code and the model disagree (ADR-0019). `drift::diagnose`
+    /// flattens the same findings into warning strings; a renderer needs them
+    /// whole, because the remedy for an undeclared dependency is one operation
+    /// and a warning string cannot carry it.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub drift: Vec<SnapDrift>,
+}
+
+/// One disagreement between the code and the model.
+#[derive(Serialize)]
+pub struct SnapDrift {
+    pub from: String,
+    pub to: String,
+    /// undeclared | unbacked
+    pub kind: &'static str,
+    /// The repo-relative file that evidences it — undeclared findings only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub via: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -278,6 +296,19 @@ pub fn snapshot(vfs: &dyn Vfs, ws: &Workspace, diags: &[Diagnostic]) -> Snapshot
         })
         .collect();
 
+    let drift = crate::drift::detect(ws)
+        .into_iter()
+        .map(|d| SnapDrift {
+            from: d.from,
+            to: d.to,
+            kind: match d.kind {
+                crate::drift::DriftKind::Undeclared => "undeclared",
+                crate::drift::DriftKind::Unbacked => "unbacked",
+            },
+            via: d.via,
+        })
+        .collect();
+
     Snapshot {
         name: ws.name.clone(),
         elements,
@@ -285,6 +316,7 @@ pub fn snapshot(vfs: &dyn Vfs, ws: &Workspace, diags: &[Diagnostic]) -> Snapshot
         views,
         docs,
         derived,
+        drift,
         diagnostics: diags
             .iter()
             .map(|d| SnapDiagnostic {

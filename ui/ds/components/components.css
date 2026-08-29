@@ -371,6 +371,12 @@ textarea.input { min-height: 90px; resize: vertical; }
 .edge.is-added   { stroke: var(--diff-added); }
 .edge.is-removed { stroke: var(--diff-removed); stroke-dasharray: 3 3; }
 .edge.is-active  { stroke: var(--color-accent); stroke-width: 1.5; }
+/* Drift (ADR-0019): what the code says and the model does not. An undeclared
+   dependency is drawn as a ghost — it is evidence, not a relation, and looks
+   unlike one until somebody declares it. An unbacked relation is the reverse
+   case: declared, with nothing in the code behind it. */
+.edge.is-drift { stroke: var(--color-warning); stroke-dasharray: 2 4; opacity: 0.85; }
+.edge.is-unbacked { stroke: var(--color-warning); stroke-dasharray: 6 3; }
 .edge-arrow { fill: none; stroke: context-stroke; stroke-width: 1; vector-effect: non-scaling-stroke; }
 /* Fat invisible twin under each .edge — a 1px line is not a click target. */
 .edge-hit { fill: none; stroke: transparent; stroke-width: 12; pointer-events: stroke; cursor: pointer; }

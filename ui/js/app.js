@@ -21,7 +21,9 @@ const invoke = tauri?.core?.invoke
           throw new Error('no workspace open');
         }
         const res = await fetch('mock/snapshot.json');
-        return res.json();
+        const snap = await res.json();
+        if (location.search.includes('drift')) snap.drift = seededDrift();
+        return snap;
       }
       if (cmd === 'workspace_root') return '(mock)';
       // git commands answer from an optional fixture; absent = no repo.
@@ -183,9 +185,13 @@ function mockSync(cmd, args) {
   } else if (op.op === 'add-relation') {
     snap.relations.push({ from: op.from, to: op.to, label: op.label ?? null,
       protocol: op.protocol ?? null, direction: 'forward' });
+    snap.drift = (snap.drift ?? []).filter((d) =>
+      !(d.kind === 'undeclared' && d.from === op.from && d.to === op.to));
   } else if (op.op === 'delete-relation') {
     snap.relations = snap.relations.filter((r) =>
       !(r.from === op.from && r.to === op.to && (op.label == null || r.label === op.label)));
+    snap.drift = (snap.drift ?? []).filter((d) =>
+      !(d.kind === 'unbacked' && d.from === op.from && d.to === op.to));
   } else if (op.op === 'set-relation-field') {
     const r = snap.relations.find((r) => r.from === op.from && r.to === op.to);
     if (r) r[op.field] = op.value;
@@ -249,6 +255,21 @@ function mockSync(cmd, args) {
   mockState.undo.push({ label, snap: before });
   mockState.redo.length = 0;
   return { label };
+}
+
+/** Two seeded findings, one of each kind (ADR-0019). The dogfood model is
+ *  drift-free by policy — `conformance.rs` fails the build otherwise — so the
+ *  only way to exercise the canvas side of drift is to seed it. */
+function seededDrift() {
+  return [
+    // Code in the exporter reaching into the git service, undeclared.
+    { from: 'blastradius.core.exporter', to: 'blastradius.core.git-service',
+      kind: 'undeclared', via: 'crates/blastradius-core/src/export.rs' },
+    // And a declared relation with nothing behind it — seeded onto one the
+    // model really has, since an unbacked finding is about a declaration.
+    { from: 'blastradius.core.exporter', to: 'blastradius.core.model-service',
+      kind: 'unbacked' },
+  ];
 }
 
 // ---- state ------------------------------------------------------------------
@@ -419,7 +440,10 @@ async function renderCanvas({ animate = true } = {}) {
   const snap = effectiveSnapshot();
   const viewDef = findViewDef(snap, state.level, state.scope);
   const view = computeView(
-    snap, state.level, state.scope, viewDef?.include_context ?? true, viewDef?.nested ?? false
+    snap, state.level, state.scope, viewDef?.include_context ?? true, viewDef?.nested ?? false,
+    // Not while diffing or time-travelling: drift is a fact about the code as
+    // it is now, and a revision's ghosts would be about a tree nobody has.
+    state.diffOn || state.travel ? [] : (snap.drift ?? [])
   );
   // Hoisted: measuring the nodes before layout needs it (see measureNodes).
   const elById = new Map([...snap.elements, ...view.nodes].map((e) => [e.id, e]));
@@ -513,14 +537,24 @@ async function renderCanvas({ animate = true } = {}) {
     const relChange = diffRelChange(e.from, e.to);
     if (relChange === 'added') cls += ' is-added';
     if (relChange === 'removed') cls += ' is-removed';
+    // Drift (ADR-0019): a ghost for what the code does and the model does not
+    // say, and a mark on a declaration nothing in the code backs up.
+    if (e.drift) cls += ' is-drift';
+    if (e.unbacked) cls += ' is-unbacked';
     path.setAttribute('class', cls);
     path.setAttribute('d', d);
     path.setAttribute('data-from', e.from);
     path.setAttribute('data-to', e.to);
-    if (e.exact) {
+    // A ghost is always selectable, aggregated or not: the fix is written at
+    // the ids the finding carries, not at the ones it is drawn between.
+    if (e.exact || e.drift) {
       const hit = document.createElementNS(svgNS, 'path');
       hit.setAttribute('class', 'edge-hit');
       hit.setAttribute('d', d);
+      // The click target carries the endpoints too: a transparent 12px stroke
+      // is otherwise unaddressable by anything but a coordinate.
+      hit.setAttribute('data-from', e.from);
+      hit.setAttribute('data-to', e.to);
       hit.addEventListener('click', (ev) => {
         ev.stopPropagation();
         selectRelation(e);
@@ -2069,10 +2103,16 @@ function renderDiagnostics() {
       if (existing) return existing.remove();
       const list = document.createElement('div');
       list.className = 'diag-list';
+      // Every diagnostic names a file and usually a line; until now none of
+      // them went anywhere.
       list.innerHTML = diags
         .filter((d) => d.severity !== 'info')
-        .map((d) => `<div>${esc(d.severity)}: ${esc(d.file)}${d.line ? ':' + d.line : ''} — ${esc(d.message)}</div>`)
+        .map((d) => `<button class="diag-row" data-editfile="${esc(d.file)}">${esc(d.severity)}: ` +
+          `${esc(d.file)}${d.line ? ':' + d.line : ''} — ${esc(d.message)}</button>`)
         .join('');
+      for (const btn of list.querySelectorAll('[data-editfile]')) {
+        btn.addEventListener('click', () => invoke('open_in_editor', { rel: btn.dataset.editfile }).catch(() => {}));
+      }
       els.canvas.appendChild(list);
     });
   }
@@ -2511,7 +2551,10 @@ async function finishConnect(toId) {
 }
 
 function selectRelation(edge) {
-  state.selectedRel = { from: edge.from, to: edge.to, label: edge.label };
+  state.selectedRel = {
+    from: edge.from, to: edge.to, label: edge.label,
+    drift: edge.drift ?? null, unbacked: edge.unbacked ?? null,
+  };
   state.selected = null;
   state.doc = null;
   state.help = null; // same as select(): the inspector wins over help
@@ -2877,8 +2920,54 @@ function updateSrcStatus() {
 }
 
 /** Relation inspector view. */
+/** An undeclared dependency: the code goes somewhere the model never says it
+ *  does (ADR-0019). Not a relation — there is nothing in the model to inspect —
+ *  so this is evidence and one button that turns it into one. */
+function renderDriftSide(r) {
+  const d = r.drift;
+  els.sideTitle.textContent = '';
+  els.sideBack.hidden = true;
+  els.sideBody.innerHTML = `<div class="insp">
+    <span class="insp-kicker">Undeclared dependency</span>
+    <span class="insp-title">${esc(shortName(d.from))} → ${esc(shortName(d.to))}</span>
+    <span style="font-family:var(--font-mono);font-size:var(--text-2xs)" class="text-muted">${esc(d.from)} → ${esc(d.to)}</span>
+    <p class="insp-desc">The code depends on this and the model does not declare
+      it. Either declare the relation, or the dependency is one the code should
+      not have.</p>
+    ${d.via ? `<div class="insp-section">Evidence</div>
+      <button class="doc-link" data-opensrc="${esc(d.via)}">${esc(d.via)}</button>` : ''}
+    ${canEdit() ? '<div class="insp-actions"><button class="btn btn-primary" id="drift-declare">Declare this relation</button></div>' : ''}
+  </div>`;
+  for (const btn of els.sideBody.querySelectorAll('[data-opensrc]')) {
+    btn.addEventListener('click', () => invoke('open_source', { rel: btn.dataset.opensrc }).catch(() => {}));
+  }
+  document.getElementById('drift-declare')?.addEventListener('click', () => {
+    openDialog({
+      title: 'Declare this relation',
+      body: `<div class="dlg-field"><label for="dlg-label">Label</label>
+          <input class="input" id="dlg-label" placeholder="reads"></div>
+        <div class="dlg-field"><label for="dlg-proto">Protocol (optional)</label>
+          <input class="input" id="dlg-proto" placeholder="in-process"></div>
+        <p class="text-muted" style="font-size:var(--text-xs)">${esc(d.from)} → ${esc(d.to)}</p>`,
+      confirm: 'Declare',
+      onConfirm: async () => {
+        const ok = await applyOp({
+          op: 'add-relation',
+          from: d.from,
+          to: d.to,
+          label: document.getElementById('dlg-label').value.trim() || null,
+          protocol: document.getElementById('dlg-proto').value.trim() || null,
+        });
+        if (ok) state.selectedRel = null;
+        return ok;
+      },
+    });
+  });
+}
+
 function renderRelationSide() {
   const r = state.selectedRel;
+  if (r.drift) return renderDriftSide(r);
   els.sideTitle.textContent = '';
   els.sideBack.hidden = true;
   const editable = canEdit();
@@ -2890,6 +2979,11 @@ function renderRelationSide() {
     <input class="input" id="rel-label" aria-label="Relation label" value="${esc(r.label ?? '')}" ${editable ? '' : 'disabled'}>
     <div class="insp-section">Protocol</div>
     <input class="input" id="rel-proto" aria-label="Relation protocol" value="${esc(relProtocol(r) ?? '')}" ${editable ? '' : 'disabled'}>
+    ${r.unbacked ? `<div class="insp-section">Drift</div>
+      <p class="insp-desc">Declared, and no code reference supports it. Our own
+        model got this wrong once: the dependency ran the other way and the
+        relation had been written as a data flow.</p>
+      ${editable ? '<div class="insp-actions"><button class="btn btn-secondary" id="rel-reverse">Reverse it</button></div>' : ''}` : ''}
     ${editable ? '<div class="insp-section"></div><button class="btn btn-danger" id="rel-delete">Delete relation</button>' : ''}
   </div>`;
   if (!editable) return;
@@ -2900,6 +2994,16 @@ function renderRelationSide() {
   };
   document.getElementById('rel-label').addEventListener('change', commit('label'));
   document.getElementById('rel-proto').addEventListener('change', commit('protocol'));
+  // One transaction, so one undo puts the relation back the way it was — and
+  // the label and protocol ride across rather than being retyped.
+  document.getElementById('rel-reverse')?.addEventListener('click', async () => {
+    const protocol = relProtocol(r) ?? null;
+    const ok = await applyOps([
+      { op: 'delete-relation', from: r.from, to: r.to, label: r.label ?? null },
+      { op: 'add-relation', from: r.to, to: r.from, label: r.label ?? null, protocol },
+    ]);
+    if (ok) { state.selectedRel = { from: r.to, to: r.from, label: r.label ?? null }; renderSide(); }
+  });
   document.getElementById('rel-delete').addEventListener('click', async () => {
     const ok = await applyOp({ op: 'delete-relation', from: r.from, to: r.to, label: r.label ?? null });
     if (ok) { state.selectedRel = null; renderSide(); }
