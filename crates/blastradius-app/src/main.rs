@@ -18,6 +18,9 @@ struct AppState {
     /// Bumped on every workspace switch; a watcher thread exits when the
     /// generation it was born with is no longer current.
     watch_gen: Arc<AtomicUsize>,
+    /// A folder the command line named that holds no workspace, waiting for
+    /// the UI to ask for it. See Startup::Offer.
+    startup_offer: Mutex<Option<PathBuf>>,
 }
 
 fn root_of(state: &State<AppState>) -> Result<PathBuf, String> {
@@ -546,23 +549,61 @@ fn decode_base64(s: &str) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-fn startup_root() -> Option<PathBuf> {
-    let candidate = std::env::args()
-        .nth(1)
-        .map(PathBuf::from)
-        .or_else(|| Some(std::env::current_dir().ok()?.join("docs")))?;
+/// What the command line asked for.
+enum Startup {
+    /// A workspace to open.
+    Workspace(PathBuf),
+    /// A folder named explicitly that holds no workspace. The window opens on
+    /// the same offer the Open button reaches — `blastradius-app .` in a fresh
+    /// repository should do what `blastradius init .` does, not show a
+    /// welcome screen with no memory of the folder you named.
+    ///
+    /// Only for an explicit argument: the implicit `./docs` fallback below is
+    /// a guess, and a guess is no reason to open a dialog at someone.
+    Offer(PathBuf),
+    None,
+}
+
+fn startup_target() -> Startup {
+    let explicit = std::env::args().nth(1).map(PathBuf::from);
+    let candidate = match explicit.clone() {
+        Some(p) => p,
+        None => match std::env::current_dir().ok() {
+            Some(cwd) => cwd.join("docs"),
+            None => return Startup::None,
+        },
+    };
     let root = candidate.canonicalize().unwrap_or(candidate);
-    blastradius_core::discover::is_workspace_dir(&root).then_some(root)
+    if blastradius_core::discover::is_workspace_dir(&root) {
+        return Startup::Workspace(root);
+    }
+    match explicit {
+        Some(_) if root.is_dir() => Startup::Offer(root),
+        _ => Startup::None,
+    }
+}
+
+/// The folder the command line named that has no workspace in it, handed to
+/// the UI once so it can open the offer. Taken rather than read: the welcome
+/// screen asks on every load, and the offer belongs to the first one.
+#[tauri::command]
+fn startup_folder(state: State<AppState>) -> Option<String> {
+    state.startup_offer.lock().unwrap().take().map(|p| p.display().to_string())
 }
 
 fn main() {
-    let root = startup_root();
+    let (root, offer) = match startup_target() {
+        Startup::Workspace(p) => (Some(p), None),
+        Startup::Offer(p) => (None, Some(p)),
+        Startup::None => (None, None),
+    };
 
     tauri::Builder::default()
         .manage(AppState {
             root: Mutex::new(root.clone()),
             engine: Mutex::new(None),
             watch_gen: Arc::new(AtomicUsize::new(0)),
+            startup_offer: Mutex::new(offer),
         })
         .invoke_handler(tauri::generate_handler![
             workspace_snapshot,
@@ -588,7 +629,8 @@ fn main() {
             workspace_open,
             workspace_init,
             workspace_demo,
-            pick_folder
+            pick_folder,
+            startup_folder
         ])
         .setup(move |app| {
             if let Some(root) = root {

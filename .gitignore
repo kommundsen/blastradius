@@ -27,3 +27,4 @@ architecture.html
 # Local scratch
 *.local
 site/
+app-smoke-failure.png

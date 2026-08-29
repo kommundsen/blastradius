@@ -87,6 +87,13 @@ function mockSync(cmd, args) {
     return ['model/blastradius.yaml'];
   }
   if (cmd === 'pick_folder') return '(mock)';
+  // `?startupfolder` plays `blastradius-app <folder>`: the shell was given a
+  // folder with no workspace in it, and hands it over once.
+  if (cmd === 'startup_folder') {
+    if (!location.search.includes('startupfolder') || mockState.startupTaken) return null;
+    mockState.startupTaken = true;
+    return '/home/dev/my-repo';
+  }
   if (cmd === 'workspace_open') {
     // `?emptyfolder` plays the case that matters most on a first run: the
     // user picked their own repository and there is no workspace in it yet.
@@ -264,6 +271,7 @@ async function reload() {
     state.snapshot = await invoke('workspace_snapshot');
   } catch (e) {
     renderWelcome();
+    await offerStartupFolder();
     return;
   }
   document.querySelector('.welcome')?.remove();
@@ -1262,6 +1270,31 @@ function renderWelcome() {
       toast(String(e));
     }
   });
+}
+
+/** `blastradius-app <folder>` on a folder with no workspace in it.
+ *
+ * It used to show the generic welcome screen with no memory of the folder you
+ * had just named, which is the same dead end `blastradius init` stopped
+ * handing people in 0.6.1. The shell hands the path over once; from here it is
+ * the ordinary Open flow, minus the picker the user has already answered.
+ */
+async function offerStartupFolder() {
+  let path = null;
+  try {
+    path = await invoke('startup_folder');
+  } catch (e) {
+    return; // older shell, or no such command: the welcome screen is fine
+  }
+  if (!path) return;
+  try {
+    const res = await invoke('workspace_open', { path });
+    if (res?.candidates) return pickWorkspaceDialog(res.candidates);
+    if (res?.empty) return initWorkspaceDialog(res.empty, res.suggest ?? 'docs');
+    await switchedWorkspace();
+  } catch (e) {
+    toast(String(e));
+  }
 }
 
 /** Pick a folder and go somewhere useful with it.

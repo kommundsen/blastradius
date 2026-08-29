@@ -129,3 +129,25 @@ test('a normal launch never shows the welcome screen', async ({ page }) => {
   // the Open button is present for runtime switching
   await expect(page.locator('#open-btn')).toBeVisible();
 });
+
+test('a folder named on the command line goes straight to the offer', async ({ page }) => {
+  // `blastradius-app <folder>` used to show the generic welcome screen with no
+  // memory of the folder you had just named — the same dead end `blastradius
+  // init` stopped handing people in 0.6.1.
+  await page.goto('/index.html?nogit&noworkspace&emptyfolder&startupfolder');
+  const dialog = page.locator('#app-dialog');
+  await expect(dialog.locator('.dialog-title')).toHaveText(/start a model here/i);
+  await expect(dialog.getByText('/home/dev/my-repo')).toBeVisible();
+  await page.locator('#dlg-ok').click();
+  await expect(page.locator('#app-dialog .dialog-title')).toHaveText(/now ask your agent/i);
+  await page.locator('#dlg-ok').click();
+  await expect(page.locator('#nodes .node').first()).toBeVisible();
+});
+
+test('a launch that named nothing still just shows the welcome screen', async ({ page }) => {
+  // The implicit ./docs fallback is a guess, and a guess is no reason to open
+  // a dialog at someone.
+  await page.goto('/index.html?nogit&noworkspace&emptyfolder');
+  await expect(page.locator('.welcome')).toBeVisible();
+  await expect(page.locator('#app-dialog')).toHaveCount(0);
+});

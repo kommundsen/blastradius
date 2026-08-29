@@ -1856,6 +1856,54 @@ Draft exits:
   reports the same undeclared and unbacked findings it reports for Rust; the
   canvas draws them with no C#-specific code, because there is none to write.
 
+### 3 — shipped 2026-08-30: the app runs from an install now, and something watches it
+
+`tools/smoke-install.ps1` takes a finished CLI and puts it through a new
+user's flow, which is why 0.7.0 stopped the run of install-only bugs. The app
+had no such gate, and the e2e suite cannot be one: it runs against the mock
+bridge (ADR-0011) and is blind to the whole IPC boundary by construction. So
+every app-side feature since 0.6.2 — three sync operations and
+`introspect_component` among them — shipped with its only exercise being a
+mock that answers "introspection needs the real app".
+
+`tools/smoke-app.ps1` stages the shipping layout (both binaries and the
+out-of-process extractors beside them, exactly as the portable bundle and the
+MSIX do), makes a throwaway repository that has never seen Blastradius, and
+launches the app *at that repository* with WebView2's debugging port open —
+the technique that found the 0.6.1 scaffold bug by hand.
+`tools/drive-app.mjs` attaches over CDP and walks the flow: take the offer,
+render a model, dive, add a component through the box menu, point it at the
+repository's own source, and run the extractor. Then the script checks what is
+left on disk: the scaffold's files, the user's README byte-identical, a facts
+file written, and the workspace validating under the CLI from the same
+install.
+
+**It needed one product change to be drivable at all, and that change is the
+better half of this item.** `blastradius-app <folder>` on a folder with no
+workspace showed the generic welcome screen with no memory of the folder you
+had just named — the same dead end `blastradius init` stopped handing people
+in 0.6.1. It now opens the offer, which is what the Open button reaches and
+what `init` does. Only for an explicit argument: the implicit `./docs`
+fallback is a guess, and a guess is no reason to open a dialog at someone.
+The native picker is the one step the gate does not drive, because it is the
+OS's dialog and the user has already answered it.
+
+*Exit met*: the packaged app opened a repository it had never seen, scaffolded
+it, rendered it, edited it, and derived 3 code elements through
+`introspect_component` — the first time that command has run anywhere outside
+a mock. **And the gate bites**: run against a bundle with no `extractors/`
+beside the binary — the 0.6.0 condition, exactly — it fails at the extractor
+step and prints the message the app itself gave.
+
+**Windows only, and named as such**: WebView2 is the engine with a debugging
+port. WebKitGTK has no equivalent, which is the same reason ADR-0011 exists.
+Linux and macOS keep the compile check and the mock suite.
+
+**Unproven until the first CI run**: everything above was verified on a
+Windows desktop. Whether a `windows-latest` runner gives the app a session it
+can open a window in is not something this machine can answer, and the job is
+written to fail loudly rather than skip if it cannot.
+
 ### 4 — shipped 2026-08-30: the mock can no longer lie
 
 The e2e suite runs against a hand-written mock of the sync engine (ADR-0011),

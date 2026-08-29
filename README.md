@@ -102,9 +102,11 @@ First build takes a few minutes (vendored libgit2 compiles once). Then:
 cargo run -p blastradius-app -- docs
 ```
 
-opens the desktop app on the dogfood workspace. Launched with no argument
-(and no `./docs`), the app shows the welcome screen instead — open any
-folder, scaffold a new workspace into one, or spin up a throwaway demo.
+opens the desktop app on the dogfood workspace. Point it at a folder that has
+no workspace in it and it offers to make one, exactly as `blastradius init`
+does. Launched with no argument (and no `./docs`), it shows the welcome
+screen instead — open any folder, scaffold a new workspace into one, or spin
+up a throwaway demo.
 
 To model **your own repo**:
 

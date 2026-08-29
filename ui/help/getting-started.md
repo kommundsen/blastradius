@@ -17,6 +17,10 @@ archive when you want one.
 
 ## Open something in the next minute
 
+You can also name the folder when you start the app —
+`blastradius-app path/to/repo` — and it goes straight there: a workspace
+opens, and a folder without one gets the same offer described below.
+
 **Open a folder or repository…** — from the welcome screen or the **Open**
 button (`Ctrl+O`) — is the only thing you need. Point it at whatever you have
 and it works out what that is:

@@ -183,6 +183,46 @@ jobs:
         shell: pwsh
         run: ./tools/smoke-install.ps1 -Cli bundle/blastradius.exe -ReadOnly
 
+  # The same gate for the *app*, which has never had one (0.10.0 item 3).
+  #
+  # The e2e suite runs against the mock bridge (ADR-0011) and is blind to the
+  # whole IPC boundary by construction, so everything app-side since 0.6.2 —
+  # three sync operations and `introspect_component` among them — has shipped
+  # with no exercise outside a mock that answers "needs the real app". This
+  # launches the shipping binary at a repository it has never seen, attaches to
+  # its WebView2 over CDP (the technique that found the 0.6.1 scaffold bug by
+  # hand), and walks a new user's flow: take the offer, render a model, edit
+  # it, and run the staged TypeScript extractor from the install.
+  #
+  # Windows only: WebView2 is the engine with a debugging port. WebKitGTK has
+  # no equivalent, which is the same reason ADR-0011 exists.
+  installed-app:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build the shipping binaries
+        run: cargo build --release -p blastradius-app -p blastradius-cli
+      - name: Install Playwright (CDP client only — no browser download)
+        run: npm ci
+      - name: Drive the packaged app from an install layout
+        shell: pwsh
+        run: ./tools/smoke-app.ps1
+      - name: Upload the failure screenshot
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-smoke-failure
+          path: app-smoke-failure.png
+          if-no-files-found: ignore
+
   # macOS is deliberately absent from the per-push matrix: macOS minutes
   # bill at 10x on a private repo, macOS distribution is deferred (roadmap),
   # and the compile check ran out the 2026-08 Actions quota. The app-macos
