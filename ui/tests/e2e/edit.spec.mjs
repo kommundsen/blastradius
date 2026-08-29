@@ -101,12 +101,17 @@ test('description is written in the inspector and drawn from the box menu', asyn
   await expect(core).toBeVisible();
   await expect(core.locator('.node-desc')).toHaveCount(0);
 
-  // Right-click puts it on the box, and the box grows to hold it.
-  const before = (await core.boundingBox()).height;
+  // Right-click puts it on the box, and the box grows to hold it. Measured by
+  // polling, not by one read: an edit empties and rebuilds `#nodes`, so a
+  // handle can be detached at the moment it is asked for its size.
+  const height = async () => (await core.boundingBox())?.height ?? 0;
+  await expect.poll(height).toBeGreaterThan(0);
+  const before = await height();
   await core.click({ button: 'right' });
   await page.locator('.ctx-menu .ctx-item', { hasText: 'Show description' }).click();
   await expect(core.locator('.node-desc')).toHaveText('The domain, and nothing that draws pixels.');
-  expect((await core.boundingBox()).height).toBeGreaterThan(before);
+  await expect.poll(height, { message: 'the box grows to hold the description' })
+    .toBeGreaterThan(before);
 
 
   // And the same menu takes it off again.
@@ -249,5 +254,110 @@ test('the menu walks with the arrow keys', async ({ page }) => {
   await expect(items.nth(1)).toBeFocused();
   await page.keyboard.press('ArrowUp');
   await expect(items.first()).toBeFocused();
+  expect(page.errors).toEqual([]);
+});
+
+// 0.9.0 C: the inspector edited two fields of an element and the format has
+// several more. `tech` was whitelisted by the engine and offered by nothing —
+// while every box renders it in brackets — and `group`, `replicas`, `external`
+// and `source:` had no operation at all, so they were YAML-only.
+test('technology and group are written from the inspector', async ({ page }) => {
+  await node(page, 'Blastradius').dblclick(); // L2
+  await expect(page.locator('#breadcrumb')).toContainText('Containers');
+  await node(page, 'CLI').first().click();
+
+  const tech = page.locator('#insp-tech');
+  await expect(tech).toHaveValue('Rust');
+  await tech.fill('Rust + clap');
+  await tech.press('Enter');
+  // The kicker is where technology reads, in C4 brackets.
+  await expect(page.locator('.insp-kicker')).toHaveText('[Container: Rust + clap]');
+
+  const group = page.locator('#insp-group');
+  await expect(group).toHaveValue('');
+  await group.fill('Tooling');
+  await group.press('Enter');
+  await node(page, 'CLI').first().click();
+  await expect(page.locator('#insp-group')).toHaveValue('Tooling');
+  expect(page.errors).toEqual([]);
+});
+
+test('an emptied field is removed, not blanked', async ({ page }) => {
+  await node(page, 'Blastradius').dblclick();
+  await node(page, 'CLI').first().click();
+  await page.locator('#insp-tech').fill('');
+  await page.locator('#insp-tech').press('Enter');
+  // No technology left to render, so the kicker is the kind alone.
+  await expect(page.locator('.insp-kicker')).toHaveText('[Container]');
+  expect(page.errors).toEqual([]);
+});
+
+test('replicas count the things that run, and only those', async ({ page }) => {
+  // A container is not a thing that runs — the node that hosts it is — so the
+  // field is not offered here at all.
+  await node(page, 'Blastradius').dblclick();
+  await expect(page.locator('#breadcrumb')).toContainText('Containers');
+  await node(page, 'CLI').first().click();
+  await expect(page.locator('#insp-replicas')).toHaveCount(0);
+
+  await page.locator('#level-seg .seg-opt', { hasText: 'D' }).click();
+  await node(page, 'Developer Machine').first().dblclick();
+  await expect(page.locator('#breadcrumb')).toContainText('Developer Machine');
+  const box = node(page, 'Windows 11 Workstation').first();
+  await box.click({ position: { x: 24, y: 12 } });
+  await page.locator('#insp-replicas').fill('3');
+  await page.locator('#insp-replicas').press('Enter');
+  await expect(box).toContainText('×3');
+  expect(page.errors).toEqual([]);
+});
+
+test('external marks a system as outside your control', async ({ page }) => {
+  await node(page, 'Blastradius').first().click();
+  await page.locator('#insp-external').check();
+  await expect(node(page, 'Blastradius').first()).toHaveClass(/is-external/);
+  await page.locator('#insp-external').uncheck();
+  await expect(node(page, 'Blastradius').first()).not.toHaveClass(/is-external/);
+  expect(page.errors).toEqual([]);
+});
+
+test('a component is pointed at its code from the inspector', async ({ page }) => {
+  await node(page, 'Blastradius').dblclick();
+  await node(page, 'Core').first().dblclick(); // L3
+  await expect(page.locator('#breadcrumb')).toContainText('Components');
+
+  // A component with no mapping is offered one — this is the step that used to
+  // mean reading spec/l4-introspection.md and hand-writing YAML.
+  // The box offers to start one; the inspector is where it is then edited.
+  await node(page, 'Exporter').first().click({ button: 'right' });
+  await page.locator('.ctx-menu .ctx-item', { hasText: 'Point at its code…' }).click();
+  await page.locator('#dlg-language').selectOption('rust');
+  await page.locator('#dlg-root').fill('crates/blastradius-core/src');
+  await page.locator('#dlg-ok').click();
+  await expect(page.locator('#map-root')).toHaveValue('crates/blastradius-core/src');
+  await expect(page.locator('#map-language')).toHaveValue('rust');
+
+  // Editing the mapping is a save, not a keystroke: several fields make one
+  // mapping, and half of one cannot be introspected.
+  await page.locator('#map-include').fill('export.rs, snapshot.rs');
+  await page.locator('#map-save').click();
+  await node(page, 'Exporter').first().click();
+  await expect(page.locator('#map-include')).toHaveValue('export.rs, snapshot.rs');
+
+  // And the mapping can be taken off again, which stops introspecting it.
+  await page.locator('#map-remove').click();
+  await expect(page.locator('#map-add')).toBeVisible();
+  expect(page.errors).toEqual([]);
+});
+
+test('a mapped component offers to run the extractor', async ({ page }) => {
+  await node(page, 'Blastradius').dblclick();
+  await node(page, 'Core').first().dblclick();
+  await node(page, 'Git Service').first().click();
+  // The dogfood model maps this one, so the editor shows the mapping it has.
+  await expect(page.locator('#map-root')).toHaveValue('crates/blastradius-core/src');
+  await page.locator('#map-run').click();
+  // The mock has no compilers; what matters here is that the button reaches
+  // the command rather than what a real extractor would say.
+  await expect(page.locator('.travel-banner.is-toast')).toContainText('0 code elements derived · mock harness: introspection needs the real app');
   expect(page.errors).toEqual([]);
 });

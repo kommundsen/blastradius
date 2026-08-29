@@ -4,7 +4,7 @@
   "extractor": "blastradius-extract-rust 0.3.0",
   "component": "blastradius.core.model-service",
   "root": "crates/blastradius-core/src",
-  "sourceDigest": "sha256:c77f324d5cfee45675e8dcd511795a3e79bd2fa04caf1197c7f34fe963d03a90",
+  "sourceDigest": "sha256:2b274c51547058d0b4962c72d5afc50951727651429da2193230677f4ab1fabb",
   "elements": [
     {
       "id": "dep.marked_yaml",

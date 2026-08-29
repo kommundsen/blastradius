@@ -21,6 +21,12 @@ The two styles coexist even on the same component: derived elements
 live under the reserved `.src.` id segment, hand-modeled children
 outside it, so neither can collide with or overwrite the other.
 
+Since 0.9.0 the mapping is also an ordinary edit: the inspector writes it
+through the sync engine (`set-source`), and `introspect_component` runs the
+extractor for one component and writes its facts. Neither changes the format nor
+the files — the app reaches the same YAML and the same `model/derived/` output
+the CLI does, which is what keeps hand-authoring a first-class route.
+
 ## The `source:` mapping
 
 On a component (L3), in the model YAML:

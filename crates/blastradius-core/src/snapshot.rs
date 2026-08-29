@@ -76,6 +76,23 @@ pub struct SnapElement {
     /// How many of this run (ADR-0018) — deployment only, omitted when absent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replicas: Option<u32>,
+    /// The L4 opt-in (spec/l4-introspection.md). Carried so an editing surface
+    /// can show and change it; the facts it governs ride in `derived`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<SnapSource>,
+}
+
+/// A component's `source:` mapping, as the renderer sees it.
+#[derive(Serialize)]
+pub struct SnapSource {
+    pub language: String,
+    pub root: String,
+    pub include: Vec<String>,
+    pub exclude: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extractor: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -160,6 +177,14 @@ pub fn snap_element(e: &crate::model::Element) -> SnapElement {
         external: e.external || e.kind == ElementKind::External,
         group: e.group.clone(),
         replicas: e.replicas,
+        source: e.source.as_ref().map(|m| SnapSource {
+            language: m.language.clone(),
+            root: m.root.clone(),
+            include: m.include.clone(),
+            exclude: m.exclude.clone(),
+            mode: m.mode.clone(),
+            extractor: m.extractor.clone(),
+        }),
     }
 }
 

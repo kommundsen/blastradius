@@ -21,6 +21,7 @@ const ctx = (over = {}) => ({
   pinnedCount: 0,
   hasDescription: false,
   described: false,
+  hasSource: false,
   ...over,
 });
 const ids = (items) => items.filter((i) => !i.sep).map((i) => i.id);
@@ -56,6 +57,17 @@ test('the description item says which way it goes', () => {
   // Nothing written yet: the menu hands over to the field rather than offering
   // to draw an empty box.
   assert.ok(labels(boxMenuItems(ctx())).includes('Add a description…'));
+});
+
+test('a component with no code behind it is offered some', () => {
+  assert.ok(ids(boxMenuItems(ctx({ kind: 'component' }))).includes('map-source'));
+  // Already mapped: the inspector shows the mapping, and a second offer to
+  // start one would be a worse route to the same fields.
+  assert.equal(ids(boxMenuItems(ctx({ kind: 'component', hasSource: true }))).includes('map-source'), false);
+  // Nothing else is introspected — L4 is per component (ADR-0016).
+  for (const kind of ['system', 'container', 'person', 'deployment-node']) {
+    assert.equal(ids(boxMenuItems(ctx({ kind }))).includes('map-source'), false, kind);
+  }
 });
 
 test('what a box may contain follows the model format, and names it', () => {
@@ -107,8 +119,13 @@ test('every sync::Operation is either offered or deliberately not', () => {
   for (const kind of Object.keys(CHILD_KINDS).concat('component')) {
     for (const pinned of [false, true]) {
       for (const hasDescription of [false, true]) {
-        for (const item of boxMenuItems(ctx({ kind, pinned, pinnedCount: pinned ? 1 : 0, hasDescription }))) {
-          if (!item.sep && item.op) everything.add(item.op);
+        for (const hasSource of [false, true]) {
+          const items = boxMenuItems(ctx({
+            kind, pinned, pinnedCount: pinned ? 1 : 0, hasDescription, hasSource,
+          }));
+          for (const item of items) {
+            if (!item.sep && item.op) everything.add(item.op);
+          }
         }
       }
     }

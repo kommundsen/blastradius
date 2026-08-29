@@ -39,7 +39,7 @@ pub fn parse_model_file(
 
     // A deployment file (ADR-0018) is its own third shape, and stands alone.
     if let Some(envs) = map.get_node("environments") {
-        if map.get_node("people").is_some() || map.get_node("external").is_some() || map.get_node("system").is_some() {
+        if map.get_node("people").is_some() || declares_external_section(map) || map.get_node("system").is_some() {
             diags.push(Diagnostic::error(
                 rel,
                 1,
@@ -51,7 +51,7 @@ pub fn parse_model_file(
         return;
     }
 
-    let has_context = map.get_node("people").is_some() || map.get_node("external").is_some();
+    let has_context = map.get_node("people").is_some() || declares_external_section(map);
     let has_system = map.get_node("system").is_some();
     match (has_context, has_system) {
         (true, true) => {
@@ -149,7 +149,9 @@ fn parse_system(map: &MarkedMappingNode, rel: &str, ws: &mut Workspace, diags: &
             external,
             source: None,
             instance_of: None, replicas: None,
-                    group: None,
+            // Read like every other element: a system grouped at L1 sits beside
+            // the people and externals that are its siblings there (spec §3c).
+            group: group_of(&Node::Mapping(map.clone())),
             file: rel.to_string(),
             line: sys_line,
         },
@@ -531,6 +533,14 @@ fn parse_source(body: &Node, rel: &str, diags: &mut Vec<Diagnostic>) -> Option<S
         extractor: yaml::get_str(sm, "extractor").map(str::to_string),
         mode,
     })
+}
+
+/// Is `external:` a context *section* here, or the system flag? A section is a
+/// mapping of elements; the flag is the scalar `true` (spec §3). Reading the key
+/// alone made a system file carrying the flag unloadable — it was taken for a
+/// context file, and then for a file trying to be both.
+fn declares_external_section(map: &MarkedMappingNode) -> bool {
+    matches!(map.get_node("external"), Some(Node::Mapping(_)))
 }
 
 /// A `group:` label, if the element carries one (spec §3c). Blank is treated

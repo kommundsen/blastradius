@@ -72,6 +72,11 @@ function mockSync(cmd, args) {
     return t.label;
   }
   if (cmd === 'open_in_editor') return null;
+  // Extraction runs real compilers over a real repository — there is nothing
+  // for the mock to do but say so.
+  if (cmd === 'introspect_component') {
+    return { elements: 0, edges: 0, warnings: ['mock harness: introspection needs the real app'] };
+  }
   if (cmd === 'open_source') return null;
   if (cmd === 'resolve_conflicts') {
     // the fixture is re-fetched per invoke; persist resolution in mockState
@@ -187,8 +192,13 @@ function mockSync(cmd, args) {
   } else if (op.op === 'set-field') {
     const el = snap.elements.find((e) => e.id === op.id);
     if (!el) throw new Error('unknown element');
-    if (op.value) el[op.field] = op.value;
-    else delete el[op.field];
+    // Mirrors compute_set_field: false is not a value of `external`, 1 is not
+    // a value of `replicas`, and an empty string is not a value of anything.
+    const clears = !op.value
+      || (op.field === 'external' && op.value !== 'true')
+      || (op.field === 'replicas' && Number(op.value) === 1);
+    if (clears) delete el[op.field];
+    else el[op.field] = op.field === 'replicas' ? Number(op.value) : op.value;
   } else if (op.op === 'pin') {
     const v = snap.views.find((v) => op.view ? v.id === op.view :
       (v.level === op.level && (op.level === 'L1' || v.scope === op.scope)));
@@ -196,6 +206,11 @@ function mockSync(cmd, args) {
       const key = op.scope && op.id.startsWith(op.scope + '.') ? op.id.slice(op.scope.length + 1) : op.id;
       v.layout[key] = [op.x, op.y];
     }
+  } else if (op.op === 'set-source') {
+    const el = snap.elements.find((e) => e.id === op.id);
+    if (!el) throw new Error('unknown element');
+    if (op.source) el.source = { include: [], exclude: [], ...op.source };
+    else delete el.source;
   } else if (op.op === 'unpin') {
     const v = snap.views.find((v) => op.view ? v.id === op.view :
       (v.level === op.level && (op.level === 'L1' || v.scope === op.scope)));
@@ -1551,6 +1566,7 @@ function renderSide() {
   } else if (el.description) {
     html += `<p class="insp-desc">${esc(el.description)}</p>`;
   }
+  html += canEdit() ? propertiesHtml(el) : readOnlyProperties(el);
 
   if (rels.length) {
     html += `<div class="insp-section">Relations</div>`;
@@ -1598,6 +1614,7 @@ function renderSide() {
       }
     });
   }
+  if (canEdit()) wireProperties(el);
   const descInput = document.getElementById('insp-desc');
   if (descInput) {
     descInput.addEventListener('change', async () => {
@@ -1608,6 +1625,181 @@ function renderSide() {
       }
     });
   }
+}
+
+/**
+ * The rest of the element, in the inspector.
+ *
+ * `set-field` has always whitelisted `tech`, and nothing in the app ever
+ * offered it — while every box in the product renders it in brackets. `group`,
+ * `replicas`, `external` and `source` had no operation at all before 0.9.0, so
+ * grouping and code-level detail were reachable only by hand-editing YAML,
+ * which is the step a first-time user is least equipped for.
+ *
+ * Each field is offered where the format allows it (spec §3, §3b, §3c) rather
+ * than everywhere with a refusal waiting: `replicas` counts things that run,
+ * `external` marks a system outside your control, `source:` is per component.
+ */
+function propertiesHtml(el) {
+  const field = (id, label, control, hint) =>
+    `<div class="insp-field"><label for="${id}">${esc(label)}</label>${control}` +
+    (hint ? `<span class="insp-hint">${esc(hint)}</span>` : '') + `</div>`;
+  const text = (id, value, placeholder) =>
+    `<input class="input" id="${id}" value="${esc(value ?? '')}" placeholder="${esc(placeholder)}">`;
+
+  let html = `<div class="insp-section">Properties</div>`;
+  html += field('insp-tech', 'Technology', text('insp-tech', el.tech, 'Rust, React, Postgres…'),
+    'Reads in brackets on the box.');
+  html += field('insp-group', 'Group', text('insp-group', el.group, 'Storefront'),
+    'Draws a boundary round siblings sharing it, in views that ask for one.');
+  if (el.kind === 'deployment-node' || el.kind === 'container-instance') {
+    html += field('insp-replicas', 'Replicas',
+      `<input class="input" id="insp-replicas" type="number" min="1" step="1"
+        value="${el.replicas ?? ''}" placeholder="1">`,
+      'How many of it actually run. One is the default and is never drawn.');
+  }
+  if (el.kind === 'system') {
+    html += `<label class="insp-check"><input type="checkbox" id="insp-external"` +
+      `${el.external ? ' checked' : ''}> Outside your control</label>`;
+  }
+  if (el.kind === 'component') html += sourceHtml(el);
+  return html;
+}
+
+/** The same properties where the workspace cannot be written to — conflicted,
+ *  stale, or being time-travelled. What is set, with nothing to type into.
+ *  `tech` is already in the kicker and `replicas` in the multiplicity line, so
+ *  neither is repeated here. */
+function readOnlyProperties(el) {
+  const rows = [];
+  if (el.group) rows.push(['Group', el.group]);
+  if (el.source) rows.push(['Code', `${el.source.language} · ${el.source.root}`]);
+  if (!rows.length) return '';
+  return `<div class="insp-section">Properties</div>` + rows.map(([k, v]) =>
+    `<div class="insp-rel"><span class="text-muted">${esc(k)}</span> ${esc(v)}</div>`).join('');
+}
+
+/** The `source:` mapping — a component's opt-in to code-level detail. */
+function sourceHtml(el) {
+  const src = el.source;
+  const opt = (v, sel, label) => `<option value="${v}"${v === sel ? ' selected' : ''}>${label ?? v}</option>`;
+  const derived = derivedGraphFor(effectiveSnapshot(), el.id);
+  let html = `<div class="insp-section">Code level</div>`;
+  if (!src) {
+    return html + `<p class="insp-hint">Point this component at the code that implements it and
+      the canvas can dive into its modules and types.</p>
+      <button class="btn btn-secondary" id="map-add">Add a source mapping…</button>`;
+  }
+  html += `<div class="insp-field"><label for="map-language">Language</label>
+    <select class="input" id="map-language">
+      ${['typescript', 'csharp', 'rust'].map((l) => opt(l, src.language)).join('')}
+    </select></div>`;
+  html += `<div class="insp-field"><label for="map-root">Root</label>
+    <input class="input" id="map-root" value="${esc(src.root)}" placeholder="crates/core/src">
+    <span class="insp-hint">Relative to the repository root, not to the workspace.</span></div>`;
+  html += `<div class="insp-field"><label for="map-include">Include</label>
+    <input class="input" id="map-include" value="${esc((src.include ?? []).join(', '))}"
+      placeholder="empty = the language's defaults">
+    <span class="insp-hint">Comma-separated globs, relative to the root.</span></div>`;
+  html += `<div class="insp-field"><label for="map-exclude">Exclude</label>
+    <input class="input" id="map-exclude" value="${esc((src.exclude ?? []).join(', '))}"
+      placeholder="**/*.test.ts"></div>`;
+  html += `<div class="insp-field"><label for="map-mode">Mode</label>
+    <select class="input" id="map-mode">
+      ${opt('', src.mode ?? '', 'syntax (default)')}${opt('semantic', src.mode ?? '')}
+    </select>
+    <span class="insp-hint">Semantic resolves cross-project references; C# only.</span></div>`;
+  html += `<div class="insp-actions">
+    <button class="btn btn-primary" id="map-save">Save mapping</button>
+    <button class="btn btn-secondary" id="map-run">Run introspection</button>
+    <button class="btn btn-secondary" id="map-remove">Remove</button></div>`;
+  if (derived?.elements?.length) {
+    html += `<p class="insp-hint">${derived.elements.length} code elements derived${
+      derived.stale ? ' — the committed facts lag the source tree.' : '.'}</p>`;
+  } else {
+    html += `<p class="insp-hint">No facts committed yet — run introspection.</p>`;
+  }
+  return html;
+}
+
+/** Commit the property fields. Each writes on change, like name and
+ *  description: there is no save button because there is no buffer. */
+function wireProperties(el) {
+  const set = (field, value) => applyOp({ op: 'set-field', id: el.id, field, value });
+  const onChange = (id, field, read = (i) => i.value.trim()) => {
+    const input = document.getElementById(id);
+    input?.addEventListener('change', () => set(field, read(input)));
+  };
+  onChange('insp-tech', 'tech');
+  onChange('insp-group', 'group');
+  onChange('insp-replicas', 'replicas');
+  document.getElementById('insp-external')?.addEventListener('change', (ev) =>
+    set('external', ev.target.checked ? 'true' : 'false'));
+
+  document.getElementById('map-add')?.addEventListener('click', () => {
+    // A mapping needs a language and a root; the dialog asks for both rather
+    // than writing a half one that cannot be introspected.
+    openSourceDialog(el.id);
+  });
+  const read = () => ({
+    language: document.getElementById('map-language').value,
+    root: document.getElementById('map-root').value.trim(),
+    include: splitGlobs(document.getElementById('map-include').value),
+    exclude: splitGlobs(document.getElementById('map-exclude').value),
+    mode: document.getElementById('map-mode').value || null,
+  });
+  document.getElementById('map-save')?.addEventListener('click', () =>
+    applyOp({ op: 'set-source', id: el.id, source: read() }));
+  document.getElementById('map-remove')?.addEventListener('click', () =>
+    applyOp({ op: 'set-source', id: el.id, source: null }));
+  document.getElementById('map-run')?.addEventListener('click', () => runIntrospection(el.id));
+}
+
+const splitGlobs = (value) => value.split(',').map((g) => g.trim()).filter(Boolean);
+
+/** Ask for the two things a mapping cannot do without, then write it. */
+function openSourceDialog(id) {
+  openDialog({
+    title: 'Code for this component',
+    body: `<div class="dlg-field"><label for="dlg-language">Language</label>
+        <select class="input" id="dlg-language">
+          <option value="typescript">typescript</option>
+          <option value="csharp">csharp</option>
+          <option value="rust">rust</option>
+        </select></div>
+      <div class="dlg-field"><label for="dlg-root">Root folder</label>
+        <input class="input" id="dlg-root" placeholder="crates/core/src">
+        <span class="dlg-id-preview">Relative to the repository root, not the workspace.</span></div>`,
+    confirm: 'Add',
+    onConfirm: async () => {
+      const root = document.getElementById('dlg-root').value.trim();
+      if (!root) { toast('a root folder is required'); return false; }
+      return applyOp({
+        op: 'set-source',
+        id,
+        source: { language: document.getElementById('dlg-language').value, root, include: [], exclude: [] },
+      });
+    },
+  });
+}
+
+/** Run the extractor for one component and write its facts. The mapping says
+ *  what to look at; this is what looks. */
+async function runIntrospection(id) {
+  toast('introspecting…');
+  try {
+    const res = await invoke('introspect_component', { id });
+    const warnings = res?.warnings ?? [];
+    toast(`${res?.elements ?? 0} code elements derived` +
+      (warnings.length ? ` · ${warnings.join(' · ')}` : ''));
+  } catch (e) {
+    toast(String(e));
+    return;
+  }
+  state.snapshot = await invoke('workspace_snapshot');
+  renderTree();
+  await renderCanvas({ animate: false });
+  renderSide();
 }
 
 /** Inspector for a derived (L4) element: read-only by nature — the source
@@ -2227,6 +2419,7 @@ function openNodeMenu(ev, id) {
     pinnedCount: pins.size,
     hasDescription: Boolean(el.description),
     described: shown,
+    hasSource: Boolean(el.source),
   });
   // menu.js decides what is offered; here is what each one does.
   showMenu(ev, items, {
@@ -2242,6 +2435,7 @@ function openNodeMenu(ev, id) {
       show: !shown,
     }),
     child: () => openCreateDialog({ parent: id, kinds: CHILD_KINDS[el.kind], into: true }),
+    'map-source': () => openSourceDialog(id),
     unpin: () => unpin(id),
     'reset-layout': () => unpin(null),
     delete: () => openDeleteDialog(id),

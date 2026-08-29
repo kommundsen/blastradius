@@ -389,11 +389,11 @@ fn apply_operation_publishes_the_shapes_it_accepts() {
     for expected in [
         "create", "rename", "set-field", "delete",
         "add-relation", "delete-relation", "set-relation-field", "pin", "unpin",
-        "show-description",
+        "show-description", "set-source",
     ] {
         assert!(ops.contains(&expected), "operation {expected} is not in the schema: {ops:?}");
     }
-    assert_eq!(ops.len(), 10, "a variant was added to Operation without a schema branch: {ops:?}");
+    assert_eq!(ops.len(), 11, "a variant was added to Operation without a schema branch: {ops:?}");
 
     // And a malformed call comes back naming the shape, not just serde's
     // "missing field".

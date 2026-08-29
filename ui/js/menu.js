@@ -28,6 +28,7 @@ export const CHILD_KINDS = {
 export const NOT_ON_THE_BOX = {
   pin: 'dragging the box is the pin; a menu item meaning "now drag me" is not one',
   'set-field': "an element's own fields are edited in the inspector, beside the text",
+  'set-source': "a mapping is several fields at once: the box offers to start one, the inspector edits it",
   'delete-relation': 'a relation is chosen by clicking the edge, and has its own inspector',
   'set-relation-field': 'same: a relation is not a box',
 };
@@ -39,7 +40,8 @@ const article = (word) => (/^[aeiou]/i.test(word) ? 'an' : 'a');
  * separates groups — what the element *is*, where it *sits*, and removing it —
  * and is only ever emitted between two groups that both have items.
  *
- * ctx: { canEdit, canPin, kind, pinned, pinnedCount, hasDescription, described }
+ * ctx: { canEdit, canPin, kind, pinned, pinnedCount, hasDescription, described,
+ *        hasSource }
  */
 export function boxMenuItems(ctx) {
   // Editing is off entirely while the model is stale, conflicted, or being
@@ -62,6 +64,11 @@ export function boxMenuItems(ctx) {
       // listed above as something the box does not do.
       : { id: 'add-description', op: null, label: 'Add a description…' },
   ];
+  // A component with no code behind it yet: below it is where the code would
+  // be, so the offer belongs beside "add a child" that other kinds get.
+  if (ctx.kind === 'component' && !ctx.hasSource) {
+    model.push({ id: 'map-source', op: null, label: 'Point at its code…' });
+  }
   const kinds = CHILD_KINDS[ctx.kind] ?? [];
   if (kinds.length) {
     // Named when there is one answer, generic when the create dialog will ask:

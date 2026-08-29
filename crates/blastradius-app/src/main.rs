@@ -432,6 +432,49 @@ fn open_path(base: &std::path::Path, rel: &str, scope: &str) -> Result<(), Strin
     result.map(|_| ()).map_err(|e| e.to_string())
 }
 
+/// Run L4 extraction for one component and write its facts
+/// (spec/l4-introspection.md). The `source:` mapping is a model edit and goes
+/// through the sync engine like any other; the facts are *derived*, so they are
+/// this command's to write and nobody's to edit.
+///
+/// Exists because a mapping you cannot act on is a promise: the inspector can
+/// write one, and the obvious next question — "so show me the code" — used to
+/// mean leaving the app for a terminal.
+#[tauri::command]
+fn introspect_component(state: State<AppState>, id: String) -> Result<serde_json::Value, String> {
+    use blastradius_core::introspect as intro;
+    let root = root_of(&state)?;
+    let repo = intro::find_repo_root(&root).ok_or_else(|| {
+        "no repository root above the workspace — `source:` roots are repo-root-relative (ADR-0014)"
+            .to_string()
+    })?;
+    let mut guard = state.engine.lock().unwrap();
+    let engine = guard.get_or_insert_with(|| SyncEngine::open(&root));
+    let mapping = engine
+        .model
+        .elements
+        .get(&id)
+        .ok_or_else(|| format!("unknown element {id}"))?
+        .source
+        .clone()
+        .ok_or_else(|| format!("{id} has no `source:` mapping — point it at some code first"))?;
+
+    let (facts, warnings) = intro::extract(&repo, &id, &mapping)?;
+    let path = root.join("model").join("derived").join(format!("{id}.l4.json"));
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    std::fs::write(&path, intro::facts_bytes(&facts)).map_err(|e| e.to_string())?;
+    // The derived graph is read at load time, so the cached model does not know
+    // about the file we just wrote until it re-reads. History survives.
+    engine.reload_all();
+    Ok(serde_json::json!({
+        "elements": facts.elements.len(),
+        "edges": facts.edges.len(),
+        "warnings": warnings,
+    }))
+}
+
 /// Share: build the self-contained HTML (ADR-0009) and save it to Downloads.
 #[tauri::command]
 fn export_html(state: State<AppState>, with_bodies: bool) -> Result<String, String> {
@@ -539,6 +582,7 @@ fn main() {
             resolve_conflicts,
             open_in_editor,
             open_source,
+            introspect_component,
             export_html,
             save_export,
             workspace_open,

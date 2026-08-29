@@ -27,8 +27,14 @@ The rest of the canvas:
 - **`+ Element`** adds something at the current altitude — a system, person or
   external system at L1, a container at L2, a component at L3, and environments
   or deployment nodes in the **D** view.
-- **The inspector** edits the element's own fields: name, technology, and
-  description, in place.
+- **The inspector** edits the element's own fields in place: name, technology,
+  description, and the **group** it draws inside. A deployment node or
+  container instance also has **replicas** — how many of it actually run — and
+  a system can be marked **outside your control**, which draws it dashed.
+  Emptying a field removes it rather than writing an empty value.
+- **Code level** for a component is set up there too: point it at the folder
+  its code lives in and run the extractor without leaving the app. See
+  [Code-level detail](code-level.md).
 - **`R`** and **`Delete`** are the keyboard versions of Connect and Delete, on
   the selected element.
 - **`Ctrl+Z` / `Ctrl+Y`** undo and redo, including across a restart.

@@ -3,7 +3,7 @@
 //! external edits, and malformed intermediate states — that must end
 //! byte-identical to the expected files, comments and formatting intact.
 
-use blastradius_core::sync::{Operation, SyncEngine};
+use blastradius_core::sync::{Operation, SourceInput, SyncEngine};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -251,6 +251,237 @@ fn unpinning_what_is_not_pinned_is_not_an_edit() {
         .unwrap();
     assert!(tx.changes.is_empty());
     assert_eq!(read(&t.dir, "views/shop-l2.yaml"), SHOP_VIEW);
+}
+
+/// A workspace with the shapes `SHOP` has not got: a component to introspect,
+/// and a deployment node to count. Two files, so the two halves stay legible.
+const DEPOT: &str = "\
+system: depot
+name: Depot
+
+containers:
+  api:
+    name: API
+    tech: Rust
+    components:
+      router:
+        name: Router
+        tech: axum
+      store:
+        name: Store
+";
+
+const DEPOT_DEPLOY: &str = "\
+environments:
+  prod:
+    name: Production
+    nodes:
+      web-tier:
+        name: Web Tier
+        instances:
+          api: { container: depot.api }
+";
+
+fn depot(name: &str) -> (TempWs, SyncEngine) {
+    let t = temp_ws(name);
+    write(&t.dir, "blastradius.yaml", MANIFEST);
+    write(&t.dir, "model/depot.yaml", DEPOT);
+    write(&t.dir, "model/deployment.yaml", DEPOT_DEPLOY);
+    let engine = SyncEngine::open(&t.dir);
+    assert!(engine.stale.is_empty(), "{:?}", engine.diagnostics);
+    (t, engine)
+}
+
+fn set(e: &mut SyncEngine, id: &str, field: &str, value: &str) -> Result<(), String> {
+    e.apply(Operation::SetField { id: id.into(), field: field.into(), value: value.into() }).map(|_| ())
+}
+
+#[test]
+fn the_whole_element_is_writable_not_just_its_name() {
+    let (t, mut e) = setup("fields");
+    set(&mut e, "shop.web", "tech", "Preact").unwrap();
+    // §3c grouping had no operation at all before 0.9.0: a group could only be
+    // hand-written or imported from a Structurizr workspace that had one.
+    set(&mut e, "shop.web", "group", "Storefront").unwrap();
+    set(&mut e, "shop.api", "group", "Storefront").unwrap();
+    let text = read(&t.dir, "model/shop.yaml");
+    assert!(text.contains("tech: Preact # SPA"), "comment survives: {text}");
+    assert!(text.contains("group: Storefront"), "{text}");
+    assert_eq!(e.model.elements["shop.web"].group.as_deref(), Some("Storefront"));
+    assert_eq!(e.model.elements["shop.api"].group.as_deref(), Some("Storefront"));
+
+    // A system in its own file is the one element whose `group:` the parser
+    // hardcoded to None — so it could be written and never drawn. At L1 its
+    // siblings are the people and externals, which have always grouped.
+    set(&mut e, "shop", "group", "Retail").unwrap();
+    assert_eq!(e.model.elements["shop"].group.as_deref(), Some("Retail"));
+}
+
+#[test]
+fn an_emptied_field_is_removed_rather_than_blanked() {
+    let (t, mut e) = setup("clear");
+    set(&mut e, "shop.web", "description", "The storefront SPA").unwrap();
+    assert!(read(&t.dir, "model/shop.yaml").contains("description: The storefront SPA"));
+    set(&mut e, "shop.web", "description", "").unwrap();
+    let text = read(&t.dir, "model/shop.yaml");
+    // Not `description: ""` — that is a description saying nothing, which is
+    // what both the MCP schema and the inspector had always claimed not to do.
+    assert!(!text.contains("description"), "{text}");
+    assert_eq!(text, SHOP, "and nothing else moved");
+    assert_eq!(e.model.elements["shop.web"].description, None);
+
+    // Clearing what is already absent is not an edit, so it leaves no undo
+    // entry behind to puzzle over.
+    let tx = e
+        .apply(Operation::SetField {
+            id: "shop.web".into(), field: "tech".into(), value: "".into(),
+        })
+        .unwrap();
+    assert!(!tx.changes.is_empty(), "the first clear writes");
+    let tx = e
+        .apply(Operation::SetField {
+            id: "shop.web".into(), field: "tech".into(), value: "".into(),
+        })
+        .unwrap();
+    assert!(tx.changes.is_empty(), "second clear is a no-op");
+}
+
+#[test]
+fn a_field_clears_out_of_a_one_line_mapping_too() {
+    let (t, mut e) = setup("flow-clear");
+    // `db: { name: Database, tech: Postgres }` — removing a whole line here
+    // would take the element with it.
+    set(&mut e, "shop.db", "tech", "").unwrap();
+    let text = read(&t.dir, "model/shop.yaml");
+    assert!(text.contains("db: { name: Database }"), "{text}");
+    assert_eq!(e.model.elements["shop.db"].tech, None);
+    assert_eq!(e.model.elements["shop.db"].name, "Database");
+
+    // And the last one out leaves a well-formed empty mapping rather than
+    // braces with a comma in them.
+    set(&mut e, "shop.db", "name", "").unwrap();
+    let text = read(&t.dir, "model/shop.yaml");
+    assert!(text.contains("db: {}"), "{text}");
+}
+
+#[test]
+fn replicas_is_checked_against_the_kind_and_the_number() {
+    let (t, mut e) = depot("replicas");
+    set(&mut e, "prod.web-tier", "replicas", "3").unwrap();
+    assert!(read(&t.dir, "model/deployment.yaml").contains("replicas: 3"));
+    assert_eq!(e.model.elements["prod.web-tier"].replicas, Some(3));
+
+    // 1 is the default and is never drawn, so writing it says nothing.
+    set(&mut e, "prod.web-tier", "replicas", "1").unwrap();
+    assert!(!read(&t.dir, "model/deployment.yaml").contains("replicas"));
+
+    let err = set(&mut e, "prod.web-tier", "replicas", "0").unwrap_err();
+    assert!(err.contains("delete the element"), "{err}");
+    let err = set(&mut e, "prod.web-tier", "replicas", "many").unwrap_err();
+    assert!(err.contains("whole number"), "{err}");
+    // A container does not have replicas — the thing that runs it does.
+    let err = set(&mut e, "depot.api", "replicas", "2").unwrap_err();
+    assert!(err.contains("deployment node or container instance"), "{err}");
+}
+
+#[test]
+fn external_is_a_system_flag_and_false_is_no_flag() {
+    let (t, mut e) = setup("external");
+    set(&mut e, "shop", "external", "true").unwrap();
+    assert!(read(&t.dir, "model/shop.yaml").contains("external: true"));
+    assert!(e.model.elements["shop"].external);
+
+    set(&mut e, "shop", "external", "false").unwrap();
+    assert!(!read(&t.dir, "model/shop.yaml").contains("external"));
+    assert!(!e.model.elements["shop"].external);
+
+    let err = set(&mut e, "shop.web", "external", "true").unwrap_err();
+    assert!(err.contains("not a container"), "{err}");
+    let err = set(&mut e, "shop", "external", "sometimes").unwrap_err();
+    assert!(err.contains("true or false"), "{err}");
+}
+
+#[test]
+fn a_source_mapping_can_be_written_without_opening_the_file() {
+    let (t, mut e) = depot("source");
+    e.apply(Operation::SetSource {
+        id: "depot.api.router".into(),
+        source: Some(SourceInput {
+            language: "rust".into(),
+            root: "crates/api/src\\".into(), // backslashes and trailing slash normalise
+            include: vec!["router.rs".into(), "  ".into()],
+            exclude: vec![],
+            mode: None,
+            extractor: None,
+        }),
+    })
+    .unwrap();
+    let text = read(&t.dir, "model/depot.yaml");
+    assert!(
+        text.contains("      router:\n        name: Router\n        tech: axum\n        source:\n          language: rust\n          root: crates/api/src\n          include: [router.rs]\n"),
+        "{text}"
+    );
+    let mapping = e.model.elements["depot.api.router"].source.as_ref().expect("mapping");
+    assert_eq!(mapping.root, "crates/api/src");
+    assert_eq!(mapping.include, vec!["router.rs".to_string()]);
+
+    // Replacing rewrites the block rather than stacking a second one.
+    e.apply(Operation::SetSource {
+        id: "depot.api.router".into(),
+        source: Some(SourceInput {
+            language: "typescript".into(),
+            root: "web/src".into(),
+            include: vec![],
+            exclude: vec!["**/*.test.ts".into()],
+            mode: None,
+            extractor: None,
+        }),
+    })
+    .unwrap();
+    let text = read(&t.dir, "model/depot.yaml");
+    assert_eq!(text.matches("source:").count(), 1, "{text}");
+    assert!(text.contains("language: typescript") && text.contains("exclude: [\"**/*.test.ts\"]"), "{text}");
+    assert!(!text.contains("include:"), "an absent include means the language default: {text}");
+
+    // And removing it takes the whole block, leaving the component behind.
+    e.apply(Operation::SetSource { id: "depot.api.router".into(), source: None }).unwrap();
+    let text = read(&t.dir, "model/depot.yaml");
+    assert_eq!(text, DEPOT, "byte-identical to before it was ever mapped");
+    assert!(e.model.elements["depot.api.router"].source.is_none());
+}
+
+#[test]
+fn a_source_mapping_is_refused_before_it_reaches_the_file() {
+    let (t, mut e) = depot("source-refused");
+    let attempt = |e: &mut SyncEngine, id: &str, language: &str, root: &str, mode: Option<&str>| {
+        e.apply(Operation::SetSource {
+            id: id.into(),
+            source: Some(SourceInput {
+                language: language.into(),
+                root: root.into(),
+                include: vec![],
+                exclude: vec![],
+                mode: mode.map(str::to_string),
+                extractor: None,
+            }),
+        })
+        .map(|_| ())
+    };
+    // Introspection is per component (spec/l4-introspection.md) — a `source:`
+    // on a container was silently ignored until 0.6.2 and is a warning now;
+    // proposing one is simply refused.
+    let err = attempt(&mut e, "depot.api", "rust", "crates/api/src", None).unwrap_err();
+    assert!(err.contains("per component"), "{err}");
+    let err = attempt(&mut e, "depot.api.router", "cobol", "src", None).unwrap_err();
+    assert!(err.contains("unknown source language"), "{err}");
+    let err = attempt(&mut e, "depot.api.router", "rust", "src", Some("deep")).unwrap_err();
+    assert!(err.contains("unknown source mode"), "{err}");
+    // Repo-root-relative, per ADR-0014.
+    for bad in ["", "/abs/path", "../sibling", "C:/repo/src"] {
+        let err = attempt(&mut e, "depot.api.router", "rust", bad, None).unwrap_err();
+        assert!(err.contains("root"), "{bad}: {err}");
+    }
+    assert_eq!(read(&t.dir, "model/depot.yaml"), DEPOT, "nothing reached the file");
 }
 
 #[test]

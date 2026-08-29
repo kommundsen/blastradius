@@ -8,7 +8,13 @@ This is **opt-in per component**. Nothing is derived until you ask.
 
 ## Opting in
 
-Add a `source:` mapping to a component:
+Select a component and use **Code level** in the inspector — or right-click it
+and pick *Point at its code…*. Choose the language and the folder its code
+lives in, then **Run introspection**. That writes the same mapping and the same
+facts as the command line below; nothing about it is app-only.
+
+The mapping it writes is an ordinary `source:` block, and hand-writing one is
+still a first-class route:
 
 ```yaml
 components:
@@ -25,6 +31,9 @@ components:
 lives beside the model, not inside it.
 
 ## Extracting
+
+**Run introspection** in the inspector does this for the selected component.
+For every component at once, or in CI:
 
 ```
 blastradius introspect .

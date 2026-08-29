@@ -4,7 +4,7 @@
   "extractor": "blastradius-extract-rust 0.3.0",
   "component": "blastradius.core.sync-engine",
   "root": "crates/blastradius-core/src",
-  "sourceDigest": "sha256:4e9f94f5464d788a375b6f8c4dc0653aad4b4ce3001fdfe42571d0c2957339df",
+  "sourceDigest": "sha256:8add0f41ee9853a5ac39b56730e61d59ec4cbfd688d1b5d7f84170c9f2ed7a99",
   "elements": [
     {
       "id": "dep.marked_yaml",
@@ -44,7 +44,7 @@
       "name": "FileChange",
       "parent": "sync",
       "path": "crates/blastradius-core/src/sync.rs",
-      "line": 64
+      "line": 98
     },
     {
       "id": "sync.JournalEvent",
@@ -52,12 +52,20 @@
       "name": "JournalEvent",
       "parent": "sync",
       "path": "crates/blastradius-core/src/sync.rs",
-      "line": 1280
+      "line": 1528
     },
     {
       "id": "sync.Operation",
       "kind": "enum",
       "name": "Operation",
+      "parent": "sync",
+      "path": "crates/blastradius-core/src/sync.rs",
+      "line": 32
+    },
+    {
+      "id": "sync.SourceInput",
+      "kind": "class",
+      "name": "SourceInput",
       "parent": "sync",
       "path": "crates/blastradius-core/src/sync.rs",
       "line": 14
@@ -68,7 +76,7 @@
       "name": "SyncEngine",
       "parent": "sync",
       "path": "crates/blastradius-core/src/sync.rs",
-      "line": 91
+      "line": 125
     },
     {
       "id": "sync.Transaction",
@@ -76,7 +84,7 @@
       "name": "Transaction",
       "parent": "sync",
       "path": "crates/blastradius-core/src/sync.rs",
-      "line": 83
+      "line": 117
     },
     {
       "id": "sync.ViewTarget",
@@ -84,7 +92,7 @@
       "name": "ViewTarget",
       "parent": "sync",
       "path": "crates/blastradius-core/src/sync.rs",
-      "line": 73
+      "line": 107
     }
   ],
   "edges": [
@@ -124,6 +132,11 @@
       "kind": "references"
     },
     {
+      "from": "sync.Operation",
+      "to": "sync.SourceInput",
+      "kind": "references"
+    },
+    {
       "from": "sync.SyncEngine",
       "to": "sync.FileChange",
       "kind": "references"
@@ -136,6 +149,11 @@
     {
       "from": "sync.SyncEngine",
       "to": "sync.Operation",
+      "kind": "references"
+    },
+    {
+      "from": "sync.SyncEngine",
+      "to": "sync.SourceInput",
       "kind": "references"
     },
     {

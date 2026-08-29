@@ -290,6 +290,107 @@ pub fn insert_entry(
     Ok(out.concat())
 }
 
+/// Remove `field` from the mapping addressed by `chain`. `Ok(None)` means it
+/// was not there — an absent field is not an edit.
+///
+/// Two shapes, because the schema has two: an ordinary block mapping loses a
+/// line, and a one-line flow mapping (`db: { name: Database, tech: Postgres }`)
+/// loses a slice of that line plus the comma that joined it. Line removal on a
+/// flow mapping would take the whole element with it, which is why this is one
+/// function rather than a `remove_entry` call at each site.
+pub fn remove_field(text: &str, chain: &[&str], field: &str) -> Result<Option<String>, String> {
+    let mut sub = chain.to_vec();
+    sub.push(field);
+    if find_entry(text, &sub)?.is_none() {
+        return Ok(None);
+    }
+    let owner = match chain.is_empty() {
+        // The document root: a system's own fields, always block form.
+        true => None,
+        false => find_entry(text, chain)?,
+    };
+    let Some(owner) = owner.filter(|o| o.inline) else {
+        return Ok(Some(remove_entry(text, &sub)?));
+    };
+
+    let lines = lines_of(text);
+    let idx = owner.key_line - 1;
+    let line = lines[idx];
+    let eol = line.trim_end_matches(['\r', '\n']);
+    let nl = &line[eol.len()..];
+    let (start, end) = flow_field_pos(eol, field)
+        .ok_or_else(|| format!("{field:?} is not a field of that one-line mapping"))?;
+    let (mut start, mut end) = (start, end);
+    // The value range can run up to the closing brace; give back the spacing so
+    // `{ name: X, tech: Y }` loses a field rather than its layout.
+    while end > start && eol[..end].ends_with(' ') {
+        end -= 1;
+    }
+    let rest = &eol[end..];
+    let spaced = rest.trim_start_matches(' ');
+    if spaced.starts_with(',') {
+        // Not the last field: take the comma that follows, and its spacing.
+        end += rest.len() - spaced.len() + 1;
+        while eol[end..].starts_with(' ') {
+            end += 1;
+        }
+    } else {
+        // Last field: take the comma *before* it instead, or the braces are
+        // left with a dangling separator.
+        let before = eol[..start].trim_end();
+        if before.ends_with(',') {
+            start = before.len() - 1;
+        }
+    }
+    let mut out_line = format!("{}{}", &eol[..start], &eol[end..]);
+    // A mapping emptied of every field reads better as `{}` than as `{  }`.
+    if let (Some(open), Some(close)) = (out_line.find('{'), out_line.rfind('}')) {
+        if out_line[open + 1..close].trim().is_empty() {
+            out_line = format!("{}{{}}{}", &out_line[..open], &out_line[close + 1..]);
+        }
+    }
+    let mut out: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
+    out[idx] = format!("{out_line}{nl}");
+    Ok(Some(out.concat()))
+}
+
+/// Set (or replace) a nested block under `chain`, rendered from `body` lines
+/// already in `key: value` form. Used for `source:` — a mapping rather than a
+/// scalar, so `set_field` cannot express it.
+///
+/// A new block lands *after* the owner's existing fields rather than before
+/// them: it is several lines long, and a reader looking for what a component
+/// is should not have to scroll past its extraction settings to find its name.
+pub fn set_block(text: &str, chain: &[&str], key: &str, body: &[String]) -> Result<String, String> {
+    if chain.is_empty() {
+        return Err("a block needs an owning entry".into());
+    }
+    let owner = find_entry(text, chain)?.ok_or_else(|| format!("{chain:?} not found"))?;
+    if owner.inline {
+        return Err(format!(
+            "{:?} is written as a one-line mapping — give it block form before adding `{key}:`",
+            chain.last().copied().unwrap_or_default()
+        ));
+    }
+    let lines = lines_of(text);
+    let indent = child_indent_for(&lines, owner);
+    let mut block = format!("{}{key}:\n", " ".repeat(indent));
+    for entry in body {
+        block.push_str(&format!("{}{entry}\n", " ".repeat(indent + 2)));
+    }
+
+    let mut sub = chain.to_vec();
+    sub.push(key);
+    let mut out: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
+    match find_entry(text, &sub)? {
+        Some(span) => {
+            out.splice(span.key_line - 1..span.end_line, [block]);
+        }
+        None => out.insert(owner.end_line, block),
+    }
+    Ok(out.concat())
+}
+
 /// Remove the entry addressed by `chain` — its key line through its value end.
 pub fn remove_entry(text: &str, chain: &[&str]) -> Result<String, String> {
     let span = find_entry(text, chain)?.ok_or_else(|| format!("{chain:?} not found"))?;

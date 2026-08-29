@@ -1544,6 +1544,75 @@ user looks for on the box. Ships: connect, rename, delete, pin/unpin (A),
 show/hide description, add a child, open the source file — same ops, a surface
 that admits they exist. Small.
 
+### C — shipped 2026-08-29: an inspector that writes the whole element
+
+`set-field` accepts `group`, `replicas` and `external` alongside `name`,
+`description` and `tech`, and a new `set-source` operation writes a component's
+`source:` mapping — which is a mapping with two sequences in it and so could
+never have ridden `set-field`. The inspector offers each where the format
+allows it: `tech` and `group` on anything, `replicas` on a deployment node or
+container instance, *outside your control* on a system, and **Code level** on a
+component, with **Run introspection** beside it. So grouping and code-level
+detail stop being YAML-only, and `tech` — which every box in the product
+renders in brackets — is finally typeable in the product that renders it.
+
+**An emptied field is now removed rather than blanked.** The MCP schema has
+promised "empty string removes the field" since 0.6.0 and the inspector's own
+comment said the same; neither was true. `set_field` wrote `description: ""`,
+which is a description that says nothing rather than no description. Clearing
+now removes the key — in a block mapping by dropping the line, and inside a
+one-line flow mapping (`db: { name: Database, tech: Postgres }`) by cutting the
+field and the comma that joined it, because removing a *line* there would take
+the whole element with it. Clearing what is already absent writes nothing and
+leaves no undo entry.
+
+Kind rules are checked in the operation rather than left to whole-workspace
+validation, so a refusal says "`replicas` says how many of a deployment node or
+container instance run, not of a container" instead of surfacing as a parse
+error in a file. `replicas: 0` is refused with the reason the parser gives, and
+`replicas: 1` and `external: false` clear their keys, because both are the
+default and writing them states nothing.
+
+**Introspection is reachable from the app**: `introspect_component` runs the
+extractor for one component and writes its facts under `model/derived/`, then
+reloads — the same output the CLI writes, so nothing about it is app-only and
+hand-authoring stays a first-class route (spec/l4-introspection.md). The
+snapshot carries `source` now, which is what lets an editing surface show a
+mapping it did not write.
+
+**Two format bugs fell out of writing the tests**, both older than this work:
+
+- **`external: true` on a system could not be loaded at all.** The spec has
+  documented it since §3 and `parse_system` has always read it — but the
+  file-shape check treated the *presence* of an `external:` key as "this is a
+  context file", so a system file carrying the flag was rejected as trying to
+  be both. It is a context *section* only when it is a mapping of elements; as
+  a scalar it is the flag. Nothing in this repository used it, which is why
+  four releases of drift detection and a dogfood gate never noticed.
+- **A system's `group:` was read as `None`, always.** Every other element reads
+  `group_of(body)`; `parse_system` hardcoded the field, so a group written on a
+  system parsed clean and drew nothing. At L1 its siblings are the people and
+  externals, which have always grouped.
+
+*Exit met*: a workspace gains a group, a `replicas` count, a `tech` and a
+`source:` mapping without the YAML being opened — asserted in WebKit against
+the real inspector, and in Rust against the bytes of the file, including that
+the mapping's removal leaves the component byte-identical to before it was ever
+mapped. The mapping's **Run introspection** reaches the extractor command; the
+mock harness has no compilers, and says so rather than pretending.
+
+**The B gate did its job on the way.** Adding `SetSource` to the engine failed
+`menu.test.mjs` — "neither on the box nor listed in NOT_ON_THE_BOX" — which
+forced the question rather than letting the box quietly fall behind the model.
+The answer: a component with no code behind it is offered *Point at its code…*,
+which opens the dialog the way "Add a description…" opens the field, and
+`set-source` is listed as something the box starts but the inspector edits.
+
+**Found and fixed alongside**: a latent flake in the description e2e — `#nodes`
+is emptied and rebuilt on every edit, so a single `boundingBox()` read could
+land on a detached handle. It polls for the measurement now. It had never
+failed until the snapshot grew.
+
 **C — An inspector that can write the whole element.** `SetField` whitelists
 `name | description | tech` (`sync.rs:513`) and the inspector exposes two of
 them. `tech:` is unreachable from the app although every box in the product

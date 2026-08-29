@@ -11,6 +11,24 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+/// A `source:` mapping as an editing surface proposes it — the same shape the
+/// parser reads back (`model::SourceMapping`), minus everything derived.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SourceInput {
+    pub language: String,
+    /// Repo-root-relative folder (ADR-0014), not workspace-relative.
+    pub root: String,
+    #[serde(default)]
+    pub include: Vec<String>,
+    #[serde(default)]
+    pub exclude: Vec<String>,
+    /// `syntax` (default) or `semantic`; only C# acts on it.
+    #[serde(default)]
+    pub mode: Option<String>,
+    #[serde(default)]
+    pub extractor: Option<String>,
+}
+
 /// A canvas operation (spec/sync-engine.md, "Outbound"). Deserialized straight
 /// from the WebView's IPC call.
 #[derive(Debug, Deserialize)]
@@ -30,6 +48,13 @@ pub enum Operation {
     /// write. 0.8.0 made the first drag in a view pin every node, so a view
     /// becomes fully manual after one drag; this is the way out of that.
     Unpin { view: Option<String>, level: String, scope: Option<String>, id: Option<String> },
+    /// Write, replace or remove a component's `source:` mapping — the L4
+    /// opt-in (spec/l4-introspection.md). `source: None` removes it.
+    ///
+    /// Separate from `SetField` because it is a mapping with sequences in it,
+    /// not a scalar. It writes only the mapping: the facts it governs are
+    /// `introspect`'s to write, and stay read-only here.
+    SetSource { id: String, source: Option<SourceInput> },
     /// Rename = set `name:` — the id is immutable (ADR-0003).
     Rename { id: String, name: String },
     /// Set a scalar field on an element (whitelisted: name, description,
@@ -63,6 +88,7 @@ fn op_target_ids(op: &Operation) -> Vec<&str> {
             }
             v
         }
+        Operation::SetSource { id, .. } => vec![id],
         Operation::AddRelation { from, to, .. }
         | Operation::DeleteRelation { from, to, .. }
         | Operation::SetRelationField { from, to, .. } => vec![from, to],
@@ -518,16 +544,8 @@ impl SyncEngine {
                 let after = splice::set_field(text, &chain_refs, "name", name)?;
                 Ok(vec![self.change(&rel, after)])
             }
-            Operation::SetField { id, field, value } => {
-                if !matches!(field.as_str(), "name" | "description" | "tech") {
-                    return Err(format!("field {field:?} is not editable on an element"));
-                }
-                let (rel, chain) = self.element_chain(id)?;
-                let text = self.files.get(&rel).ok_or("file not cached")?;
-                let chain_refs: Vec<&str> = chain.iter().map(String::as_str).collect();
-                let after = splice::set_field(text, &chain_refs, field, value)?;
-                Ok(vec![self.change(&rel, after)])
-            }
+            Operation::SetField { id, field, value } => self.compute_set_field(id, field, value),
+            Operation::SetSource { id, source } => self.compute_set_source(id, source.as_ref()),
             Operation::Create { parent, id, name, kind } => {
                 self.compute_create(parent.as_deref(), id, name, kind)
             }
@@ -746,6 +764,165 @@ impl SyncEngine {
                 Ok(vec![FileChange { rel, before: None, after: Some(text) }])
             }
         }
+    }
+
+    /// Set — or, with an empty value, *remove* — one scalar field on an
+    /// element. The whitelist is what the format lets an element carry beyond
+    /// its identity and its children: §3 (`name`, `description`, `tech`,
+    /// `external`), §3b (`replicas`) and §3c (`group`). `source:` is a mapping
+    /// rather than a scalar and has its own operation.
+    ///
+    /// **An empty value removes the key** rather than writing `field: ""`. The
+    /// MCP schema has said so since 0.6.0 and the inspector's own comment said
+    /// so too, and neither was true: an emptied description became an empty
+    /// string, which is a description that says nothing rather than no
+    /// description at all.
+    ///
+    /// Fields are checked against the element's kind here rather than left to
+    /// whole-workspace validation, so a refusal names the field and the kind
+    /// instead of reporting a parse error somewhere in a file.
+    fn compute_set_field(&self, id: &str, field: &str, value: &str) -> Result<Vec<FileChange>, String> {
+        let el = self.model.elements.get(id).ok_or_else(|| format!("unknown element {id}"))?;
+        let kind = el.kind.as_str();
+        let mut value = value.trim().to_string();
+        match field {
+            "name" | "description" | "tech" | "group" => {}
+            "replicas" => {
+                if !matches!(el.kind, ElementKind::DeploymentNode | ElementKind::ContainerInstance) {
+                    return Err(format!(
+                        "`replicas` says how many of a deployment node or container instance run, not of a {kind}"
+                    ));
+                }
+                match value.as_str() {
+                    "" => {}
+                    v => match v.parse::<u32>() {
+                        Ok(0) => {
+                            return Err(
+                                "`replicas: 0` — delete the element rather than running none of it".into(),
+                            )
+                        }
+                        // 1 is the default and is never drawn, so writing it
+                        // states nothing: clear the field instead.
+                        Ok(1) => value.clear(),
+                        Ok(_) => {}
+                        Err(_) => return Err(format!("`replicas` must be a whole number, not {v:?}")),
+                    },
+                }
+            }
+            "external" => {
+                if el.kind != ElementKind::System {
+                    return Err(format!("`external` marks a system as outside your control, not a {kind}"));
+                }
+                // `external: false` is the default; writing it says nothing.
+                value = match value.as_str() {
+                    "true" => "true".into(),
+                    "" | "false" => String::new(),
+                    v => return Err(format!("`external` is true or false, not {v:?}")),
+                };
+            }
+            _ => return Err(format!("field {field:?} is not editable on an element")),
+        }
+
+        let (rel, chain) = self.element_chain(id)?;
+        let text = self.files.get(&rel).ok_or("file not cached")?;
+        let chain_refs: Vec<&str> = chain.iter().map(String::as_str).collect();
+        if value.is_empty() {
+            return match splice::remove_field(text, &chain_refs, field)? {
+                Some(after) => Ok(vec![self.change(&rel, after)]),
+                // Already absent: clearing nothing is not an edit, and pushing
+                // it would put an undo entry on the stack that undoes nothing.
+                None => Ok(Vec::new()),
+            };
+        }
+        let after = splice::set_field(text, &chain_refs, field, &value)?;
+        Ok(vec![self.change(&rel, after)])
+    }
+
+    /// Write, replace or remove a component's `source:` mapping — the opt-in
+    /// that gives it code-level detail (spec/l4-introspection.md).
+    ///
+    /// It is a mapping with two sequences in it, so it cannot ride `SetField`,
+    /// and until now nothing but a text editor could write one — which meant
+    /// reading the spec before the app could show anyone their own code. The
+    /// facts it governs are not written here: `introspect` writes those, and
+    /// this only decides what it will look at.
+    fn compute_set_source(
+        &self,
+        id: &str,
+        source: Option<&SourceInput>,
+    ) -> Result<Vec<FileChange>, String> {
+        let el = self.model.elements.get(id).ok_or_else(|| format!("unknown element {id}"))?;
+        if el.kind != ElementKind::Component {
+            return Err(format!(
+                "introspection is per component; {id:?} is a {}",
+                el.kind.as_str()
+            ));
+        }
+        let (rel, chain) = self.element_chain(id)?;
+        let text = self.files.get(&rel).ok_or("file not cached")?;
+        let chain_refs: Vec<&str> = chain.iter().map(String::as_str).collect();
+
+        let Some(src) = source else {
+            return match splice::remove_field(text, &chain_refs, "source")? {
+                Some(after) => Ok(vec![self.change(&rel, after)]),
+                None => Ok(Vec::new()),
+            };
+        };
+
+        if !crate::parse::SOURCE_LANGUAGES.contains(&src.language.as_str()) {
+            return Err(format!(
+                "unknown source language {:?} — expected one of {}",
+                src.language,
+                crate::parse::SOURCE_LANGUAGES.join(", ")
+            ));
+        }
+        if let Some(mode) = &src.mode {
+            if !crate::parse::SOURCE_MODES.contains(&mode.as_str()) {
+                return Err(format!(
+                    "unknown source mode {mode:?} — expected one of {}",
+                    crate::parse::SOURCE_MODES.join(", ")
+                ));
+            }
+        }
+        // Repo-root-relative, per ADR-0014: an absolute path is one machine's
+        // answer, and `..` leaves the repository altogether.
+        let root = src.root.trim().replace('\\', "/").trim_end_matches('/').to_string();
+        if root.is_empty() {
+            return Err("`root:` is the folder the component's code lives in — it cannot be empty".into());
+        }
+        if root.starts_with('/') || root.split('/').any(|seg| seg == "..") || root.contains(':') {
+            return Err(format!("`root:` must be repo-root-relative, without `..` — got {root:?}"));
+        }
+
+        let list = |globs: &[String]| -> String {
+            let items: Vec<String> = globs
+                .iter()
+                .map(|g| g.trim())
+                .filter(|g| !g.is_empty())
+                .map(splice::yaml_scalar)
+                .collect();
+            format!("[{}]", items.join(", "))
+        };
+        let mut body = vec![
+            format!("language: {}", splice::yaml_scalar(&src.language)),
+            format!("root: {}", splice::yaml_scalar(&root)),
+        ];
+        // An absent `include:` means the language's default set, which is a
+        // better thing to leave in a file than a copy of it that will age.
+        if src.include.iter().any(|g| !g.trim().is_empty()) {
+            body.push(format!("include: {}", list(&src.include)));
+        }
+        if src.exclude.iter().any(|g| !g.trim().is_empty()) {
+            body.push(format!("exclude: {}", list(&src.exclude)));
+        }
+        if let Some(mode) = &src.mode {
+            body.push(format!("mode: {}", splice::yaml_scalar(mode)));
+        }
+        if let Some(extractor) = &src.extractor {
+            body.push(format!("extractor: {}", splice::yaml_scalar(extractor)));
+        }
+        let after = splice::set_block(text, &chain_refs, "source", &body)?;
+        Ok(vec![self.change(&rel, after)])
     }
 
     fn compute_create(
@@ -1387,7 +1564,11 @@ fn op_label(op: &Operation) -> String {
         Operation::ShowDescription { id, show, .. } => {
             format!("{} description on {id}", if *show { "show" } else { "hide" })
         }
-        Operation::SetField { id, field, value } => format!("set {field} on {id} to {value:?}"),
+        Operation::SetField { id, field, value } => format!("set {field} on {id} to {value:?}"),        Operation::SetSource { id, source } => match source {
+            Some(s) => format!("map {id} to {} source in {}", s.language, s.root),
+            None => format!("stop introspecting {id}"),
+        },
+
         Operation::Create { id, kind, .. } => format!("create {kind} {id}"),
         Operation::Delete { id } => format!("delete {id}"),
         Operation::AddRelation { from, to, .. } => format!("relate {from} -> {to}"),

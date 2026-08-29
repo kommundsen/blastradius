@@ -70,6 +70,8 @@ text directly via markers, so no parser replacement was needed.
 | Drag node to pin | views/*.yaml | upsert `layout.<id>: [x, y]` |
 | Unpin | views/*.yaml | remove `layout.<id>`, or every pin in the view; the last one out removes `layout:` itself. Never authors a view file — nothing is pinned in a view that has no file |
 | Rename element | model file | set `name:` (id immutable, ADR-0003) |
+| Set a field | model file | set `name`, `description`, `tech`, `group`, `replicas` or `external`; an empty value **removes** the key, in a block mapping or inside a one-line flow mapping |
+| Set a source mapping | model file | write, replace or remove a component's `source:` block (spec/l4-introspection.md); refused on anything but a component |
 | Create element | model file | insert mapping under parent, id from dialog |
 | Delete element | model + views | remove node; remove layout entry; relations referencing it are removed **in the same transaction** and listed in the confirm dialog |
 | Create/edit relation | model file | insert/update sequence item |

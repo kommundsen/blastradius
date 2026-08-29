@@ -4,7 +4,7 @@
   "extractor": "blastradius-extract-ts 0.2.0",
   "component": "blastradius.ui.canvas",
   "root": "ui/js",
-  "sourceDigest": "sha256:4b3115e8842e78a3e2b38a4715c9c088cb385a6173a4d010dea5239a13589d9b",
+  "sourceDigest": "sha256:587b17a8770d317359a6b843e72614b7970b6e1f8665e7c630f9e9107f243b4a",
   "elements": [
     {
       "id": "app",
@@ -35,6 +35,12 @@
       "kind": "module",
       "name": "layout.js",
       "path": "ui/js/layout.js"
+    },
+    {
+      "id": "menu",
+      "kind": "module",
+      "name": "menu.js",
+      "path": "ui/js/menu.js"
     },
     {
       "id": "search",
@@ -74,6 +80,11 @@
     {
       "from": "app",
       "to": "layout",
+      "kind": "imports"
+    },
+    {
+      "from": "app",
+      "to": "menu",
       "kind": "imports"
     },
     {
