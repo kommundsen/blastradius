@@ -1856,6 +1856,55 @@ Draft exits:
   reports the same undeclared and unbacked findings it reports for Rust; the
   canvas draws them with no C#-specific code, because there is none to write.
 
+### 4 — shipped 2026-08-30: the mock can no longer lie
+
+The e2e suite runs against a hand-written mock of the sync engine (ADR-0011),
+and every operation's semantics were mirrored into it *by hand*. 0.9.0 alone
+added four such mirrors. Each is a place the suite can agree with itself while
+disagreeing with the engine — which is exactly what 0.8.0's settle test did for
+a whole release.
+
+One operation list now runs through both. `ui/tests/contract/operations.json`
+holds all twelve operations the engine understands; `contract.rs` copies
+`docs/` to a temp workspace, applies them through the real `SyncEngine`, and
+commits the resulting snapshot to `ui/tests/contract/after.json`;
+`contract.test.mjs` applies the same list through `ui/js/mockops.js` — the
+semantics extracted out of `app.js` so a test can hold them — and compares.
+Two gates ride along: a Rust test that fails when an `Operation` variant is
+missing from the fixture (the same shape as the box-menu gate), and a JS test
+that runs the list cumulatively and fails if any step changes *nothing*, since
+the mock falls through silently on an operation it does not implement.
+
+`diagnostics` and `docs` are out of scope, for reasons rather than for
+convenience: the mock neither validates nor reads a filesystem, and no
+operation edits a document. Everything the operations can reach — elements,
+relations, views, derived — is compared whole, which incidentally makes this
+the gate on `ui/mock/snapshot.json` being regenerated when the model changes.
+That has been a comment in `ci.yml` since Phase 1.
+
+It found three things immediately:
+
+- **The View panel's "Written to…" button opened nothing.** `SnapView` carried
+  no `file`, so 0.9.0 shipped a panel that named the view *id* as if it were a
+  filename and handed `open_in_editor` an empty string. Fixed, and asserted.
+- **A relation the mock created carried `protocol: null` and `label: null`**
+  where the engine omits the key, and a created element landed at the end of
+  the list where the engine keys them by id. Both now match.
+- **`menu.test.mjs` and `drift.test.mjs` have never run in CI.** Both shipped
+  in 0.9.0 into a hand-maintained list of test files in `ci.yml` that nobody
+  updated — including the gate whose whole job is to fail the build when a sync
+  operation is neither offered on the box nor excused. The list is a glob now,
+  and `npm run test:node` runs the same thing locally.
+
+*Exit met*: two Rust tests, two node tests. Deliberately breaking the mock's
+authored-view shape fails the contract, which is the only way to know a gate
+is a gate.
+
+**Deliberately not done**: the contract compares end states, not file text. The
+engine's format preservation is the subject of `sync.rs`'s torture test and
+needs no second one; what was missing was agreement about *meaning*, which is
+what the mock mirrors and what the snapshot carries.
+
 ### 9 — shipped 2026-08-29: the canvas says what it can do
 
 The hint read "Double-click to dive · Esc to rise" and had since Phase 1, which

@@ -392,6 +392,18 @@ test('groups written on elements become visible from the view panel', async ({ p
   expect(page.errors).toEqual([]);
 });
 
+test('the view panel names the file it writes, and offers to open it', async ({ page }) => {
+  // It said "Written to containers" and handed `open_in_editor` an empty
+  // string: the snapshot's views carried no file, so 0.9.0 shipped a button
+  // that opened nothing. Found while building the mock/engine contract.
+  await node(page, 'Blastradius').dblclick();
+  await viewPanel(page).click();
+  const link = page.locator('#side-body [data-editfile]');
+  await expect(link).toHaveText('views/containers.yaml');
+  await expect(link).toHaveAttribute('data-editfile', 'views/containers.yaml');
+  expect(page.errors).toEqual([]);
+});
+
 test('the view panel turns context off and on', async ({ page }) => {
   await node(page, 'Blastradius').dblclick(); // L2, which has pins and context
   await expect(page.locator('#breadcrumb')).toContainText('Containers');

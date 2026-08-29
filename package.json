@@ -4,7 +4,8 @@
   "description": "Dev tooling only — ui/ itself has no build step and no runtime dependencies (ADR-0011).",
   "scripts": {
     "test:layout": "node --test ui/tests/determinism.test.mjs",
-    "test:webkit": "playwright test"
+    "test:webkit": "playwright test",
+    "test:node": "node --test ui/tests/*.test.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

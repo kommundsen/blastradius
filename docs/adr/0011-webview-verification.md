@@ -38,6 +38,16 @@ This promotes the mock harness from convenience to **contract**: the frontend
 must remain fully runnable against `ui/mock/snapshot.json` with no Tauri
 present, because that is what CI verifies rendering with.
 
+## The mock is checked against the engine
+
+Every operation's semantics were mirrored into the mock by hand, which made the
+suite able to agree with itself while disagreeing with the engine. Since 0.10.0
+the semantics live in `ui/js/mockops.js` and one operation list runs through
+both: `crates/blastradius-core/tests/contract.rs` through the real
+`SyncEngine`, `ui/tests/contract.test.mjs` through the mock, both compared
+against the same committed snapshot. A new operation that only one side
+implements fails the build.
+
 ## Consequences
 - Playwright is the repo's first Node dependency (`package.json` at root,
   dev-only). The no-bundler rule for `ui/` itself still holds.

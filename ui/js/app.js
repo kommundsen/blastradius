@@ -8,6 +8,7 @@ import { edgeLabelLines, multiplicity } from './labels.js';
 import { HELP_PAGES, helpBody, helpLinkTarget } from './help.js';
 import { searchModel } from './search.js';
 import { boxMenuItems, canvasMenuItems, CHILD_KINDS } from './menu.js';
+import { applyMockOperation, mockOpLabel } from './mockops.js';
 
 // ---- shell bridge -----------------------------------------------------------
 // Real IPC under Tauri; mock (fetch of a committed snapshot) in a plain
@@ -170,88 +171,10 @@ function mockSync(cmd, args) {
 
   const before = clone();
   const op = args.op;
-  const label = op.op + ' ' + (op.id ?? (op.from ? op.from + ' -> ' + op.to : ''));
-  if (op.op === 'rename') {
-    const el = snap.elements.find((e) => e.id === op.id);
-    if (!el) throw new Error('unknown element');
-    el.name = op.name;
-  } else if (op.op === 'create') {
-    const id = op.parent ? op.parent + '.' + op.id : op.id;
-    if (snap.elements.some((e) => e.id === id)) throw new Error('id exists');
-    snap.elements.push({ id, kind: op.kind, parent: op.parent ?? undefined, name: op.name });
-  } else if (op.op === 'delete') {
-    snap.elements = snap.elements.filter((e) => e.id !== op.id && !e.id.startsWith(op.id + '.'));
-    snap.relations = snap.relations.filter((r) => r.from !== op.id && r.to !== op.id);
-  } else if (op.op === 'add-relation') {
-    snap.relations.push({ from: op.from, to: op.to, label: op.label ?? null,
-      protocol: op.protocol ?? null, direction: 'forward' });
-    snap.drift = (snap.drift ?? []).filter((d) =>
-      !(d.kind === 'undeclared' && d.from === op.from && d.to === op.to));
-  } else if (op.op === 'delete-relation') {
-    snap.relations = snap.relations.filter((r) =>
-      !(r.from === op.from && r.to === op.to && (op.label == null || r.label === op.label)));
-    snap.drift = (snap.drift ?? []).filter((d) =>
-      !(d.kind === 'unbacked' && d.from === op.from && d.to === op.to));
-  } else if (op.op === 'set-relation-field') {
-    const r = snap.relations.find((r) => r.from === op.from && r.to === op.to);
-    if (r) r[op.field] = op.value;
-  } else if (op.op === 'set-field') {
-    const el = snap.elements.find((e) => e.id === op.id);
-    if (!el) throw new Error('unknown element');
-    // Mirrors compute_set_field: false is not a value of `external`, 1 is not
-    // a value of `replicas`, and an empty string is not a value of anything.
-    const clears = !op.value
-      || (op.field === 'external' && op.value !== 'true')
-      || (op.field === 'replicas' && Number(op.value) === 1);
-    if (clears) delete el[op.field];
-    else el[op.field] = op.field === 'replicas' ? Number(op.value) : op.value;
-  } else if (op.op === 'pin') {
-    const v = snap.views.find((v) => op.view ? v.id === op.view :
-      (v.level === op.level && (op.level === 'L1' || v.scope === op.scope)));
-    if (v) {
-      const key = op.scope && op.id.startsWith(op.scope + '.') ? op.id.slice(op.scope.length + 1) : op.id;
-      v.layout[key] = [op.x, op.y];
-    }
-  } else if (op.op === 'set-view-flag') {
-    const key = { 'show-groups': 'show_groups', 'include-context': 'include_context', nested: 'nested' }[op.flag];
-    let v = snap.views.find((v) => op.view ? v.id === op.view :
-      (v.level === op.level && (op.level === 'L1' || v.scope === op.scope)));
-    if (!v) {
-      // The engine authors the file here; the mock has no filesystem, so it
-      // authors the view the file would have declared.
-      v = { id: (op.scope ?? op.level).split('.').pop() + '-' + op.level.toLowerCase(),
-        scope: op.scope ?? '', level: op.level, layout: {}, descriptions: [],
-        include_context: true, show_groups: false, nested: false };
-      snap.views.push(v);
-    }
-    v[key] = op.value;
-  } else if (op.op === 'set-source') {
-    const el = snap.elements.find((e) => e.id === op.id);
-    if (!el) throw new Error('unknown element');
-    if (op.source) el.source = { include: [], exclude: [], ...op.source };
-    else delete el.source;
-  } else if (op.op === 'unpin') {
-    const v = snap.views.find((v) => op.view ? v.id === op.view :
-      (v.level === op.level && (op.level === 'L1' || v.scope === op.scope)));
-    if (v && op.id == null) {
-      v.layout = {};
-    } else if (v) {
-      const key = op.scope && op.id.startsWith(op.scope + '.') ? op.id.slice(op.scope.length + 1) : op.id;
-      delete v.layout[key];
-      delete v.layout[op.id];
-    }
-  } else if (op.op === 'show-description') {
-    // The real engine writes a view file when there is none; the mock has no
-    // filesystem, so it can only edit a view the fixture already declares.
-    const v = snap.views.find((v) => op.view ? v.id === op.view :
-      (v.level === op.level && (op.level === 'L1' || v.scope === op.scope)));
-    if (v) {
-      const key = op.scope && op.id.startsWith(op.scope + '.') ? op.id.slice(op.scope.length + 1) : op.id;
-      const list = new Set(v.descriptions ?? []);
-      if (op.show) list.add(key); else list.delete(key);
-      v.descriptions = [...list].sort();
-    }
-  }
+  const label = mockOpLabel(op);
+  // The semantics live in ui/js/mockops.js so the contract test can run the
+  // same operation list through them that core::sync runs through the engine.
+  applyMockOperation(snap, op);
   mockState.undo.push({ label, snap: before });
   mockState.redo.length = 0;
   return { label };

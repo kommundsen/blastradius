@@ -52,8 +52,12 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
-      - name: Layout determinism + routing + headless render + L4 derivation suites
-        run: node --test ui/tests/determinism.test.mjs ui/tests/routing.test.mjs ui/tests/render.test.mjs ui/tests/derived.test.mjs ui/tests/help.test.mjs ui/tests/labels.test.mjs ui/tests/onboarding.test.mjs ui/tests/layout-space.test.mjs ui/tests/search.test.mjs
+      # Globbed, not listed. The list was hand-maintained and had fallen two
+      # suites behind: menu.test.mjs (the gate that fails the build when a sync
+      # operation is neither offered on the box nor excused) and drift.test.mjs
+      # both shipped in 0.9.0 and had never run here.
+      - name: Node suites — layout, routing, render, L4 derivation, mock/engine contract
+        run: node --test ui/tests/*.test.mjs
       - name: Install Playwright WebKit
         run: |
           npm ci

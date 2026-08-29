@@ -1,0 +1,1447 @@
+{
+  "derived": [
+    {
+      "component": "blastradius.core.git-service",
+      "edges": [
+        {
+          "from": "blastradius.core.git-service.src.git",
+          "kind": "imports",
+          "to": "blastradius.core.git-service.src.dep.git2"
+        },
+        {
+          "from": "blastradius.core.git-service.src.git",
+          "kind": "imports",
+          "to": "blastradius.core.git-service.src.dep.serde"
+        },
+        {
+          "from": "blastradius.core.git-service.src.git.ConflictElement",
+          "kind": "references",
+          "to": "blastradius.core.git-service.src.git.ConflictSide"
+        },
+        {
+          "from": "blastradius.core.git-service.src.git.Conflicts",
+          "kind": "references",
+          "to": "blastradius.core.git-service.src.git.ConflictElement"
+        },
+        {
+          "from": "blastradius.core.git-service.src.git.GitContext",
+          "kind": "references",
+          "to": "blastradius.core.git-service.src.git.CommitInfo"
+        },
+        {
+          "from": "blastradius.core.git-service.src.git.GitContext",
+          "kind": "references",
+          "to": "blastradius.core.git-service.src.git.ConflictElement"
+        },
+        {
+          "from": "blastradius.core.git-service.src.git.GitContext",
+          "kind": "references",
+          "to": "blastradius.core.git-service.src.git.ConflictSide"
+        },
+        {
+          "from": "blastradius.core.git-service.src.git.GitContext",
+          "kind": "references",
+          "to": "blastradius.core.git-service.src.git.Conflicts"
+        },
+        {
+          "from": "blastradius.core.git-service.src.git.GitContext",
+          "kind": "references",
+          "to": "blastradius.core.git-service.src.git.GitStatus"
+        },
+        {
+          "from": "blastradius.core.git-service.src.git.GitContext",
+          "kind": "references",
+          "to": "blastradius.core.git-service.src.git.GitTreeVfs"
+        },
+        {
+          "from": "blastradius.core.git-service.src.resolve",
+          "kind": "imports",
+          "to": "blastradius.core.git-service.src.dep.serde"
+        },
+        {
+          "from": "blastradius.core.git-service.src.resolve",
+          "kind": "imports",
+          "to": "blastradius.core.git-service.src.git"
+        },
+        {
+          "from": "blastradius.core.git-service.src.resolve",
+          "kind": "references",
+          "to": "blastradius.core.git-service.src.git.GitContext"
+        },
+        {
+          "from": "blastradius.core.git-service.src.resolve",
+          "kind": "references",
+          "to": "blastradius.core.git-service.src.resolve.Resolution"
+        },
+        {
+          "from": "blastradius.core.git-service.src.resolve.Resolution",
+          "kind": "references",
+          "to": "blastradius.core.git-service.src.resolve.Side"
+        }
+      ],
+      "elements": [
+        {
+          "id": "blastradius.core.git-service.src.dep.git2",
+          "kind": "dependency",
+          "name": "git2",
+          "path": ""
+        },
+        {
+          "id": "blastradius.core.git-service.src.dep.serde",
+          "kind": "dependency",
+          "name": "serde",
+          "path": ""
+        },
+        {
+          "id": "blastradius.core.git-service.src.git",
+          "kind": "module",
+          "name": "git.rs",
+          "path": "crates/blastradius-core/src/git.rs"
+        },
+        {
+          "id": "blastradius.core.git-service.src.git.CommitInfo",
+          "kind": "class",
+          "line": 31,
+          "name": "CommitInfo",
+          "parent": "blastradius.core.git-service.src.git",
+          "path": "crates/blastradius-core/src/git.rs"
+        },
+        {
+          "id": "blastradius.core.git-service.src.git.ConflictElement",
+          "kind": "class",
+          "line": 51,
+          "name": "ConflictElement",
+          "parent": "blastradius.core.git-service.src.git",
+          "path": "crates/blastradius-core/src/git.rs"
+        },
+        {
+          "id": "blastradius.core.git-service.src.git.ConflictSide",
+          "kind": "class",
+          "line": 41,
+          "name": "ConflictSide",
+          "parent": "blastradius.core.git-service.src.git",
+          "path": "crates/blastradius-core/src/git.rs"
+        },
+        {
+          "id": "blastradius.core.git-service.src.git.Conflicts",
+          "kind": "class",
+          "line": 61,
+          "name": "Conflicts",
+          "parent": "blastradius.core.git-service.src.git",
+          "path": "crates/blastradius-core/src/git.rs"
+        },
+        {
+          "id": "blastradius.core.git-service.src.git.GitContext",
+          "kind": "class",
+          "line": 14,
+          "name": "GitContext",
+          "parent": "blastradius.core.git-service.src.git",
+          "path": "crates/blastradius-core/src/git.rs"
+        },
+        {
+          "id": "blastradius.core.git-service.src.git.GitStatus",
+          "kind": "class",
+          "line": 20,
+          "name": "GitStatus",
+          "parent": "blastradius.core.git-service.src.git",
+          "path": "crates/blastradius-core/src/git.rs"
+        },
+        {
+          "id": "blastradius.core.git-service.src.git.GitTreeVfs",
+          "kind": "class",
+          "line": 327,
+          "name": "GitTreeVfs",
+          "parent": "blastradius.core.git-service.src.git",
+          "path": "crates/blastradius-core/src/git.rs"
+        },
+        {
+          "id": "blastradius.core.git-service.src.resolve",
+          "kind": "module",
+          "name": "resolve.rs",
+          "path": "crates/blastradius-core/src/resolve.rs"
+        },
+        {
+          "id": "blastradius.core.git-service.src.resolve.Resolution",
+          "kind": "class",
+          "line": 25,
+          "name": "Resolution",
+          "parent": "blastradius.core.git-service.src.resolve",
+          "path": "crates/blastradius-core/src/resolve.rs"
+        },
+        {
+          "id": "blastradius.core.git-service.src.resolve.Side",
+          "kind": "enum",
+          "line": 18,
+          "name": "Side",
+          "parent": "blastradius.core.git-service.src.resolve",
+          "path": "crates/blastradius-core/src/resolve.rs"
+        }
+      ],
+      "language": "rust",
+      "stale": false
+    },
+    {
+      "component": "blastradius.core.model-service",
+      "edges": [
+        {
+          "from": "blastradius.core.model-service.src.manifest",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.manifest.Manifest"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.ElementKind"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.DerivedGraph",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.DerivedEdge"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.DerivedGraph",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.DerivedElement"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.Element",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.ElementKind"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.Element",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.SourceMapping"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.Relation",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.Direction"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.Workspace",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.DerivedElement"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.Workspace",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.DerivedGraph"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.Workspace",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.Doc"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.Workspace",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.Element"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.Workspace",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.Relation"
+        },
+        {
+          "from": "blastradius.core.model-service.src.model.Workspace",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.View"
+        },
+        {
+          "from": "blastradius.core.model-service.src.parse",
+          "kind": "imports",
+          "to": "blastradius.core.model-service.src.dep.marked_yaml"
+        },
+        {
+          "from": "blastradius.core.model-service.src.parse",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.Element"
+        },
+        {
+          "from": "blastradius.core.model-service.src.parse",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.ElementKind"
+        },
+        {
+          "from": "blastradius.core.model-service.src.parse",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.Relation"
+        },
+        {
+          "from": "blastradius.core.model-service.src.parse",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.SourceMapping"
+        },
+        {
+          "from": "blastradius.core.model-service.src.parse",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.Workspace"
+        },
+        {
+          "from": "blastradius.core.model-service.src.parse.RawRelation",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.Direction"
+        },
+        {
+          "from": "blastradius.core.model-service.src.validate",
+          "kind": "imports",
+          "to": "blastradius.core.model-service.src.model"
+        },
+        {
+          "from": "blastradius.core.model-service.src.validate",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.Workspace"
+        },
+        {
+          "from": "blastradius.core.model-service.src.views",
+          "kind": "imports",
+          "to": "blastradius.core.model-service.src.dep.marked_yaml"
+        },
+        {
+          "from": "blastradius.core.model-service.src.views",
+          "kind": "imports",
+          "to": "blastradius.core.model-service.src.model"
+        },
+        {
+          "from": "blastradius.core.model-service.src.views",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.View"
+        },
+        {
+          "from": "blastradius.core.model-service.src.views",
+          "kind": "references",
+          "to": "blastradius.core.model-service.src.model.Workspace"
+        }
+      ],
+      "elements": [
+        {
+          "id": "blastradius.core.model-service.src.dep.marked_yaml",
+          "kind": "dependency",
+          "name": "marked_yaml",
+          "path": ""
+        },
+        {
+          "id": "blastradius.core.model-service.src.manifest",
+          "kind": "module",
+          "name": "manifest.rs",
+          "path": "crates/blastradius-core/src/manifest.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.manifest.Manifest",
+          "kind": "class",
+          "line": 28,
+          "name": "Manifest",
+          "parent": "blastradius.core.model-service.src.manifest",
+          "path": "crates/blastradius-core/src/manifest.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.model",
+          "kind": "module",
+          "name": "model.rs",
+          "path": "crates/blastradius-core/src/model.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.DerivedEdge",
+          "kind": "class",
+          "line": 214,
+          "name": "DerivedEdge",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.DerivedElement",
+          "kind": "class",
+          "line": 199,
+          "name": "DerivedElement",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.DerivedGraph",
+          "kind": "class",
+          "line": 177,
+          "name": "DerivedGraph",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.Direction",
+          "kind": "enum",
+          "line": 113,
+          "name": "Direction",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.Doc",
+          "kind": "class",
+          "line": 166,
+          "name": "Doc",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.Element",
+          "kind": "class",
+          "line": 70,
+          "name": "Element",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.ElementKind",
+          "kind": "enum",
+          "line": 17,
+          "name": "ElementKind",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.Relation",
+          "kind": "class",
+          "line": 120,
+          "name": "Relation",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.SourceMapping",
+          "kind": "class",
+          "line": 98,
+          "name": "SourceMapping",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.View",
+          "kind": "class",
+          "line": 137,
+          "name": "View",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.model.Workspace",
+          "kind": "class",
+          "line": 222,
+          "name": "Workspace",
+          "parent": "blastradius.core.model-service.src.model",
+          "path": "crates/blastradius-core/src/model.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.parse",
+          "kind": "module",
+          "name": "parse.rs",
+          "path": "crates/blastradius-core/src/parse.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.parse.RawRelation",
+          "kind": "class",
+          "line": 12,
+          "name": "RawRelation",
+          "parent": "blastradius.core.model-service.src.parse",
+          "path": "crates/blastradius-core/src/parse.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.validate",
+          "kind": "module",
+          "name": "validate.rs",
+          "path": "crates/blastradius-core/src/validate.rs"
+        },
+        {
+          "id": "blastradius.core.model-service.src.views",
+          "kind": "module",
+          "name": "views.rs",
+          "path": "crates/blastradius-core/src/views.rs"
+        }
+      ],
+      "language": "rust",
+      "stale": false
+    },
+    {
+      "component": "blastradius.core.sync-engine",
+      "edges": [
+        {
+          "from": "blastradius.core.sync-engine.src.splice",
+          "kind": "imports",
+          "to": "blastradius.core.sync-engine.src.dep.marked_yaml"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.splice",
+          "kind": "references",
+          "to": "blastradius.core.sync-engine.src.splice.EntrySpan"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync",
+          "kind": "imports",
+          "to": "blastradius.core.sync-engine.src.dep.serde"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync",
+          "kind": "imports",
+          "to": "blastradius.core.sync-engine.src.splice"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync",
+          "kind": "references",
+          "to": "blastradius.core.sync-engine.src.sync.Operation"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync",
+          "kind": "references",
+          "to": "blastradius.core.sync-engine.src.sync.Transaction"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync.JournalEvent",
+          "kind": "references",
+          "to": "blastradius.core.sync-engine.src.sync.Transaction"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync.Operation",
+          "kind": "references",
+          "to": "blastradius.core.sync-engine.src.sync.SourceInput"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync.SyncEngine",
+          "kind": "references",
+          "to": "blastradius.core.sync-engine.src.sync.FileChange"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync.SyncEngine",
+          "kind": "references",
+          "to": "blastradius.core.sync-engine.src.sync.JournalEvent"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync.SyncEngine",
+          "kind": "references",
+          "to": "blastradius.core.sync-engine.src.sync.Operation"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync.SyncEngine",
+          "kind": "references",
+          "to": "blastradius.core.sync-engine.src.sync.SourceInput"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync.SyncEngine",
+          "kind": "references",
+          "to": "blastradius.core.sync-engine.src.sync.Transaction"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync.SyncEngine",
+          "kind": "references",
+          "to": "blastradius.core.sync-engine.src.sync.ViewFileTarget"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync.SyncEngine",
+          "kind": "references",
+          "to": "blastradius.core.sync-engine.src.sync.ViewTarget"
+        },
+        {
+          "from": "blastradius.core.sync-engine.src.sync.Transaction",
+          "kind": "references",
+          "to": "blastradius.core.sync-engine.src.sync.FileChange"
+        }
+      ],
+      "elements": [
+        {
+          "id": "blastradius.core.sync-engine.src.dep.marked_yaml",
+          "kind": "dependency",
+          "name": "marked_yaml",
+          "path": ""
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.dep.serde",
+          "kind": "dependency",
+          "name": "serde",
+          "path": ""
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.splice",
+          "kind": "module",
+          "name": "splice.rs",
+          "path": "crates/blastradius-core/src/splice.rs"
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.splice.EntrySpan",
+          "kind": "class",
+          "line": 12,
+          "name": "EntrySpan",
+          "parent": "blastradius.core.sync-engine.src.splice",
+          "path": "crates/blastradius-core/src/splice.rs"
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.sync",
+          "kind": "module",
+          "name": "sync.rs",
+          "path": "crates/blastradius-core/src/sync.rs"
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.sync.FileChange",
+          "kind": "class",
+          "line": 105,
+          "name": "FileChange",
+          "parent": "blastradius.core.sync-engine.src.sync",
+          "path": "crates/blastradius-core/src/sync.rs"
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.sync.JournalEvent",
+          "kind": "enum",
+          "line": 1615,
+          "name": "JournalEvent",
+          "parent": "blastradius.core.sync-engine.src.sync",
+          "path": "crates/blastradius-core/src/sync.rs"
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.sync.Operation",
+          "kind": "enum",
+          "line": 32,
+          "name": "Operation",
+          "parent": "blastradius.core.sync-engine.src.sync",
+          "path": "crates/blastradius-core/src/sync.rs"
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.sync.SourceInput",
+          "kind": "class",
+          "line": 14,
+          "name": "SourceInput",
+          "parent": "blastradius.core.sync-engine.src.sync",
+          "path": "crates/blastradius-core/src/sync.rs"
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.sync.SyncEngine",
+          "kind": "class",
+          "line": 140,
+          "name": "SyncEngine",
+          "parent": "blastradius.core.sync-engine.src.sync",
+          "path": "crates/blastradius-core/src/sync.rs"
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.sync.Transaction",
+          "kind": "class",
+          "line": 132,
+          "name": "Transaction",
+          "parent": "blastradius.core.sync-engine.src.sync",
+          "path": "crates/blastradius-core/src/sync.rs"
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.sync.ViewFileTarget",
+          "kind": "enum",
+          "line": 124,
+          "name": "ViewFileTarget",
+          "parent": "blastradius.core.sync-engine.src.sync",
+          "path": "crates/blastradius-core/src/sync.rs"
+        },
+        {
+          "id": "blastradius.core.sync-engine.src.sync.ViewTarget",
+          "kind": "enum",
+          "line": 114,
+          "name": "ViewTarget",
+          "parent": "blastradius.core.sync-engine.src.sync",
+          "path": "crates/blastradius-core/src/sync.rs"
+        }
+      ],
+      "language": "rust",
+      "stale": false
+    },
+    {
+      "component": "blastradius.ui.canvas",
+      "edges": [
+        {
+          "from": "blastradius.ui.canvas.src.app",
+          "kind": "imports",
+          "to": "blastradius.ui.canvas.src.data"
+        },
+        {
+          "from": "blastradius.ui.canvas.src.app",
+          "kind": "imports",
+          "to": "blastradius.ui.canvas.src.help"
+        },
+        {
+          "from": "blastradius.ui.canvas.src.app",
+          "kind": "imports",
+          "to": "blastradius.ui.canvas.src.labels"
+        },
+        {
+          "from": "blastradius.ui.canvas.src.app",
+          "kind": "imports",
+          "to": "blastradius.ui.canvas.src.layout"
+        },
+        {
+          "from": "blastradius.ui.canvas.src.app",
+          "kind": "imports",
+          "to": "blastradius.ui.canvas.src.menu"
+        },
+        {
+          "from": "blastradius.ui.canvas.src.app",
+          "kind": "imports",
+          "to": "blastradius.ui.canvas.src.search"
+        },
+        {
+          "from": "blastradius.ui.canvas.src.app",
+          "kind": "imports",
+          "to": "blastradius.ui.canvas.src.svg"
+        },
+        {
+          "from": "blastradius.ui.canvas.src.layout",
+          "kind": "imports",
+          "to": "blastradius.ui.canvas.src.labels"
+        },
+        {
+          "from": "blastradius.ui.canvas.src.search",
+          "kind": "imports",
+          "to": "blastradius.ui.canvas.src.data"
+        },
+        {
+          "from": "blastradius.ui.canvas.src.svg",
+          "kind": "imports",
+          "to": "blastradius.ui.canvas.src.labels"
+        },
+        {
+          "from": "blastradius.ui.canvas.src.svg",
+          "kind": "imports",
+          "to": "blastradius.ui.canvas.src.layout"
+        }
+      ],
+      "elements": [
+        {
+          "id": "blastradius.ui.canvas.src.app",
+          "kind": "module",
+          "name": "app.js",
+          "path": "ui/js/app.js"
+        },
+        {
+          "id": "blastradius.ui.canvas.src.data",
+          "kind": "module",
+          "name": "data.js",
+          "path": "ui/js/data.js"
+        },
+        {
+          "id": "blastradius.ui.canvas.src.help",
+          "kind": "module",
+          "name": "help.js",
+          "path": "ui/js/help.js"
+        },
+        {
+          "id": "blastradius.ui.canvas.src.labels",
+          "kind": "module",
+          "name": "labels.js",
+          "path": "ui/js/labels.js"
+        },
+        {
+          "id": "blastradius.ui.canvas.src.layout",
+          "kind": "module",
+          "name": "layout.js",
+          "path": "ui/js/layout.js"
+        },
+        {
+          "id": "blastradius.ui.canvas.src.menu",
+          "kind": "module",
+          "name": "menu.js",
+          "path": "ui/js/menu.js"
+        },
+        {
+          "id": "blastradius.ui.canvas.src.search",
+          "kind": "module",
+          "name": "search.js",
+          "path": "ui/js/search.js"
+        },
+        {
+          "id": "blastradius.ui.canvas.src.svg",
+          "kind": "module",
+          "name": "svg.js",
+          "path": "ui/js/svg.js"
+        },
+        {
+          "id": "blastradius.ui.canvas.src.viewer",
+          "kind": "module",
+          "name": "viewer.js",
+          "path": "ui/js/viewer.js"
+        }
+      ],
+      "language": "typescript",
+      "stale": false
+    }
+  ],
+  "elements": [
+    {
+      "description": "Owns architecture documentation for their team; models systems, reviews model PRs, presents exports.",
+      "id": "architect",
+      "kind": "person",
+      "name": "Platform Architect"
+    },
+    {
+      "description": "Local-first desktop app for interactive, git-versioned C4 architecture models.",
+      "id": "blastradius",
+      "kind": "system",
+      "name": "Blastradius"
+    },
+    {
+      "description": "`blastradius init/validate/diff/export/import` — the headless attachment point for CI (ADR-0005); enforces the dogfood gate on this folder.",
+      "id": "blastradius.cli",
+      "kind": "container",
+      "name": "CLI",
+      "parent": "blastradius",
+      "tech": "Rust"
+    },
+    {
+      "id": "blastradius.cli.mcp-server",
+      "kind": "component",
+      "name": "MCP Server",
+      "parent": "blastradius.cli",
+      "tech": "Rust"
+    },
+    {
+      "description": "The domain. Library-first — the CLI and CI attach here without a WebView.",
+      "id": "blastradius.core",
+      "kind": "container",
+      "name": "Core",
+      "parent": "blastradius",
+      "tech": "Rust"
+    },
+    {
+      "description": "Self-contained HTML snapshot and SVG/PNG assembly, all headless-capable for CI (ADR-0009); the PR diff bot renders through the same pipeline.",
+      "group": "Interop",
+      "id": "blastradius.core.exporter",
+      "kind": "component",
+      "name": "Exporter",
+      "parent": "blastradius.core"
+    },
+    {
+      "description": "Repository access — status, revision materialisation for diff, conflict stages, history (ADR-0007); applies in-app conflict resolutions as splices on the chosen side, staged via the user's own git (ADR-0015).",
+      "id": "blastradius.core.git-service",
+      "kind": "component",
+      "name": "Git Service",
+      "parent": "blastradius.core",
+      "source": {
+        "exclude": [],
+        "include": [
+          "git.rs",
+          "resolve.rs"
+        ],
+        "language": "rust",
+        "root": "crates/blastradius-core/src"
+      },
+      "tech": "git2 / libgit2"
+    },
+    {
+      "description": "One-way DSL import with fidelity report (ADR-0002).",
+      "group": "Interop",
+      "id": "blastradius.core.importer",
+      "kind": "component",
+      "name": "Structurizr Importer",
+      "parent": "blastradius.core"
+    },
+    {
+      "description": "Derives read-only code-level elements from `source:`-mapped components (ADR-0016): built-in Rust extraction, out-of-process TypeScript/C# extractors over a common facts schema, committed under model/derived/ with a staleness digest.",
+      "id": "blastradius.core.introspector",
+      "kind": "component",
+      "name": "L4 Introspector",
+      "parent": "blastradius.core",
+      "tech": "syn · external extractors"
+    },
+    {
+      "description": "Workspace loading, schema parse and validation, doc registry, semantic model diff (spec/model-format.md).",
+      "group": "Model",
+      "id": "blastradius.core.model-service",
+      "kind": "component",
+      "name": "Model Service",
+      "parent": "blastradius.core",
+      "source": {
+        "exclude": [],
+        "include": [
+          "model.rs",
+          "parse.rs",
+          "validate.rs",
+          "views.rs",
+          "manifest.rs"
+        ],
+        "language": "rust",
+        "root": "crates/blastradius-core/src"
+      }
+    },
+    {
+      "description": "Arbiter between canvas, panel, and external editors; CST-preserving writes, staleness, shared undo (ADR-0008).",
+      "group": "Model",
+      "id": "blastradius.core.sync-engine",
+      "kind": "component",
+      "name": "Sync Engine",
+      "parent": "blastradius.core",
+      "source": {
+        "exclude": [],
+        "include": [
+          "sync.rs",
+          "splice.rs",
+          "journal.rs"
+        ],
+        "language": "rust",
+        "root": "crates/blastradius-core/src"
+      }
+    },
+    {
+      "description": "Window, menus, packaging, updates; hosts the WebView and the Core; owns the IPC boundary (ADR-0005).",
+      "id": "blastradius.shell",
+      "kind": "container",
+      "name": "App Shell",
+      "parent": "blastradius",
+      "tech": "Tauri 2"
+    },
+    {
+      "description": "The command handlers bridging WebView invoke/events to the core library (ADR-0005).",
+      "id": "blastradius.shell.ipc-bridge",
+      "kind": "component",
+      "name": "IPC Bridge",
+      "parent": "blastradius.shell",
+      "tech": "Tauri 2"
+    },
+    {
+      "description": "External-edit detection (workspace files + git metadata); feeds the sync engine's single inbound path; echo suppression by content hash.",
+      "id": "blastradius.shell.watcher",
+      "kind": "component",
+      "name": "File Watcher",
+      "parent": "blastradius.shell",
+      "tech": "notify"
+    },
+    {
+      "description": "Native window, welcome screen, File-Open dialog, workspace switching.",
+      "id": "blastradius.shell.window",
+      "kind": "component",
+      "name": "Window & Lifecycle",
+      "parent": "blastradius.shell"
+    },
+    {
+      "description": "All rendering and interaction. Owns no domain state; every edit is proposed to the Core as a transaction.",
+      "id": "blastradius.ui",
+      "kind": "container",
+      "name": "Canvas UI",
+      "parent": "blastradius",
+      "tech": "WebView · design system"
+    },
+    {
+      "description": "Zooming diagram surface — nodes, edges, diff states, continuous L1→L4 camera.",
+      "id": "blastradius.ui.canvas",
+      "kind": "component",
+      "name": "Canvas",
+      "parent": "blastradius.ui",
+      "source": {
+        "exclude": [],
+        "include": [],
+        "language": "typescript",
+        "root": "ui/js"
+      },
+      "tech": "SVG + DOM camera layer"
+    },
+    {
+      "description": "Renders typed documents; element ↔ document navigation (ADR-0010).",
+      "id": "blastradius.ui.docs-panel",
+      "kind": "component",
+      "name": "Documents Panel",
+      "parent": "blastradius.ui",
+      "source": {
+        "exclude": [],
+        "include": [
+          "help.js"
+        ],
+        "language": "typescript",
+        "root": "ui/js"
+      },
+      "tech": "Vanilla ES modules"
+    },
+    {
+      "description": "Deterministic layered layout with pinning constraints and stability hints (ADR-0006).",
+      "id": "blastradius.ui.layout-worker",
+      "kind": "component",
+      "name": "Layout Worker",
+      "parent": "blastradius.ui",
+      "tech": "elkjs · web worker"
+    },
+    {
+      "id": "blastradius.ui.palette",
+      "kind": "component",
+      "name": "Command Palette",
+      "parent": "blastradius.ui"
+    },
+    {
+      "description": "In-app source editor with inline validation; a peer surface to the canvas, not a viewer. CodeMirror upgrade is Phase 5 polish.",
+      "group": "Panels",
+      "id": "blastradius.ui.yaml-panel",
+      "kind": "component",
+      "name": "YAML Panel",
+      "parent": "blastradius.ui",
+      "tech": "plain-text editor (v1)"
+    },
+    {
+      "description": "Builds, gates, and packages every push; tag pushes additionally submit to the Microsoft Store.",
+      "id": "ci",
+      "kind": "environment",
+      "name": "GitHub Actions"
+    },
+    {
+      "id": "ci.ubuntu-runner",
+      "kind": "deployment-node",
+      "name": "ubuntu-latest Runner",
+      "parent": "ci",
+      "tech": "GitHub-hosted"
+    },
+    {
+      "description": "validate docs/, the L4 staleness gate, extractor fixture gates.",
+      "id": "ci.ubuntu-runner.cli",
+      "kind": "container-instance",
+      "name": "Validate & Introspect",
+      "parent": "ci.ubuntu-runner"
+    },
+    {
+      "id": "ci.windows-runner",
+      "kind": "deployment-node",
+      "name": "windows-latest Runner",
+      "parent": "ci",
+      "tech": "GitHub-hosted"
+    },
+    {
+      "description": "x64 + arm64 bundled into one .msixupload (ADR-0013).",
+      "id": "ci.windows-runner.msix-packaging",
+      "kind": "deployment-node",
+      "name": "MSIX Packaging",
+      "parent": "ci.windows-runner",
+      "tech": "winapp CLI · pack-msix.ps1"
+    },
+    {
+      "description": "Claude Code, Copilot, Cursor, Codex. Reads and edits the model through the MCP server; registered project-scoped by blastradius init (ADR-0012).",
+      "external": true,
+      "id": "coding-agent",
+      "kind": "external",
+      "name": "Coding Agent"
+    },
+    {
+      "description": "Where the app is built and dogfooded. The workspace under test is this repository's own docs/ directory.",
+      "id": "dev-machine",
+      "kind": "environment",
+      "name": "Developer Machine"
+    },
+    {
+      "id": "dev-machine.workstation",
+      "kind": "deployment-node",
+      "name": "Windows 11 Workstation",
+      "parent": "dev-machine",
+      "tech": "x64"
+    },
+    {
+      "id": "dev-machine.workstation.dev-build",
+      "kind": "deployment-node",
+      "name": "Blastradius (dev build)",
+      "parent": "dev-machine.workstation",
+      "tech": "cargo tauri dev"
+    },
+    {
+      "id": "dev-machine.workstation.dev-build.core",
+      "kind": "container-instance",
+      "name": "Core",
+      "parent": "dev-machine.workstation.dev-build"
+    },
+    {
+      "id": "dev-machine.workstation.dev-build.shell",
+      "kind": "container-instance",
+      "name": "App Shell",
+      "parent": "dev-machine.workstation.dev-build"
+    },
+    {
+      "id": "dev-machine.workstation.dev-build.ui",
+      "kind": "container-instance",
+      "name": "Canvas UI",
+      "parent": "dev-machine.workstation.dev-build"
+    },
+    {
+      "id": "dev-machine.workstation.terminal",
+      "kind": "deployment-node",
+      "name": "Terminal",
+      "parent": "dev-machine.workstation",
+      "tech": "PowerShell"
+    },
+    {
+      "description": "validate, introspect, export, and the MCP server over stdio.",
+      "id": "dev-machine.workstation.terminal.cli",
+      "kind": "container-instance",
+      "name": "CLI",
+      "parent": "dev-machine.workstation.terminal"
+    },
+    {
+      "description": "VS Code, vim, anything. Edits workspace files concurrently with the app; reconciled by the sync engine.",
+      "external": true,
+      "id": "external-editor",
+      "kind": "external",
+      "name": "External Editor"
+    },
+    {
+      "description": "The team's repo. Holds the workspace; carries history, branches, and merge conflicts. Written only by the user's own git tooling (ADR-0007).",
+      "external": true,
+      "id": "git-repo",
+      "kind": "external",
+      "name": "Git Repository"
+    },
+    {
+      "description": "Reads model diffs in PRs and exported HTML; may never install the app.",
+      "id": "reviewer",
+      "kind": "person",
+      "name": "Reviewer"
+    },
+    {
+      "description": "Existing Structurizr DSL model; one-way import source (ADR-0002).",
+      "external": true,
+      "id": "structurizr-workspace",
+      "kind": "external",
+      "name": "Structurizr Workspace"
+    },
+    {
+      "description": "Windows 10/11, where the Store delivers and updates the app.",
+      "id": "user-machine",
+      "kind": "environment",
+      "name": "End-User Machine"
+    },
+    {
+      "id": "user-machine.windows",
+      "kind": "deployment-node",
+      "name": "Windows 10/11",
+      "parent": "user-machine",
+      "tech": "x64 · arm64"
+    },
+    {
+      "id": "user-machine.windows.msix-package",
+      "kind": "deployment-node",
+      "name": "Blastradius (MSIX)",
+      "parent": "user-machine.windows",
+      "tech": "Store-signed, Store-updated"
+    },
+    {
+      "id": "user-machine.windows.msix-package.cli",
+      "kind": "container-instance",
+      "name": "CLI",
+      "parent": "user-machine.windows.msix-package"
+    },
+    {
+      "id": "user-machine.windows.msix-package.core",
+      "kind": "container-instance",
+      "name": "Core",
+      "parent": "user-machine.windows.msix-package"
+    },
+    {
+      "id": "user-machine.windows.msix-package.shell",
+      "kind": "container-instance",
+      "name": "App Shell",
+      "parent": "user-machine.windows.msix-package"
+    },
+    {
+      "id": "user-machine.windows.msix-package.ui",
+      "kind": "container-instance",
+      "name": "Canvas UI",
+      "parent": "user-machine.windows.msix-package"
+    }
+  ],
+  "name": "Blastradius",
+  "relations": [
+    {
+      "direction": "forward",
+      "from": "architect",
+      "label": "models the system",
+      "to": "blastradius.ui"
+    },
+    {
+      "direction": "forward",
+      "from": "reviewer",
+      "label": "reads exported HTML & PR diffs",
+      "to": "blastradius"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.ui.canvas",
+      "label": "edit operations",
+      "protocol": "Tauri IPC",
+      "to": "blastradius.core.sync-engine"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.ui.yaml-panel",
+      "label": "buffer updates",
+      "protocol": "Tauri IPC",
+      "to": "blastradius.core.sync-engine"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.ui.docs-panel",
+      "label": "doc queries",
+      "protocol": "Tauri IPC",
+      "to": "blastradius.core.model-service"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.cli",
+      "label": "validate · diff",
+      "protocol": "library call",
+      "to": "blastradius.core.model-service"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.ui.canvas",
+      "label": "layout requests",
+      "protocol": "postMessage",
+      "to": "blastradius.ui.layout-worker"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.core.sync-engine",
+      "label": "reads the parsed model",
+      "to": "blastradius.core.model-service"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.core.git-service",
+      "label": "reads model types",
+      "to": "blastradius.core.model-service"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.core.git-service",
+      "label": "rebuilds files through the splice primitives",
+      "to": "blastradius.core.sync-engine"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.core.sync-engine",
+      "label": "reads & writes workspace files",
+      "protocol": "fs",
+      "to": "git-repo"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.core.git-service",
+      "label": "status · blobs · history",
+      "protocol": "libgit2",
+      "to": "git-repo"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.core.introspector",
+      "label": "reads mapped source trees",
+      "protocol": "fs",
+      "to": "git-repo"
+    },
+    {
+      "direction": "both",
+      "from": "external-editor",
+      "label": "concurrent edits",
+      "to": "git-repo"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.core.importer",
+      "label": "one-way import",
+      "to": "structurizr-workspace"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.cli.mcp-server",
+      "label": "applies operations through",
+      "to": "blastradius.core.sync-engine"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.cli",
+      "label": "export command",
+      "to": "blastradius.core.exporter"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.core.exporter",
+      "label": "sealed snapshot of the model",
+      "to": "blastradius.core.model-service"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.cli",
+      "label": "import command",
+      "to": "blastradius.core.importer"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.shell.watcher",
+      "label": "external change events",
+      "to": "blastradius.core.sync-engine"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.ui.canvas",
+      "label": "invoke commands",
+      "protocol": "Tauri IPC",
+      "to": "blastradius.shell.ipc-bridge"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.shell.ipc-bridge",
+      "label": "snapshots, operations, git queries",
+      "to": "blastradius.core.model-service"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.shell.window",
+      "label": "hosts the WebView",
+      "to": "blastradius.ui"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.cli",
+      "label": "gitdiff command",
+      "to": "blastradius.core.git-service"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.shell.ipc-bridge",
+      "label": "status, history, time-travel",
+      "to": "blastradius.core.git-service"
+    },
+    {
+      "direction": "forward",
+      "from": "blastradius.ui.palette",
+      "label": "drives",
+      "protocol": "in-process",
+      "to": "blastradius.ui.canvas"
+    },
+    {
+      "direction": "forward",
+      "from": "coding-agent",
+      "label": "queries & edits the model via",
+      "protocol": "MCP/stdio",
+      "to": "blastradius.cli.mcp-server"
+    },
+    {
+      "direction": "forward",
+      "from": "architect",
+      "label": "launches, opens workspaces",
+      "to": "blastradius.shell.window"
+    },
+    {
+      "direction": "both",
+      "from": "dev-machine.workstation.terminal",
+      "label": "shares the workspace on disk",
+      "to": "dev-machine.workstation.dev-build"
+    },
+    {
+      "direction": "forward",
+      "from": "dev-machine.workstation.terminal",
+      "label": "commit & push",
+      "to": "git-repo"
+    },
+    {
+      "direction": "forward",
+      "from": "dev-machine.workstation",
+      "label": "triggers on push",
+      "to": "ci.ubuntu-runner"
+    },
+    {
+      "direction": "forward",
+      "from": "ci.ubuntu-runner",
+      "label": "checks out",
+      "to": "git-repo"
+    },
+    {
+      "direction": "forward",
+      "from": "ci.ubuntu-runner",
+      "label": "gates before packaging",
+      "to": "ci.windows-runner"
+    },
+    {
+      "direction": "forward",
+      "from": "ci.windows-runner.msix-packaging",
+      "label": "submits to the Store",
+      "protocol": "Partner Center API",
+      "to": "user-machine.windows.msix-package"
+    },
+    {
+      "direction": "both",
+      "from": "user-machine.windows.msix-package",
+      "label": "reads the user's own workspace",
+      "to": "git-repo"
+    }
+  ],
+  "views": [
+    {
+      "descriptions": [],
+      "file": "views/containers.yaml",
+      "id": "containers",
+      "include_context": true,
+      "layout": {},
+      "level": "L2",
+      "name": "Containers",
+      "nested": false,
+      "scope": "blastradius",
+      "show_groups": false
+    },
+    {
+      "descriptions": [
+        "exporter",
+        "model-service",
+        "sync-engine"
+      ],
+      "file": "views/core-components.yaml",
+      "id": "core-components",
+      "include_context": true,
+      "layout": {
+        "exporter": [
+          4.0,
+          2.0
+        ]
+      },
+      "level": "L3",
+      "name": "Core Components",
+      "nested": false,
+      "scope": "blastradius.core",
+      "show_groups": true
+    },
+    {
+      "descriptions": [],
+      "file": "views/deployment.yaml",
+      "id": "deployment",
+      "include_context": true,
+      "layout": {
+        "ci": [
+          10.0,
+          1.0
+        ],
+        "dev-machine": [
+          1.0,
+          1.0
+        ],
+        "user-machine": [
+          19.0,
+          1.0
+        ]
+      },
+      "level": "LD",
+      "name": "Deployment",
+      "nested": false,
+      "scope": "",
+      "show_groups": false
+    },
+    {
+      "descriptions": [],
+      "file": "views/dev-machine.yaml",
+      "id": "dev-machine",
+      "include_context": true,
+      "layout": {},
+      "level": "LD",
+      "name": "Developer Machine",
+      "nested": true,
+      "scope": "dev-machine",
+      "show_groups": false
+    },
+    {
+      "descriptions": [],
+      "file": "views/ui-l3.yaml",
+      "id": "ui-l3",
+      "include_context": true,
+      "layout": {},
+      "level": "L3",
+      "nested": false,
+      "scope": "blastradius.ui",
+      "show_groups": true
+    }
+  ]
+}

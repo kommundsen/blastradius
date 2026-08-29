@@ -130,6 +130,10 @@ pub struct SnapRelation {
 #[derive(Serialize)]
 pub struct SnapView {
     pub id: String,
+    /// The view file this view is written in, workspace-relative. The
+    /// inspector's View panel offers to open it, and offered nothing until
+    /// 0.10.0 because the field was not here to offer.
+    pub file: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub scope: String,
@@ -235,6 +239,7 @@ pub fn snapshot(vfs: &dyn Vfs, ws: &Workspace, diags: &[Diagnostic]) -> Snapshot
         .iter()
         .map(|v| SnapView {
             id: v.id.clone(),
+            file: v.file.clone(),
             name: v.name.clone(),
             scope: v.scope.clone(),
             level: v.level.clone(),
