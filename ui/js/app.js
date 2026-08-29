@@ -311,7 +311,7 @@ const els = {
   canvas: $('canvas'), sideTitle: $('side-title'), sideBody: $('side-body'),
   sideBack: $('side-back'), levelSeg: $('level-seg'), diagChips: $('diag-chips'),
   helpBtn: $('help-btn'),
-  hint: $('hint'), themeBtn: $('theme-btn'),
+  hint: $('hint'), themeBtn: $('theme-btn'), tour: $('tour'), blank: $('canvas-blank'),
   gitChips: $('git-chips'), diffBtn: $('diff-btn'), historyBtn: $('history-btn'),
   undoBtn: $('undo-btn'), redoBtn: $('redo-btn'), addBtn: $('add-btn'),
   sideMode: $('side-mode'), srcStatus: $('src-status'), findBtn: $('find-btn'),
@@ -357,6 +357,7 @@ async function reload() {
   renderTree();
   await renderCanvas({ animate: false });
   renderSide();
+  renderTour();
 }
 
 async function refreshSync() {
@@ -418,6 +419,54 @@ function renderEditChrome() {
       : `<span>⚠ ${esc(staleViews.join(', '))} does not parse — pinning is disabled for that view</span>`;
     els.canvas.appendChild(b);
   }
+}
+
+/** The canvas hint in its resting state. One string, one place. */
+const HINT = 'Double-click to dive · Right-click for actions · Esc to rise';
+
+/* --- first run ---------------------------------------------------------------
+ *
+ * The hint has read "Double-click to dive · Esc to rise" since Phase 1, and
+ * since 0.9.0 that is a minority of what the canvas can do: renaming,
+ * describing, adding a child, pointing a component at its code and every view
+ * setting live behind a right-click or the View tab, and neither announces
+ * itself. The help page says so, one click and one decision away from where
+ * the user is looking.
+ *
+ * So: a card that says the three things, shown until it is dismissed — or
+ * until the menu it teaches is opened, which is the same evidence and does not
+ * need a click to collect.
+ */
+const TOUR_KEY = 'br.tour-seen';
+
+function tourSeen() {
+  try { return localStorage.getItem(TOUR_KEY) === '1'; } catch (e) { return true; }
+}
+
+/** Retire the card. `why` is for the reader of this code, not for storage:
+ *  dismissing it and using the menu are the same outcome. */
+function endTour() {
+  try { localStorage.setItem(TOUR_KEY, '1'); } catch (e) { /* private mode: shown again */ }
+  els.tour.hidden = true;
+}
+
+function renderTour() {
+  if (!state.snapshot || tourSeen()) { els.tour.hidden = true; return; }
+  els.tour.hidden = false;
+  els.tour.innerHTML = `<div class="tour-head">
+      <span class="tour-title">Three things worth knowing</span>
+      <button class="btn btn-ghost" id="tour-close" aria-label="Dismiss">✕</button>
+    </div>
+    <ul class="tour-list">
+      <li><b>Right-click a box</b> to rename it, describe it, add what is inside,
+        or point it at the code that implements it.</li>
+      <li><b>The View tab</b>, beside Inspect, controls what this diagram shows —
+        groups, descriptions, nesting.</li>
+      <li><b>Double-click to dive in</b>, Esc to come back up.</li>
+    </ul>
+    <div class="tour-foot"><button class="btn btn-ghost" id="tour-help">Read the help</button></div>`;
+  $('tour-close').addEventListener('click', endTour);
+  $('tour-help').addEventListener('click', () => { endTour(); openHelp(''); });
 }
 
 async function refreshGit() {
@@ -575,6 +624,7 @@ async function renderCanvas({ animate = true } = {}) {
     }
   }
 
+  renderBlank(layout);
   fitGroupBoxes(els.nodes, layout);
   applyCamera();
   renderBreadcrumb();
@@ -583,6 +633,35 @@ async function renderCanvas({ animate = true } = {}) {
   // just changed — by a dive, a level button, or an edit. The inspector needs
   // no such thing: its subject only changes when the selection does.
   if (state.sideMode === 'view') renderViewPanel();
+}
+
+/** A view with nothing in it is a state, not a blank screen.
+ *
+ * Reachable in ordinary use: the level a scaffolded system has no containers
+ * for yet, or the last element in a view being deleted. It used to draw an
+ * empty frame, which is indistinguishable from a failure to render.
+ */
+function renderBlank(layout) {
+  if (layout.nodes.length) { els.blank.hidden = true; return; }
+  els.blank.hidden = false;
+  const level = LEVEL_NAMES[state.level] ?? state.level;
+  const scopeEl = state.scope ? anyElement(state.scope) : null;
+  const where = scopeEl ? `${esc(scopeEl.name)} has no ${level.toLowerCase()} yet` : `No ${level.toLowerCase()} yet`;
+  // Context is the one level with nowhere above it, so "Esc to rise" is not an
+  // answer there — and at L4 there is nothing to add by hand at all.
+  const derived = state.level === 'L4';
+  els.blank.innerHTML = `<span class="canvas-blank-title">${where}</span>
+    <p>${derived
+      ? 'Code elements come from the source. Run introspection on this component to derive them.'
+      : 'Right-click the canvas to add one, or press Esc to go back up.'}</p>`;
+  if (!derived && canEdit()) {
+    const b = document.createElement('button');
+    b.className = 'btn btn-secondary';
+    b.id = 'blank-add';
+    b.textContent = '+ Add an element';
+    b.addEventListener('click', () => openCreateDialog());
+    els.blank.appendChild(b);
+  }
 }
 
 /** The size each node will actually render at.
@@ -748,6 +827,14 @@ function select(id) {
   renderSide();
 }
 
+/** Nothing is inside this one yet — which is a fact about the model, and the
+ *  remedy is one right-click away. */
+function emptyDive(el) {
+  toast(canEdit()
+    ? `${el.name} has nothing inside yet — right-click it to add one.`
+    : `${el.name} has nothing inside yet.`);
+}
+
 async function dive(id) {
   const el = anyElement(id);
   if (!el) return;
@@ -756,7 +843,9 @@ async function dive(id) {
     await glideInto(id);
     state.level = 'L2'; state.scope = id;
   } else if (el.kind === 'container' && state.level === 'L2') {
-    if (!state.snapshot.elements.some((e) => e.parent === id)) return; // nothing inside
+    // Silence is the worst answer here: on a starter model the database has no
+    // components, and double-clicking it did nothing at all.
+    if (!state.snapshot.elements.some((e) => e.parent === id)) return emptyDive(el);
     await glideInto(id);
     state.level = 'L3'; state.scope = id;
   } else if (el.kind === 'component' && state.level === 'L3' && graph?.elements.length) {
@@ -773,7 +862,7 @@ async function dive(id) {
     // The deployment tree dives like the logical one (ADR-0018): an
     // environment opens its nodes, a node opens whatever runs on it.
     // Container instances are leaves.
-    if (!state.snapshot.elements.some((e) => e.parent === id)) return;
+    if (!state.snapshot.elements.some((e) => e.parent === id)) return emptyDive(el);
     await glideInto(id);
     state.level = 'LD'; state.scope = id;
   } else {
@@ -2530,7 +2619,7 @@ function startConnect(fromId) {
 function cancelConnect() {
   state.connectFrom = null;
   els.canvas.classList.remove('is-connecting');
-  els.hint.textContent = 'Double-click to dive · Esc to rise';
+  els.hint.textContent = HINT;
 }
 
 async function finishConnect(toId) {
@@ -2650,6 +2739,9 @@ function openCanvasMenu(ev) {
 
 /** Build and place a menu from menu.js items, binding each id to its action. */
 function showMenu(ev, items, run) {
+  // The right-click menu is the thing the first-run card exists to teach. It
+  // has been found; the card has no further job.
+  if (!tourSeen()) endTour();
   ev.preventDefault();
   if (!items.length) return; // nothing to offer is not an empty menu
   const menu = document.createElement('div');

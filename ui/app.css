@@ -14,6 +14,43 @@ body { margin: 0; overflow: hidden; }
 .overlay-bl { position: absolute; left: var(--space-4); bottom: var(--space-4);
   display: flex; gap: var(--space-3); align-items: center; }
 
+/* First run: the canvas never said where the editing lives. Since 0.9.0 most
+   of it is behind the box's right-click menu and the View tab, and a hint tag
+   with room for three words cannot carry that. Sits above the control row,
+   dismissed for good, and retires itself the first time the menu it teaches
+   gets opened.
+
+   Deliberately `pointer-events: none` on the card and `auto` on its buttons:
+   overlay chrome sitting on top of the drawing must not eat a drag aimed at a
+   node underneath it. */
+.tour { position: absolute; left: var(--space-4); bottom: calc(var(--space-4) + 42px);
+  max-width: 300px; pointer-events: none;
+  padding: var(--space-3); border: 1px solid var(--color-divider);
+  border-radius: var(--radius); background: var(--color-surface);
+  box-shadow: var(--shadow-node); font-size: var(--text-xs); }
+.tour button { pointer-events: auto; }
+.tour-head { display: flex; align-items: baseline; gap: var(--space-2); }
+.tour-title { font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: var(--text-2xs); letter-spacing: var(--tracking-label);
+  text-transform: uppercase; flex: 1; }
+.tour-list { margin: var(--space-2) 0 0; padding-left: 1.1em;
+  display: flex; flex-direction: column; gap: var(--space-2);
+  line-height: var(--leading-body); color: var(--color-text-muted); }
+.tour-list b { color: var(--color-text); }
+.tour-foot { margin-top: var(--space-2); }
+
+/* A view with nothing in it used to be an empty frame, which reads as a bug
+   rather than as a state. Same pointer-events rule as .tour, and for the same
+   reason — plus this one sits in the middle of the canvas, where right-click
+   is the answer it is pointing at. */
+.canvas-blank { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%);
+  pointer-events: none; text-align: center; max-width: 340px;
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-2); }
+.canvas-blank button { pointer-events: auto; }
+.canvas-blank-title { font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: var(--text-md); text-transform: uppercase; }
+.canvas-blank p { margin: 0; font-size: var(--text-sm); color: var(--color-text-muted); }
+
 /* nodes are buttons (keyboard reachable) but keep the design-system look */
 .node { cursor: default; text-align: left; }
 .node:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }

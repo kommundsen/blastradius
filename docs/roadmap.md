@@ -1813,6 +1813,166 @@ one, H behind the ADR-0003 amendment it requires.
 (still owed, carried), macOS distribution (deferred five times), and the
 `writable()` open question from 0.7.0.
 
+## 0.10.0 — planned (2026-08-29): what a user actually meets
+
+0.9.0 made the app able to write the model it can draw; this pool is
+about whether that works for someone who is not the person who built it. Three
+of the items below are not features at all, which is the honest state of things:
+the product has never been measured against its own PRD metric, and its
+thesis feature is inert on the language its owner uses most.
+
+**Picked 2026-08-29** (owner): **3, 4 and 9**, plus **2** as the theme. Sequence
+**9 → 4 → 3 → 2**, which is cheapest-first and then dependency order: 4 protects
+everything written after it, 3 protects the packaged app — and specifically the
+extractor path, which is where every install-only bug this project has shipped
+lived — and 2 is the one that touches that path.
+
+**1, the five-minute-stranger run, was considered and not picked — a sixth
+time.** It is worth saying plainly rather than letting it slide down a list
+again: the PRD's own success metric has been owed since 0.4.0, nothing in this
+release makes it easier, and the three items picked here are all *proxies* for
+it — ways of asking "does this work for someone who did not build it" that can
+be answered without finding that someone. They are worth having and they are not
+the same answer.
+
+Draft exits:
+
+- **9** — a first-run canvas that says what it can do: the hint names
+  right-click and the View panel, not just dive and rise, and an empty or
+  freshly-scaffolded workspace says what to do next rather than showing an empty
+  frame. Asserted in e2e against the mock's `?emptyfolder` path.
+- **4** — one operation list runs through the real engine (Rust) and through the
+  e2e mock (JS), and the resulting snapshots are compared field by field. Every
+  divergence 0.9.0 introduced by hand — unpin's key removal, `external: false`,
+  `replicas: 1`, view authoring — is covered by it, and a new operation that
+  only one side implements fails the build.
+- **3** — CI drives the *packaged* app over CDP the way 0.6.1 did by hand:
+  open a repository with no workspace, take the offer, and reach a rendered
+  model, out of an installed layout. `introspect_component` runs there against a
+  real repository, which is the only place it has ever been exercised outside a
+  mock that answers "needs the real app".
+- **2** — a C# fixture where a type in one project references a type in another
+  records an `outbound` entry naming the defining file, so `drift::detect`
+  reports the same undeclared and unbacked findings it reports for Rust; the
+  canvas draws them with no C#-specific code, because there is none to write.
+
+### 9 — shipped 2026-08-29: the canvas says what it can do
+
+The hint read "Double-click to dive · Esc to rise" and had since Phase 1, which
+by 0.9.0 was a minority of what the canvas does: renaming, describing, adding a
+child, pointing a component at its code and every view setting live behind a
+right-click or the View tab, and nothing on screen said so. The help page said
+so — one click and one decision away from where the user is looking.
+
+Four surfaces now do:
+
+- **The hint names the menu**: *Double-click to dive · Right-click for actions ·
+  Esc to rise*. One string, one place, and the connect-mode hint restores it.
+- **A first-run card** on the canvas names the three things worth knowing: the
+  box's right-click menu, the View tab beside Inspect, and dive/rise. It is
+  dismissed for good — and it also **retires itself the moment the menu it
+  teaches is opened**, which is the same evidence and does not cost the user a
+  click. Overlay chrome sits on top of the drawing, so the card is
+  `pointer-events: none` with `auto` only on its two buttons: a hint must never
+  eat a drag aimed at a node beneath it, and there is an e2e test that clicks
+  straight through it.
+- **A view with nothing in it is a state, not an empty frame.** It says which
+  level is empty and what to do about it — right-click, Esc, or the add button
+  it offers when editing is allowed. At L4 it says the honest thing instead:
+  code elements come from the source, so run introspection.
+- **Diving into something with nothing inside says so.** It used to `return`
+  silently. On a *scaffolded* model that is exactly what double-clicking the
+  starter database does, so the first exploratory gesture of a first run was
+  answered with nothing at all.
+
+*Exit met*: eight e2e, including the `?emptyfolder` scaffold path — take the
+offer, close the hand-off, and the card is there — and the click-through test
+that keeps the card from becoming the bug it is meant to prevent.
+
+**Deliberately not done**: the card is stored per browser profile, not per
+workspace (`br.tour-seen` in `localStorage`), so it is shown once per person
+rather than once per repository. Someone who dismisses it and later opens a
+second workspace does not see it again — which is the right answer for a hint
+about the app, and the wrong one for a hint about a model. Nothing here is
+about a model.
+
+**1 — The five-minute-stranger run.** The PRD's metric: a platform engineer who
+has never seen the product installs it and reaches a rendered model of their own
+repository in under five minutes, unassisted and timed. Owed since 0.4.0 and
+carried through five releases; 0.5.0 came close (a real outsider tried it and
+liked it) and was correctly *not* counted, because none of the conditions were
+measured. It is the only item in any pool that measures the user experience
+rather than asserting it, and it needs a person and a stopwatch rather than a
+commit.
+
+**2 — Drift is blind on C#.** `extractors/dotnet/` records no `outbound`
+entries at all — the field exists in the facts schema, the Rust and TypeScript
+extractors fill it, and the C# one never has. So the product's central claim,
+documentation that cannot quietly rot, is inert on the stack ADR-0016 named
+*first* ("language priority is C#/.NET and JavaScript/TypeScript — the user's
+stack"). ADR-0019 records the reason honestly: at syntax level C# resolves
+namespaces rather than paths, so there is no file to point at. Semantic mode has
+resolved symbols and therefore does have one. Nothing in 0.9.0's drift work —
+ghost edges, declare, reverse — does anything for a C# user today.
+
+**3 — Nothing has ever run the *app* from an installed layout.**
+`tools/smoke-install.ps1` takes a finished *CLI* and puts it through a new
+user's flow, which is why 0.7.0 stopped the run of install-only bugs. The app
+has no such gate. 0.9.0 added three sync operations and a new IPC command
+(`introspect_component`) whose only exercise anywhere is a mock that answers
+"introspection needs the real app". Every release that shipped app-side
+features without an installed run has shipped a bug that only that layout could
+show (0.6.0, 0.6.1, 0.6.2). The technique exists: 0.6.1 drove the packaged app
+over CDP (`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port`) and
+reproduced a Tauri-only bug the e2e suite is structurally blind to.
+
+**4 — The mock harness can lie, and has.** The e2e suite runs against a
+hand-written mock of the sync engine (ADR-0011), and every operation's semantics
+are mirrored into it by hand. 0.9.0 alone added four such mirrors — unpin
+removing the `layout:` key, `external: false` clearing rather than setting,
+`replicas: 1` clearing, and a view file being authored when none exists. Each is
+a place the suite can agree with itself while disagreeing with the engine, which
+is exactly what 0.8.0's settle test did for a whole release. Worth considering:
+a contract test that runs one operation list through both the real engine and
+the mock and compares the resulting snapshots, so a divergence fails a build
+instead of hiding one.
+
+**5 — Relation repair (E, carried).** F shipped *Reverse it* for the one case
+drift can prove; everything else about a relation is still delete-and-retype.
+`direction: both | none` is a model field with no operation, re-pointing an
+endpoint means losing the label and protocol, and adding a relation still means
+finding both boxes on the canvas — while `search.js` already ranks every element
+for the palette.
+
+**6 — A problems panel.** Validation errors and drift findings now share a chip
+that opens a list of strings, clickable since 0.9.0 to open the offending file.
+But drift is structured now: a finding knows its two elements, and the canvas
+knows how to fly to either. A list that is element-shaped — click a finding, land
+on it, fix it there — is the difference between a report and a workflow. It is
+also where a C# user would first notice item 2, once there is something to show.
+
+**7 — Documents and ADRs from inside the app (G, carried).** The inspector's
+Documents section is read-only links; there is no operation for docs of any
+kind, so recording a decision means leaving the app. The skill teaches
+"attach ADRs to the elements they govern" and the app cannot do it.
+
+**8 — Move an element (H, carried).** Still the one modelling operation the
+product punishes: delete and recreate, losing relations, pins, description,
+`descriptions:` entries and doc links. Needs ADR-0003 amended rather than
+ignored — a move changes an element's *path*, and the question is whether
+identity was ever the path.
+
+**9 — First-run discoverability.** The canvas hint reads "Double-click to dive ·
+Esc to rise" and has since Phase 1. Since 0.9.0 the box's right-click menu is
+where most editing lives, the View panel is a new tab, and neither announces
+itself; the help page says so, which is one click and one decision away from
+where the user is. Cheapest item here by a wide margin, and untested against
+anyone.
+
+**The shape of the list.** 1 and 3 are the same question asked two ways — does
+this work for someone who did not build it — and 2 is the same question asked
+about a language. 5, 6 and 9 are what a user feels once it does.
+
 ## 0.7.0 — candidate pool (2026-08-25)
 
 **The hold resolved itself.** This pool was 0.6.0's, held (2026-08-25)
