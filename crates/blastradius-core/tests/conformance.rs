@@ -16,7 +16,7 @@ fn repo_docs_workspace_is_valid() {
     assert!(!has_errors(&diags));
     // 25 logical + 20 deployment (ADR-0018): 3 environments, 8 nodes, 9 instances.
     assert_eq!(ws.elements.len(), 45, "element count changed — update this test with the model");
-    assert_eq!(ws.docs.len(), 29, "registered doc count changed");
+    assert_eq!(ws.docs.len(), 30, "registered doc count changed");
     // L1 is implicit; the four files are containers (L2), core components
     // (L3), the deployment overview, and the nested developer machine.
     assert_eq!(ws.views.len(), 4);
