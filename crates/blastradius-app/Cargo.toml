@@ -9,6 +9,22 @@ description = "Blastradius desktop shell (Tauri) — hosts the WebView and the C
 name = "blastradius-app"
 path = "src/main.rs"
 
+# Off by default, and deliberately not in any default set: a remote debugging
+# port is total control of the WebView, and this app hands the WebView the
+# whole IPC surface (`withGlobalTauri`) — commands that launch editors, spawn
+# extractors, open any directory and write files. CDP has no authentication
+# and loopback is not a security boundary, so a shipped binary must not be
+# able to open one at all, whatever environment it is launched in.
+#
+# Both release paths build plainly — .github/workflows/release.yml for the
+# portable archives, tools/pack-msix.ps1 for the Store submission — so the
+# published artifacts contain none of this code. Only tools/smoke-app.ps1
+# builds with it, to drive the packaged app over CDP (roadmap 0.10.0 item 3).
+# Never add it to a default feature set, and never build a release with
+# --all-features.
+[features]
+remote-debug = []
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

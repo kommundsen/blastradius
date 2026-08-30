@@ -564,6 +564,61 @@ enum Startup {
     None,
 }
 
+/// The one window, built in code rather than declared in `tauri.conf.json`,
+/// so that exactly one launch in the world can ask for a debugging port.
+///
+/// Behind the off-by-default `remote-debug` feature,
+/// `BLASTRADIUS_REMOTE_DEBUG_PORT` opens a CDP port on the WebView so
+/// `tools/smoke-app.ps1` can drive the *packaged* app — the gate that covers
+/// everything the mock bridge is blind to (ADR-0011).
+///
+/// The feature, not the environment variable, is the security boundary. A
+/// debugging port is total control of the WebView, and this app gives the
+/// WebView the whole IPC surface: commands here launch an editor, spawn
+/// extractors, open any directory and write files. CDP has no authentication,
+/// and loopback is not a boundary — any process on the machine, including one
+/// running as another user, can connect. An environment variable is far too
+/// weak a gate for that, so the shipped binaries contain none of this code and
+/// cannot be talked into it.
+///
+/// Why our code and not WebView2's own
+/// `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`: that variable is honoured by the
+/// runtime loader on some builds and silently dropped by others. Two browser
+/// command lines from the same binary, one desktop and one CI runner, differed
+/// in exactly that flag and nothing else (roadmap, 0.10.0 item 3). A gate that
+/// depends on which patch of WebView2 a machine happens to have is not a gate.
+fn build_main_window(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    #[allow(unused_mut)]
+    let mut builder =
+        tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
+            .title("Blastradius")
+            .inner_size(1280.0, 800.0)
+            .min_inner_size(480.0, 400.0);
+
+    #[cfg(all(windows, feature = "remote-debug"))]
+    {
+        if let Ok(port) = std::env::var("BLASTRADIUS_REMOTE_DEBUG_PORT") {
+            if port.trim().parse::<u16>().is_ok() {
+                // Loud on purpose. A build that *can* be remote-controlled
+                // should never be mistaken for one that cannot.
+                builder = builder.title("Blastradius — REMOTE DEBUG PORT OPEN");
+                // additional_browser_args *replaces* wry's defaults, so they
+                // are repeated here verbatim. Dropping them would change how
+                // the webview behaves in the one configuration we test in.
+                const WRY_DEFAULTS: &str =
+                    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
+                builder = builder.additional_browser_args(&format!(
+                    "{WRY_DEFAULTS} --remote-debugging-port={}",
+                    port.trim()
+                ));
+            }
+        }
+    }
+
+    builder.build()?;
+    Ok(())
+}
+
 fn startup_target() -> Startup {
     let explicit = std::env::args().nth(1).map(PathBuf::from);
     let candidate = match explicit.clone() {
@@ -633,6 +688,7 @@ fn main() {
             startup_folder
         ])
         .setup(move |app| {
+            build_main_window(app)?;
             if let Some(root) = root {
                 let state: State<AppState> = app.state();
                 let watch_gen = state.watch_gen.clone();

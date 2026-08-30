@@ -56,7 +56,11 @@ try {
     New-Item -ItemType Directory -Force $staged | Out-Null
     foreach ($bin in 'blastradius.exe', 'blastradius-app.exe') {
       $from = Join-Path $repo "target/release/$bin"
-      if (-not (Test-Path $from)) { Fail "missing build output: $from (cargo build --release)" }
+      if (-not (Test-Path $from)) {
+        Fail "missing build output: $from`n" +
+             "  cargo build --release -p blastradius-cli`n" +
+             "  cargo build --release -p blastradius-app --features remote-debug"
+      }
       Copy-Item $from (Join-Path $staged $bin)
     }
     # The extractors core looks for beside the running binary. Without them,
@@ -132,10 +136,16 @@ export function summarise(orders: Order[]): number {
   # therefore no debugging port. Its own folder makes the browser process ours.
   $udf = Join-Path ([System.IO.Path]::GetTempPath()) ("br-app-smoke-udf-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
   $env:WEBVIEW2_USER_DATA_FOLDER = $udf
-  $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$Port"
+  # The app opens the port itself. WebView2's own
+  # WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS is honoured by the runtime loader on
+  # some builds and silently dropped by others — 151.0.4129.107 took it on a
+  # desktop and 151.0.4129.101 ignored it on a runner, from the same binary,
+  # the two browser command lines differing in exactly that flag. A gate that
+  # depends on which patch of WebView2 a machine has is not a gate.
+  $env:BLASTRADIUS_REMOTE_DEBUG_PORT = "$Port"
   $proc = Start-Process -FilePath $appExe -ArgumentList $scratch -PassThru `
     -RedirectStandardOutput $outLog -RedirectStandardError $errLog
-  Remove-Item Env:\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS
+  Remove-Item Env:\BLASTRADIUS_REMOTE_DEBUG_PORT
   Remove-Item Env:\WEBVIEW2_USER_DATA_FOLDER
 
   $deadline = (Get-Date).AddSeconds(60)
@@ -185,6 +195,7 @@ export function summarise(orders: Order[]): number {
       Write-Host "    --- app $($pair[0]) ---"
       if ([string]::IsNullOrWhiteSpace($text)) { Write-Host '    (empty)' } else { Write-Host $text }
     }
+    Write-Host '    (a build without --features remote-debug opens no port by design)' -ForegroundColor Yellow
     Fail "the WebView never opened a debugging port on $Port"
   }
   Write-Host '    attached'

@@ -48,6 +48,21 @@ both: `crates/blastradius-core/tests/contract.rs` through the real
 against the same committed snapshot. A new operation that only one side
 implements fails the build.
 
+## The packaged app is driven over CDP on Windows
+
+The mock bridge is blind to the IPC boundary by construction, so since 0.10.0
+`tools/smoke-app.ps1` launches the *packaged* app at a repository it has never
+seen and drives its WebView2 over CDP. WebKitGTK has no equivalent debugging
+port, which is why this covers Windows only — the same asymmetry that made
+this ADR necessary, pointing the other way.
+
+The port is opened by our own code behind an off-by-default `remote-debug`
+Cargo feature, not by WebView2's `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`:
+that variable is honoured by some runtime patches and silently dropped by
+others, and a shipped binary must not be able to open a debugging port at all.
+CDP has no authentication, and this app gives the WebView the whole IPC
+surface.
+
 ## Consequences
 - Playwright is the repo's first Node dependency (`package.json` at root,
   dev-only). The no-bundler rule for `ui/` itself still holds.

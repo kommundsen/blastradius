@@ -208,8 +208,17 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
-      - name: Build the shipping binaries
-        run: cargo build --release -p blastradius-app -p blastradius-cli
+      # The app is built with `remote-debug`, which is off by default and
+      # absent from both release paths — a CDP port is total control of the
+      # WebView and this app hands the WebView the whole IPC surface, so the
+      # published binaries must not be able to open one at all. The cost is
+      # named: this job drives a binary one cfg block away from the shipped
+      # one, which is a smaller gap than a remote-control switch in a Store
+      # app.
+      - name: Build the shipping binaries (app with the debug port compiled in)
+        run: |
+          cargo build --release -p blastradius-cli
+          cargo build --release -p blastradius-app --features remote-debug
       - name: Install Playwright (CDP client only — no browser download)
         run: npm ci
       - name: Drive the packaged app from an install layout

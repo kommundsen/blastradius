@@ -1953,10 +1953,51 @@ step and prints the message the app itself gave.
 port. WebKitGTK has no equivalent, which is the same reason ADR-0011 exists.
 Linux and macOS keep the compile check and the mock suite.
 
-**Unproven until the first CI run**: everything above was verified on a
-Windows desktop. Whether a `windows-latest` runner gives the app a session it
-can open a window in is not something this machine can answer, and the job is
-written to fail loudly rather than skip if it cannot.
+**The first CI run said no, and finding out why took four of them.** The job
+is worth the record, because almost every guess was wrong:
+
+- The runner *can* run our GUI app. Window created (handle 327978), WebView2
+  running (6 processes), no crash, nothing on stderr. The headless-session
+  theory — the obvious one — was simply false.
+- The app's empty stdout and stderr proved nothing either way: a
+  `windows_subsystem = "windows"` binary has no console, so there was never
+  going to be anything there. Two runs were read as evidence before that
+  registered.
+- Isolating the WebView2 user data folder, so the browser process was
+  certainly ours and freshly created, changed nothing.
+- The answer was in the browser process's own command line. On this desktop
+  (runtime 151.0.4129.107) it carries `--remote-debugging-port`; on the runner
+  (151.0.4129.101) the same binary produces a command line identical in every
+  other respect and **without that flag**. WebView2's
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` is honoured by one patch of the
+  runtime loader and silently dropped by another.
+
+So the app passes the flag itself now, through wry's `additional_browser_args`,
+which no loader can drop — **behind an off-by-default `remote-debug` Cargo
+feature**, which is the part that matters more than the fix.
+
+**Why a feature and not an environment variable.** A debugging port is total
+control of the WebView, and this app gives the WebView the whole IPC surface
+(`withGlobalTauri`): commands here launch an editor, spawn extractors, open
+any directory and write files. CDP has no authentication, and loopback is not
+a security boundary — any process on the machine, including one running as
+another user, can connect. An environment variable would mean a signed Store
+build could be turned into a remote-control target by `setx`, permanently,
+with nothing in the UI saying so. Off by default, the shipped binaries contain
+none of that code and cannot be talked into it. Verified rather than asserted:
+the default build with the variable set opens no port and passes no flag,
+while the feature build opens one and renames its own window to
+**"Blastradius — REMOTE DEBUG PORT OPEN"**, so a debug-capable build can never
+be mistaken for an ordinary one.
+
+Both release paths — `release.yml` for the portable archives, `pack-msix.ps1`
+for the Store submission — build plainly, and neither uses `--all-features`,
+which is the one way this could leak. Cargo.toml says so where someone would
+be about to change it.
+
+**The cost, stated**: CI now drives a binary one `cfg` block away from the one
+we publish. That is a smaller gap than a remote-control switch in a Store app,
+and it is the whole of the difference.
 
 ### 4 — shipped 2026-08-30: the mock can no longer lie
 
