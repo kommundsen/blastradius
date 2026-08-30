@@ -187,14 +187,25 @@ inspector at 810px is not the problem and is not to be cut to make a point.
   belongs in. `design-system/guidelines/` documents tokens, density and
   elevation, and has never documented information architecture.
 - `.app-bar`'s rules changed in `design-system/components/components.css`, and
-  therefore in `ui/ds/components/components.css` — **which was a hand-maintained
-  copy with nothing checking it**. A product whose thesis is that documentation
-  should not be able to rot quietly had a copy of its own design system that
-  could. Found by this change having to edit both by hand, and **fixed in the
-  same release**: `tools/sync-ds.mjs` copies the source to the shipped subset,
-  and `--check` fails the build when they differ — the same shape as
-  `blastradius introspect --check`, which is the product's own answer to
-  exactly this problem pointed at source code.
+  therefore in `ui/ds/components/components.css`. This first said that copy was
+  "hand-maintained with nothing checking it", which was **half wrong and worth
+  correcting**: a sync script had existed since 0.7.1 (`tools/sync-ds.py`), and
+  the roadmap records why it is careful. What did not exist was anything
+  *running* it — not in CI, not in npm, no gate — so the copy could still drift,
+  and did.
+
+  **Fixed in the same release**: `tools/sync-ds.mjs` replaces the Python script
+  and adds the missing half, `--check`, wired into CI — the same shape as
+  `blastradius introspect --check`, which is the product's own answer to this
+  problem pointed at source code.
+
+  It keeps the older script's tripwire, which matters more than the copy does.
+  0.7.1 found `ui/ds/` **ahead** of the source — deployment node styles, group
+  boundaries and three tokens existed only there — and a wholesale copy silently
+  removed shipped styles and broke the headless renderer, which reads its tokens
+  out of `ui/ds/`. So a sync refuses rather than clobbering when the destination
+  holds selectors or custom properties the source lacks, names them, and writes
+  nothing.
 
   What ships is derived rather than listed: whatever `styles.css` imports,
   transitively, plus `assets/`. Adding a file to the design system does not need

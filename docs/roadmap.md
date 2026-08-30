@@ -1122,6 +1122,11 @@ before overwriting any CSS file it checks that every selector and custom
 property already in the destination still exists in the source, names what
 would be lost, and writes nothing.
 
+*Superseded 0.11.0*: `tools/sync-ds.py` is now `tools/sync-ds.mjs`, which keeps
+this tripwire and adds the thing 0.7.1 did not — a `--check` mode that runs in
+CI. The script was correct and nothing ever ran it, so the copy could still
+drift and did.
+
 ## 0.7.0 — released (2026-08-28)
 
 **Cut 2026-08-28.** Store submission `1152921505701761076` reached
@@ -1913,13 +1918,21 @@ lightest of the three (3 inputs, 4 buttons, 810px) against the system
 inspector's 5, 8 and 907px, which nothing recent touched. All three already
 overflow the ~747px panel at the default window.
 
-**The design system's shipped copy can no longer rot.** `ui/ds/` was a
-hand-maintained subset of `design-system/` with nothing checking it — found
-because this change had to edit both by hand. `tools/sync-ds.mjs` syncs it and
-`--check` fails the build on drift, which is `introspect --check` pointed at
-the design system instead of at source. What ships is derived from what
-`styles.css` imports, so adding a file to the design system does not need the
-script edited. The gate was proved by breaking it deliberately.
+**The design system's shipped copy can no longer rot.** `tools/sync-ds.mjs`
+syncs `design-system/` to `ui/ds/` and `--check` fails the build on drift,
+which is `introspect --check` pointed at the design system instead of at
+source. What ships is derived from what `styles.css` imports, so adding a file
+does not need the script edited. The gate was proved by breaking it
+deliberately.
+
+*Corrected mid-change*: this was first written up as "a hand-maintained copy
+with nothing checking it", which was half wrong. `tools/sync-ds.py` had done the
+copying since 0.7.1 and is why the landmine below was defused; it was found only
+after the replacement had been written, which is a search that should have
+happened first. What was genuinely missing was anything *running* it — no CI
+step, no npm script, no gate. The new script keeps the old one's tripwire (it
+refuses when `ui/ds/` holds rules the source lacks, rather than clobbering them)
+and adds the check; `sync-ds.py` is deleted rather than left as a second answer.
 
 Item 6's placement now has a reason rather than a cost: a problems panel
 belongs neither to the drawing nor to the selection — it is what you consult

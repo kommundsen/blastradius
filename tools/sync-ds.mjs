@@ -1,14 +1,26 @@
 // Keep ui/ds in step with design-system (ADR-0020).
 //
 // `design-system/` is the source; `ui/ds/` is the subset that ships inside the
-// app and, via tools/build-site.mjs, inside the docs site. Until now that
-// subset was a hand-maintained copy with nothing checking it — a product whose
-// thesis is that documentation cannot quietly rot, carrying a copy of its own
-// design system that could.
+// app and, via tools/build-site.mjs, inside the docs site. A sync script has
+// existed since 0.7.1 (`tools/sync-ds.py`, replaced by this one) — what did not
+// exist was anything *running* it: nothing in CI, nothing in npm, no gate. So
+// a product whose thesis is that documentation cannot quietly rot carried a
+// copy of its own design system that could.
 //
 // The shape of the fix is the one the product already uses for facts:
 // regenerate, or `--check` and fail the build. `blastradius introspect
 // --check` is the same idea pointed at source code.
+//
+// THE CATCH, kept from the script this replaces because it was found the hard
+// way in 0.7.1: `ui/ds/` is *documented* as generated and has not always been
+// *treated* as generated. It had been edited directly and was ahead — deployment
+// node styles, group boundaries and three tokens existed only there — and a
+// wholesale copy silently removed shipped styles and broke the headless
+// renderer, which reads its tokens out of ui/ds/. So a sync REFUSES rather than
+// clobbering: before overwriting any stylesheet it checks that every selector
+// and custom property already in the destination still exists in the source,
+// names what would be lost, and writes nothing. Reconcile by hand — copy the
+// drifted rules back into design-system/ — and run it again.
 //
 // What ships is *derived*, not listed: whatever `styles.css` imports,
 // transitively, plus `assets/` (fonts and the brand marks, which the CSS and
@@ -57,7 +69,41 @@ function filesUnder(rel) {
 
 const shipped = [...importGraph(ENTRY), ...filesUnder('assets')];
 
+// Deliberately crude: a "did something disappear" tripwire, not a CSS parser.
+const DECL = /(--[a-z0-9-]+)\s*:/gi;
+const SELECTOR = /^([.#][A-Za-z][\w.>\s:()[\]="'-]*)\s*\{/gm;
+
+function cssNames(text) {
+  const out = new Set();
+  for (const m of text.matchAll(DECL)) out.add(m[1]);
+  for (const m of text.matchAll(SELECTOR)) out.add(m[1].trim());
+  return out;
+}
+
+/** Rules the shipped copy has that the source does not — the dangerous
+ *  direction, and the one a plain overwrite destroys silently. */
+function wouldLose(rel) {
+  if (!rel.endsWith('.css') || !existsSync(join(DST, rel))) return [];
+  const from = cssNames(readFileSync(join(SRC, rel), 'utf8'));
+  const to = cssNames(readFileSync(join(DST, rel), 'utf8'));
+  return [...to].filter((n) => !from.has(n)).sort();
+}
+
 const check = process.argv.includes('--check');
+const losses = shipped.map((rel) => [rel, wouldLose(rel)]).filter(([, l]) => l.length);
+
+if (losses.length) {
+  console.error('ui/ds has rules design-system does not:\n');
+  for (const [rel, names] of losses) {
+    console.error(`  ${rel} would lose:`);
+    for (const n of names) console.error(`    ${n}`);
+  }
+  console.error('\nui/ds is generated, but it has been edited directly and is ahead —');
+  console.error('the 0.7.1 landmine. Copy those rules into design-system/ first.');
+  console.error('Nothing was written.');
+  process.exit(1);
+}
+
 const drifted = [];
 const missing = [];
 
