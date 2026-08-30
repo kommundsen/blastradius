@@ -2,6 +2,7 @@
 // in the constraining engine against the mock harness — identical modules and
 // CSS to the Tauri window.
 import { test, expect } from '@playwright/test';
+import { barAction } from './_chrome.mjs';
 
 test.beforeEach(async ({ page }) => {
   const errors = [];
@@ -299,12 +300,12 @@ test('edge labels knock out the grid (paint-order support)', async ({ page }) =>
 test('theme pin overrides and returns to OS', async ({ page }) => {
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   const auto = await bg();
-  await page.locator('#theme-btn').click(); // light
+  await barAction(page, 'Theme'); // light
   const light = await bg();
-  await page.locator('#theme-btn').click(); // dark
+  await barAction(page, 'Theme'); // dark
   const dark = await bg();
   expect(light).not.toEqual(dark);
-  await page.locator('#theme-btn').click(); // back to auto
+  await barAction(page, 'Theme'); // back to auto
   expect(await bg()).toEqual(auto);
 });
 

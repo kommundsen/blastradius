@@ -1,6 +1,7 @@
 // Bundled in-app help (docs/roadmap.md 0.4.0 theme 3): reachable, offline,
 // and navigable without leaving the app.
 import { test, expect } from '@playwright/test';
+import { barAction } from './_chrome.mjs';
 
 test.beforeEach(async ({ page }) => {
   const errors = [];
@@ -12,7 +13,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('Help opens an index covering every feature area', async ({ page }) => {
-  await page.locator('#help-btn').click();
+  await barAction(page, 'Help');
   await expect(page.locator('#side-title')).toHaveText('Help');
 
   // The exit criterion: every shipped feature is reachable from here.
@@ -35,7 +36,7 @@ test('Help opens an index covering every feature area', async ({ page }) => {
 });
 
 test('a page renders its markdown, and cross-links stay in the panel', async ({ page }) => {
-  await page.locator('#help-btn').click();
+  await barAction(page, 'Help');
   await page.locator('#side-body [data-help="getting-started"]').click();
   await expect(page.locator('#side-title')).toHaveText('Getting started');
   await expect(page.locator('.doc-body h1')).toHaveText('Getting started');
@@ -69,7 +70,7 @@ test('clicking an element leaves help for the inspector', async ({ page }) => {
   // relation but not help, and renderSide tests help first — so the canvas
   // selection moved while the panel stayed on help, with no way back short of
   // finding the toggle again.
-  await page.locator('#help-btn').click();
+  await barAction(page, 'Help');
   await expect(page.locator('#side-title')).toHaveText('Help');
 
   const node = page.locator('#nodes .node').first();
@@ -81,7 +82,7 @@ test('clicking an element leaves help for the inspector', async ({ page }) => {
   expect(id).toBeTruthy();
 
   // And the button is still a way out and back in.
-  await page.locator('#help-btn').click();
+  await barAction(page, 'Help');
   await expect(page.locator('#side-title')).toHaveText('Help');
   expect(page.errors).toEqual([]);
 });
@@ -93,7 +94,7 @@ test('help never reaches the network', async ({ page }) => {
     if (!url.startsWith('http://127.0.0.1') && !url.startsWith('http://localhost')) external.push(url);
     return route.continue();
   });
-  await page.locator('#help-btn').click();
+  await barAction(page, 'Help');
   for (const id of ['getting-started', 'deployment', 'privacy']) {
     await page.locator(`#side-body [data-help="${id}"]`).click();
     await expect(page.locator('.doc-body')).toBeVisible();

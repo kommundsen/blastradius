@@ -579,7 +579,7 @@
         {
           "id": "blastradius.core.sync-engine.src.sync.FileChange",
           "kind": "class",
-          "line": 105,
+          "line": 133,
           "name": "FileChange",
           "parent": "blastradius.core.sync-engine.src.sync",
           "path": "crates/blastradius-core/src/sync.rs"
@@ -587,7 +587,7 @@
         {
           "id": "blastradius.core.sync-engine.src.sync.JournalEvent",
           "kind": "enum",
-          "line": 1615,
+          "line": 1725,
           "name": "JournalEvent",
           "parent": "blastradius.core.sync-engine.src.sync",
           "path": "crates/blastradius-core/src/sync.rs"
@@ -611,7 +611,7 @@
         {
           "id": "blastradius.core.sync-engine.src.sync.SyncEngine",
           "kind": "class",
-          "line": 140,
+          "line": 168,
           "name": "SyncEngine",
           "parent": "blastradius.core.sync-engine.src.sync",
           "path": "crates/blastradius-core/src/sync.rs"
@@ -619,7 +619,7 @@
         {
           "id": "blastradius.core.sync-engine.src.sync.Transaction",
           "kind": "class",
-          "line": 132,
+          "line": 160,
           "name": "Transaction",
           "parent": "blastradius.core.sync-engine.src.sync",
           "path": "crates/blastradius-core/src/sync.rs"
@@ -627,7 +627,7 @@
         {
           "id": "blastradius.core.sync-engine.src.sync.ViewFileTarget",
           "kind": "enum",
-          "line": 124,
+          "line": 152,
           "name": "ViewFileTarget",
           "parent": "blastradius.core.sync-engine.src.sync",
           "path": "crates/blastradius-core/src/sync.rs"
@@ -635,7 +635,7 @@
         {
           "id": "blastradius.core.sync-engine.src.sync.ViewTarget",
           "kind": "enum",
-          "line": 114,
+          "line": 142,
           "name": "ViewTarget",
           "parent": "blastradius.core.sync-engine.src.sync",
           "path": "crates/blastradius-core/src/sync.rs"

@@ -1,6 +1,7 @@
 // Phase 2 rendering gate: diff mode, ghosts, conflict inspector, history,
 // time-travel — against the fabricated mock/git.json fixture, in WebKit.
 import { test, expect } from '@playwright/test';
+import { barAction, barOffers } from './_chrome.mjs';
 
 test.beforeEach(async ({ page }) => {
   const errors = [];
@@ -14,8 +15,10 @@ test.beforeEach(async ({ page }) => {
 test('git chrome renders branch and conflict chip', async ({ page }) => {
   await expect(page.locator('#git-chips')).toContainText('⎇ feature/sync-engine');
   await expect(page.locator('#git-chips .tag-danger')).toContainText('1 conflicted');
-  await expect(page.locator('#diff-btn')).toBeVisible();
-  await expect(page.locator('#history-btn')).toBeVisible();
+  // Both live in the ⋯ menu now (ADR-0020), and a git base is what makes
+  // them exist at all — so their presence there is the assertion.
+  expect(await barOffers(page, 'Diff')).toBe(true);
+  expect(await barOffers(page, 'History')).toBe(true);
   expect(page.errors).toEqual([]);
 });
 
@@ -25,7 +28,7 @@ test('diff mode: states, ghost, counts, layout toggle', async ({ page }) => {
   await node('Blastradius').dblclick();
   await expect(page.locator('#breadcrumb')).toContainText('Containers');
 
-  await page.locator('#diff-btn').click();
+  await barAction(page, 'Diff');
   await expect(page.locator('#git-chips .tag-success')).toContainText('1 added');
   await expect(page.locator('#git-chips .tag-warning')).toContainText('1 changed');
   await expect(page.locator('#git-chips .tag-danger').last()).toContainText('1 removed');
@@ -81,7 +84,7 @@ test('in-app resolution: pick a side, apply, conflict clears (0.2.0)', async ({ 
 });
 
 test('history: set base recomputes, view travels and returns', async ({ page }) => {
-  await page.locator('#history-btn').click();
+  await barAction(page, 'History');
   await expect(page.locator('#side-title')).toHaveText('History');
   await expect(page.locator('.hist-row')).toHaveCount(3);
 

@@ -1955,7 +1955,10 @@ with an estimate.
 five-minute metric just got: either it is planned or it is retired. A $99/year
 developer account and no evidence anyone wants it is not a plan.
 
-**Hygiene, foldable into anything**: the eleven raw NUL bytes in
+**Hygiene, foldable into anything**: `ui/ds/` is a hand-maintained copy of
+`design-system/` with no sync gate (found by ADR-0020, which had to edit both) —
+a product about documentation that cannot quietly rot, with a copy of its own
+design system that can; the eleven raw NUL bytes in
 `extractors/dotnet/Program.cs` (noted in 0.10.0, behaviour-neutral to fix,
 touches the byte-exact fixture gate so it wants its own diff), the `glib`
 advisory that arrives with a Tauri bump, and the `writable()` question from

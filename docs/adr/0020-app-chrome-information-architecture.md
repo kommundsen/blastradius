@@ -98,9 +98,29 @@ feature has somewhere to be told no:
 A new control goes in the menu unless someone argues it into the always list,
 which is the direction the default should point.
 
-**Gated, not asserted**: `chrome-audit.spec.mjs` becomes a gate that fails the
-build if any bar control is pushed off-screen at 480px — the minimum window the
-app itself permits. A rule with no test is a comment.
+**Gated, not asserted**: `chrome-audit.spec.mjs` fails the build if any bar
+control is pushed off-screen at 480px — the minimum window the app itself
+permits. A rule with no test is a comment.
+
+#### What implementing it changed
+
+Moving five buttons was not enough on its own: at 480px the bar was still 29px
+over. The measurement said why, and it was not the buttons.
+
+- **Empty slots were costing a gap each.** The breadcrumb, the git chips, the
+  diagnostics chips and the spacer are all zero-width when there is nothing to
+  say, and the bar was paying its full 14px gap around every one of them —
+  roughly 70px of pure nothing. Empty chip spans are now `display: none`, with
+  the spacer exempt because being empty is its whole job.
+- **A narrow window tightens the rhythm** before it drops another control:
+  `gap` steps from `--space-4` to `--space-2` under 680px, which is the
+  language the density steps already speak.
+- **Find gets a fourth drop step**, at 520px, and this is the one place the
+  decision above bent. Find holds down to 560px, but at 480 the level segment
+  alone is 169px and something has to yield. Find is the only candidate whose
+  keyboard route survives — Ctrl+K still opens it — so it drops last rather
+  than not at all. `bar-drop-4` is new; `bar-drop-1` and `bar-drop-3` remain
+  tagged on nothing, which is now a deliberate reserve rather than an oversight.
 
 ### 2. Three regions, three jobs
 
@@ -144,6 +164,13 @@ inspector at 810px is not the problem and is not to be cut to make a point.
 - The design system gains a page it did not have: which region a surface
   belongs in. `design-system/guidelines/` documents tokens, density and
   elevation, and has never documented information architecture.
+- `.app-bar`'s rules changed in `design-system/components/components.css`, and
+  therefore in `ui/ds/components/components.css` — **which is a hand-maintained
+  copy with nothing checking it**. The two were byte-identical before this
+  change and are byte-identical after it, by hand. A product whose thesis is
+  that documentation should not be able to rot quietly has a copy of its own
+  design system that can, and no gate on it. Recorded here rather than fixed:
+  it is a build-pipeline question, not a chrome one.
 
 ## What this deliberately does not decide
 

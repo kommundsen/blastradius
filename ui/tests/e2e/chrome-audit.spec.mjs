@@ -1,6 +1,10 @@
-// A measurement, not a gate (0.11.0 design review). Records what the app bar,
-// the canvas overlays and the inspector actually do, so the review argues from
-// numbers rather than from an impression of clutter.
+// The chrome's size contract (ADR-0020), and the measurements the review that
+// wrote it argued from.
+//
+// The gate is the first test: nothing in the app bar may be pushed off-screen
+// at the smallest window the app itself permits (480px, `min_inner_size`).
+// Before ADR-0020 that failed — Open, Help and Share were unreachable there,
+// and Share is the primary action. A rule with no test is a comment.
 //
 // Run: npx playwright test chrome-audit --reporter=line
 import { test, expect } from '@playwright/test';
@@ -9,6 +13,40 @@ const WIDTHS = [1280, 980, 820, 680, 560, 480];
 
 const node = (page, t) =>
   page.locator('#nodes .node', { has: page.locator('.node-title', { hasText: t }) });
+
+test('nothing in the app bar is unreachable at the smallest allowed window', async ({ page }) => {
+  await page.goto('/index.html?nogit');
+  await expect(page.locator('#nodes .node')).not.toHaveCount(0);
+  // 480x400 is `min_inner_size` in crates/blastradius-app/src — the app lets
+  // the user get here, so the app has to work here.
+  await page.setViewportSize({ width: 480, height: 400 });
+  await page.waitForTimeout(120);
+  const bad = await page.evaluate(() => {
+    const bar = document.querySelector('.app-bar');
+    return [...bar.querySelectorAll('button')]
+      .filter((b) => !b.hidden && !b.closest('[hidden]'))
+      .filter((b) => {
+        const r = b.getBoundingClientRect();
+        return r.width > 0 && r.right > bar.clientWidth + 1;
+      })
+      .map((b) => b.id);
+  });
+  expect(bad, 'bar controls pushed off-screen at 480px').toEqual([]);
+  // And the one thing the product is for is still there.
+  await expect(page.locator('#share-btn')).toBeVisible();
+  await expect(page.locator('#more-btn')).toBeVisible();
+});
+
+test('the overflow menu carries what the bar no longer does', async ({ page }) => {
+  await page.goto('/index.html?nogit');
+  await expect(page.locator('#nodes .node')).not.toHaveCount(0);
+  await page.locator('#more-btn').click();
+  const items = page.locator('.ctx-menu .ctx-item');
+  // No git base in ?nogit, so Diff and History are absent rather than greyed.
+  await expect(items).toHaveText([/Open/, /Theme/, /Help/]);
+  await page.locator('.ctx-menu .ctx-item', { hasText: 'Help' }).click();
+  await expect(page.locator('#side-body')).toContainText('Getting started');
+});
 
 test('measure the app bar as the window narrows', async ({ page }) => {
   await page.goto('/index.html?nogit');

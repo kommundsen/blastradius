@@ -31,13 +31,21 @@
     <span class="app-bar-spacer"></span>
     <button class="btn btn-secondary" id="undo-btn" disabled title="Undo (Ctrl+Z)">↶</button>
     <button class="btn btn-secondary" id="redo-btn" disabled title="Redo (Ctrl+Y)">↷</button>
-    <button class="btn btn-secondary" id="diff-btn" hidden title="Semantic diff vs base (spec/git-and-diff.md)">Diff</button>
-    <button class="btn btn-secondary" id="history-btn" hidden>History</button>
-    <button class="btn btn-secondary" id="find-btn" title="Find in the model (Ctrl+K)">Find</button>
-    <button class="btn btn-secondary" id="open-btn" title="Open workspace folder (Ctrl+O)">Open</button>
-    <button class="btn btn-secondary bar-drop-2" id="theme-btn" title="Theme: follow OS">Theme</button>
-    <button class="btn btn-secondary" id="help-btn" title="Help (?)">Help</button>
+    <button class="btn btn-secondary bar-drop-4" id="find-btn" title="Find in the model (Ctrl+K)">Find</button>
+    <button class="btn btn-secondary" id="more-btn" aria-haspopup="menu" aria-expanded="false"
+            title="More actions">⋯</button>
     <button class="btn btn-primary" id="share-btn">Share</button>
+    <!-- ADR-0020: the bar carries state and the primary action; these live in
+         the ⋯ menu. They stay in the DOM, hidden as a group, so their handlers
+         and their own `hidden` logic (Diff and History appear only with a git
+         base) need no second home — the menu reads them and clicks them. -->
+    <span id="bar-overflow" hidden>
+      <button class="btn btn-secondary" id="diff-btn" hidden title="Semantic diff vs base (spec/git-and-diff.md)">Diff</button>
+      <button class="btn btn-secondary" id="history-btn" hidden>History</button>
+      <button class="btn btn-secondary" id="open-btn" title="Open workspace folder (Ctrl+O)">Open</button>
+      <button class="btn btn-secondary" id="theme-btn" title="Theme: follow OS">Theme</button>
+      <button class="btn btn-secondary" id="help-btn" title="Help (?)">Help</button>
+    </span>
   </header>
 
   <div class="app-body" data-nav="open" data-side="open">

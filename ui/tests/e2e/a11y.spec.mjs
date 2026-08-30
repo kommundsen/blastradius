@@ -3,6 +3,7 @@
 // in both themes. Zero violations is the bar, not a report.
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { barAction } from './_chrome.mjs';
 
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
@@ -72,7 +73,7 @@ test('source panel (CodeMirror) is AA clean', async ({ page }) => {
 test('bundled help is AA clean (index and a page)', async ({ page }) => {
   await page.goto('/index.html?nogit');
   await expect(page.locator('#nodes .node').first()).toBeVisible();
-  await page.locator('#help-btn').click();
+  await barAction(page, 'Help');
   await expect(page.locator('#side-title')).toHaveText('Help');
   await scan(page, 'help index');
   // Shortcuts is the table-heaviest page; model format is the code-heaviest.

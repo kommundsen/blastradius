@@ -1,6 +1,7 @@
 // Phase 5 onboarding: the welcome screen (no workspace open) and the runtime
 // workspace-switch flow, exercised through the mock bridge (?noworkspace).
 import { test, expect } from '@playwright/test';
+import { barOffers } from './_chrome.mjs';
 
 test('welcome screen offers one way in', async ({ page }) => {
   await page.goto('/index.html?nogit&noworkspace');
@@ -127,7 +128,7 @@ test('a normal launch never shows the welcome screen', async ({ page }) => {
   await expect(page.locator('#nodes .node').first()).toBeVisible();
   await expect(page.locator('.welcome')).toHaveCount(0);
   // the Open button is present for runtime switching
-  await expect(page.locator('#open-btn')).toBeVisible();
+  expect(await barOffers(page, 'Open')).toBe(true);
 });
 
 test('a folder named on the command line goes straight to the offer', async ({ page }) => {

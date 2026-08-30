@@ -2,6 +2,7 @@
 // folder, no conflicts). File-level correctness is proven by the Rust torture
 // test; this suite proves the surfaces drive the operations.
 import { test, expect } from '@playwright/test';
+import { barAction } from './_chrome.mjs';
 
 test.beforeEach(async ({ page }) => {
   const errors = [];
@@ -516,7 +517,7 @@ test('drift is not drawn over a diff, where it would be about another tree', asy
   await node(page, 'Blastradius').dblclick();
   await node(page, 'Core').first().dblclick();
   await expect(page.locator('#edges path.edge.is-drift')).toHaveCount(1);
-  await page.locator('#diff-btn').click();
+  await barAction(page, 'Diff');
   await expect(page.locator('#edges path.edge.is-drift')).toHaveCount(0);
   expect(page.errors).toEqual([]);
 });

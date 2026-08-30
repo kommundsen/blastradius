@@ -242,6 +242,7 @@ const els = {
   sideBack: $('side-back'), levelSeg: $('level-seg'), diagChips: $('diag-chips'),
   helpBtn: $('help-btn'),
   hint: $('hint'), themeBtn: $('theme-btn'), tour: $('tour'), blank: $('canvas-blank'),
+  moreBtn: $('more-btn'),
   gitChips: $('git-chips'), diffBtn: $('diff-btn'), historyBtn: $('history-btn'),
   undoBtn: $('undo-btn'), redoBtn: $('redo-btn'), addBtn: $('add-btn'),
   sideMode: $('side-mode'), srcStatus: $('src-status'), findBtn: $('find-btn'),
@@ -1017,6 +1018,7 @@ function wireChrome() {
   // theme cycle: auto -> light -> dark
   let theme = 'auto';
   document.getElementById('open-btn').addEventListener('click', () => openWorkspaceFlow('open'));
+  els.moreBtn.addEventListener('click', openBarMenu);
   els.themeBtn.addEventListener('click', () => {
     theme = theme === 'auto' ? 'light' : theme === 'light' ? 'dark' : 'auto';
     if (theme === 'auto') document.documentElement.removeAttribute('data-theme');
@@ -2678,6 +2680,7 @@ function selectRelation(edge) {
 let ctxMenu = null;
 
 function closeNodeMenu() {
+  els.moreBtn?.setAttribute('aria-expanded', 'false');
   ctxMenu?.remove();
   ctxMenu = null;
 }
@@ -2748,6 +2751,37 @@ function unpin(id) {
 
 /** Right-click on the canvas itself, where there is no box to talk about: the
  *  view's own layout is the only thing left to say something about. */
+/**
+ * The app bar's overflow menu (ADR-0020). The bar carries where you are, what
+ * is true, what you just did, Find and Share; everything else is here.
+ *
+ * Items name real buttons in `#bar-overflow` rather than duplicating their
+ * work: the handler, the label and the conditions under which the action
+ * exists at all (Diff and History need a git base) already live on those
+ * buttons, and a second copy would be a second thing to keep in step.
+ */
+const BAR_MENU = [
+  { id: 'diff-btn', key: null },
+  { id: 'history-btn', key: null },
+  { id: 'open-btn', key: 'Ctrl+O' },
+  { id: 'theme-btn', key: null },
+  { id: 'help-btn', key: '?' },
+];
+
+function openBarMenu(ev) {
+  const items = [];
+  for (const { id, key } of BAR_MENU) {
+    const btn = document.getElementById(id);
+    if (!btn || btn.hidden) continue;   // an action that does not apply is not greyed out, it is absent
+    items.push({ id, label: key ? `${btn.textContent} · ${key}` : btn.textContent });
+  }
+  const run = Object.fromEntries(
+    items.map((i) => [i.id, () => document.getElementById(i.id).click()])
+  );
+  els.moreBtn.setAttribute('aria-expanded', 'true');
+  showMenu(ev, items, run);
+}
+
 function openCanvasMenu(ev) {
   if (ev.target.closest('.node')) return;
   closeNodeMenu();

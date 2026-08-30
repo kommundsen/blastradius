@@ -173,9 +173,24 @@ textarea.input { min-height: 90px; resize: vertical; }
 /* Bar items declare how readily they may be dropped as the window narrows, lowest first.
    Without this the bar simply overflows: a 4-step level switcher, three status chips and
    two buttons cannot coexist at 480px. */
+/* ADR-0020. An empty slot must not cost a gap: the bar's chips are spans that
+   render nothing until there is something to say, and at 480px the gaps around
+   five zero-width children were ~70px of the measured overflow. The spacer is
+   deliberately empty — it is the thing that pushes the actions right — so it is
+   exempt. */
+.app-bar > span:empty:not(.app-bar-spacer) { display: none; }
+/* And a narrow window tightens the rhythm before it drops another control,
+   which is the language the density steps already speak. */
+@container appwin (max-width: 680px) { .app-bar { gap: var(--space-2); } }
 @container appwin (max-width: 980px) { .app-bar .bar-drop-1 { display: none; } }
 @container appwin (max-width: 820px) { .app-bar .bar-drop-2 { display: none; } }
 @container appwin (max-width: 680px) { .app-bar .bar-drop-3 { display: none; } }
+/* A fourth step, at the window's own minimum (480px, `min_inner_size`). Only
+   Find uses it: ADR-0020 keeps Find in the bar because it is the entry to any
+   model bigger than a screen, and it holds down to 560px — but at 480 the
+   level segment alone is 169px and something has to yield. Ctrl+K still
+   opens it, which is not true of anything else the bar would give up. */
+@container appwin (max-width: 520px) { .app-bar .bar-drop-4 { display: none; } }
 .app-body { flex: 1; min-height: 0; display: flex; position: relative;
   container-type: inline-size; container-name: app; }
 
