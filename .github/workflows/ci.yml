@@ -52,6 +52,11 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
+      # ui/ds is the design-system subset the app ships (ADR-0020). It was a
+      # hand-maintained copy with nothing checking it; this is the same shape
+      # as `introspect --check` — regenerate, or fail the build.
+      - name: Design system is in step with its shipped copy (ADR-0020)
+        run: node tools/sync-ds.mjs --check
       # Globbed, not listed. The list was hand-maintained and had fallen two
       # suites behind: menu.test.mjs (the gate that fails the build when a sync
       # operation is neither offered on the box nor excused) and drift.test.mjs

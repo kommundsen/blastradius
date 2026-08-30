@@ -4,6 +4,18 @@ The brand and component system for **Blastradius** — a local-first desktop app
 
 Derived from the Industry blueprint direction (steel-blue wireframe on a light technical ground) and extended with the app's own diagram grammar.
 
+## The shipped copy
+
+`ui/ds/` is the subset the app loads at runtime, and `tools/build-site.mjs`
+copies that into the docs site. **It is generated — do not edit it by hand.**
+
+    npm run ds:sync     # design-system/ -> ui/ds/
+    npm run ds:check    # fail if they differ (runs in CI)
+
+What ships is whatever `styles.css` imports, transitively, plus `assets/`; the
+guidelines, templates, UI kits and the bundle are authoring material and stay
+here. Before ADR-0020 the copy was hand-maintained with nothing checking it.
+
 ## Content fundamentals
 
 - Tone: modern dev-tool — matter-of-fact, confident, no exclamation marks, no emoji.

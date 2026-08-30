@@ -165,12 +165,20 @@ inspector at 810px is not the problem and is not to be cut to make a point.
   belongs in. `design-system/guidelines/` documents tokens, density and
   elevation, and has never documented information architecture.
 - `.app-bar`'s rules changed in `design-system/components/components.css`, and
-  therefore in `ui/ds/components/components.css` — **which is a hand-maintained
-  copy with nothing checking it**. The two were byte-identical before this
-  change and are byte-identical after it, by hand. A product whose thesis is
-  that documentation should not be able to rot quietly has a copy of its own
-  design system that can, and no gate on it. Recorded here rather than fixed:
-  it is a build-pipeline question, not a chrome one.
+  therefore in `ui/ds/components/components.css` — **which was a hand-maintained
+  copy with nothing checking it**. A product whose thesis is that documentation
+  should not be able to rot quietly had a copy of its own design system that
+  could. Found by this change having to edit both by hand, and **fixed in the
+  same release**: `tools/sync-ds.mjs` copies the source to the shipped subset,
+  and `--check` fails the build when they differ — the same shape as
+  `blastradius introspect --check`, which is the product's own answer to
+  exactly this problem pointed at source code.
+
+  What ships is derived rather than listed: whatever `styles.css` imports,
+  transitively, plus `assets/`. Adding a file to the design system does not need
+  the script edited — importing it does. A file in the copy that nothing imports
+  any more is reported as orphaned and left alone, because a script that quietly
+  deletes is a script nobody runs.
 
 ## What this deliberately does not decide
 

@@ -1842,6 +1842,43 @@ difference between a report and a workflow. *Draft exit*: every finding in the
 panel is actionable without leaving it, asserted in e2e against seeded drift of
 both kinds.
 
+### The design review, and the app bar — shipped 2026-08-30
+
+Called by the owner mid-decision on item 6's placement: "at some point we need
+a design review. Things are starting to become cluttered." **ADR-0020** is the
+answer, argued from `ui/tests/e2e/chrome-audit.spec.mjs` rather than from an
+impression.
+
+It found a defect rather than a matter of taste. The app bar is
+`flex-wrap: nowrap` with a drop mechanism at three breakpoints and one of nine
+buttons using it; at 560px Help and Share were pushed off-screen, and at 480px —
+the window's own `min_inner_size` — Open, Help and Share were, with no menu
+behind them. Fixed: five actions moved into a ⋯ menu, empty chip slots stopped
+costing a 14px gap each (~70px of nothing at that width), the gap tightens under
+680px, and Find drops last at 520px where Ctrl+K still reaches it. Zero overflow
+from 1280 to 480, asserted at the minimum window.
+
+Two things the measurement corrected. **The canvas overlays were fine** — 3.1%
+and 10.7% of the canvas, the tour card already `pointer-events: none`; the thing
+most feared was the thing already handled. And **the inspector density was not
+where it was blamed**: the relation inspector item 5 had just touched is the
+lightest of the three (3 inputs, 4 buttons, 810px) against the system
+inspector's 5, 8 and 907px, which nothing recent touched. All three already
+overflow the ~747px panel at the default window.
+
+**The design system's shipped copy can no longer rot.** `ui/ds/` was a
+hand-maintained subset of `design-system/` with nothing checking it — found
+because this change had to edit both by hand. `tools/sync-ds.mjs` syncs it and
+`--check` fails the build on drift, which is `introspect --check` pointed at
+the design system instead of at source. What ships is derived from what
+`styles.css` imports, so adding a file to the design system does not need the
+script edited. The gate was proved by breaking it deliberately.
+
+Item 6's placement now has a reason rather than a cost: a problems panel
+belongs neither to the drawing nor to the selection — it is what you consult
+*before* there is a selection, and it must survive while you fix what it points
+at — so it is a dismissible panel anchored to the chip that counts it.
+
 ### 5 — shipped 2026-08-30: relation repair
 
 **Found on the first read, 2026-08-30**: 0.9.0's *Reverse it* is a UI-level
@@ -1955,10 +1992,7 @@ with an estimate.
 five-minute metric just got: either it is planned or it is retired. A $99/year
 developer account and no evidence anyone wants it is not a plan.
 
-**Hygiene, foldable into anything**: `ui/ds/` is a hand-maintained copy of
-`design-system/` with no sync gate (found by ADR-0020, which had to edit both) —
-a product about documentation that cannot quietly rot, with a copy of its own
-design system that can; the eleven raw NUL bytes in
+**Hygiene, foldable into anything**: the eleven raw NUL bytes in
 `extractors/dotnet/Program.cs` (noted in 0.10.0, behaviour-neutral to fix,
 touches the byte-exact fixture gate so it wants its own diff), the `glib`
 advisory that arrives with a Tauri bump, and the `writable()` question from
