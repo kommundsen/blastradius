@@ -1818,7 +1818,7 @@ one, H behind the ADR-0003 amendment it requires.
 (still owed, carried), macOS distribution (deferred five times), and the
 `writable()` open question from 0.7.0.
 
-## 0.11.0 — candidate pool (2026-08-30): keeping a model, not just making one
+## 0.11.0 — released (2026-08-30): keeping a model, not just making one
 
 **Picked 2026-08-30** (owner): **5 and 6**, the pair the pool argued were one
 release. Sequence **5 → 6**, which is dependency order rather than
@@ -1827,6 +1827,38 @@ them, so the panel never ships pointing at problems the app cannot fix. 7 was
 considered and cut, which is what the pool said it was for; 8 stays blocked on
 the ADR-0003 question rather than being answered by an implementation; A and B
 lost to depth again, and this pool noticed that out loud before doing it.
+
+**What actually shipped, and it is more than the two items.** Three of the five
+things below were not planned, and each was found rather than scheduled — which
+is the honest shape of the release and worth reading in that order:
+
+1. **5 — relation repair.** Direction, endpoint re-pointing and reversal, each
+   an in-place splice. Found on the first read that 0.9.0's *Reverse it*
+   silently dropped `direction`, which is this item's own failure mode in the
+   one repair that had already shipped.
+2. **The design review (ADR-0020)**, called by the owner mid-decision on where
+   item 6 should go — "things are starting to become cluttered". Measured
+   rather than argued, and it found the app bar hiding its own controls: at the
+   window's declared minimum, Open, Help and **Share** were unreachable.
+3. **The design system's shipped copy can no longer rot** — `ui/ds/` had a sync
+   script since 0.7.1 and nothing that ran it. Now gated in CI, with the older
+   script's anti-clobber tripwire kept.
+4. **6 — the problems panel**, into the home the ADR gave it, with the repair on
+   the row rather than at the end of a journey.
+5. **A container instance could not be created at all**, reported from a real
+   modelling session over MCP. A whole element kind was unreachable through any
+   operation; a format-preservation bug in flow mappings fell out of fixing it.
+
+And `docs/release-checklist.md`: half an hour of manual smoke testing before a
+release, scoped to exactly what the automated gates cannot reach.
+
+**Two documents were amended by the work rather than after it**, which is the
+part worth keeping. ADR-0020 promised the problems panel would never eat a
+gesture aimed at a node beneath it, copying the tour card's rule; a panel with
+buttons cannot do that, an e2e test caught it doing exactly what the sentence
+forbade, and the guarantee was replaced with an achievable one. And the same
+ADR called `ui/ds/` "a hand-maintained copy with nothing checking it", which
+was half wrong — the script existed and was careful, and only ever went unrun.
 
 The product can create a model, write to it, and detect when it
 rots. What it cannot do is help you *keep* it — which is the whole proposition,
