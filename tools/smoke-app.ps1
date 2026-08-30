@@ -126,10 +126,17 @@ export function summarise(orders: Order[]): number {
 
   $outLog = Join-Path ([System.IO.Path]::GetTempPath()) 'br-app-smoke.out'
   $errLog = Join-Path ([System.IO.Path]::GetTempPath()) 'br-app-smoke.err'
+  # WebView2 shares one browser process per user data folder, and additional
+  # browser arguments apply only when that process is *created*. A run that
+  # attaches to an existing browser silently inherits its command line — and
+  # therefore no debugging port. Its own folder makes the browser process ours.
+  $udf = Join-Path ([System.IO.Path]::GetTempPath()) ("br-app-smoke-udf-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
+  $env:WEBVIEW2_USER_DATA_FOLDER = $udf
   $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$Port"
   $proc = Start-Process -FilePath $appExe -ArgumentList $scratch -PassThru `
     -RedirectStandardOutput $outLog -RedirectStandardError $errLog
   Remove-Item Env:\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS
+  Remove-Item Env:\WEBVIEW2_USER_DATA_FOLDER
 
   $deadline = (Get-Date).AddSeconds(60)
   $up = $false
@@ -156,6 +163,18 @@ export function summarise(orders: Order[]): number {
       Write-Host "    main window handle: $($proc.MainWindowHandle)"
       $kids = @(Get-Process -Name 'msedgewebview2' -ErrorAction SilentlyContinue)
       Write-Host "    msedgewebview2 processes: $($kids.Count)"
+      # The decisive one: did our argument reach the browser process at all?
+      # Present means WebView2 took it and something else swallowed the port;
+      # absent means the environment variable never applied — most likely
+      # because wry passes its own additional browser arguments, which
+      # override it outright.
+      $cmdlines = @(Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'" -ErrorAction SilentlyContinue |
+        Select-Object -ExpandProperty CommandLine)
+      $browser = @($cmdlines | Where-Object { $_ -and $_ -notmatch '--type=' })
+      Write-Host "    browser process command lines: $($browser.Count) of $($cmdlines.Count)"
+      foreach ($c in $browser) { Write-Host "      $c" }
+      Write-Host "    any mentioning our port: $(@($cmdlines | Where-Object { $_ -match [regex]::Escape("remote-debugging-port=$Port") }).Count)"
+      Write-Host "    user data folder: $udf (exists=$(Test-Path $udf))"
       $listening = & netstat -ano 2>$null | Select-String ":$Port\s"
       Write-Host "    listening on $Port : $(if ($listening) { ($listening -join '; ').Trim() } else { 'nothing' })"
     }
@@ -202,5 +221,10 @@ export function summarise(orders: Order[]): number {
   if ($acl) { Set-Acl $staged $acl }
   if ($scratch -and (Test-Path $scratch) -and -not $KeepScratch) {
     Remove-Item -Recurse -Force $scratch -ErrorAction SilentlyContinue
+  }
+  # The browser process holds the folder open for a moment after it is asked
+  # to stop, so this is best-effort rather than asserted.
+  if ($udf -and (Test-Path $udf) -and -not $KeepScratch) {
+    Remove-Item -Recurse -Force $udf -ErrorAction SilentlyContinue
   }
 }
