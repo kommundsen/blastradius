@@ -2115,6 +2115,22 @@ with an estimate.
 five-minute metric just got: either it is planned or it is retired. A $99/year
 developer account and no evidence anyone wants it is not a plan.
 
+**The WebKit render budget is a flaky gate** (measured 2026-08-30). `perf.spec.mjs`
+asserts a dive round-trip lands under 100ms, best-of-3. Across recent *green* CI
+runs it measured 51ms, 68ms and 80ms; the 0.11.0 bump measured 105 and failed
+the build. The spread is the runner, not the code — the same commit measures
+50, 49, 50 locally, and removing the change first suspected of causing it
+(`renderDiagnostics` on every canvas render) measures 53, 51, 49, which is no
+difference at all.
+
+So the gate has roughly 20ms of headroom against 50ms of observed variance, and
+it will keep failing releases at random. Three honest options, none taken yet
+because it is a decision about what the budget is *for*: raise it to something
+the runner can hold, take more samples and compare medians rather than a
+best-of-3 that a single slow sample still poisons, or move it off the shared
+runner entirely — the Rust half (`budgets.rs`) is release-gated for exactly this
+reason and this half is not.
+
 **A JSON Schema, so editors understand the format** (raised 2026-08-30). There
 is none today — `find . -name '*.schema.json'` is empty — so a person editing
 `model/*.yaml` by hand in VS Code gets no completion, no hover, and no error

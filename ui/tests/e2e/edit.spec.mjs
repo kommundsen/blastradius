@@ -637,6 +637,11 @@ test('a container instance is created with the container it runs', async ({ page
   await page.locator('#level-seg .seg-opt', { hasText: 'D' }).click();
   await expect(page.locator('#breadcrumb')).toContainText('Deployment');
   await node(page, 'Developer Machine').first().dblclick();
+  // Wait for arrival, not for the gesture: the dive glide takes
+  // --duration-camera, and until it lands the scope is still the overview —
+  // where the only kind on offer is `environment`. The same CI-only race this
+  // file already warns about above, and it caught me too.
+  await expect(page.locator('#breadcrumb')).toContainText('Developer Machine');
 
   await page.locator('#add-btn').click();
   await page.locator('#dlg-kind').selectOption('container-instance');
@@ -655,7 +660,9 @@ test('a container instance is created with the container it runs', async ({ page
 
 test('the container field is offered to no other kind', async ({ page }) => {
   await page.locator('#level-seg .seg-opt', { hasText: 'D' }).click();
+  await expect(page.locator('#breadcrumb')).toContainText('Deployment');
   await node(page, 'Developer Machine').first().dblclick();
+  await expect(page.locator('#breadcrumb')).toContainText('Developer Machine');
   await page.locator('#add-btn').click();
   await page.locator('#dlg-kind').selectOption('deployment-node');
   await expect(page.locator('#dlg-container-field')).toBeHidden();

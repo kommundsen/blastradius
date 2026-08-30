@@ -105,7 +105,7 @@ fn create_and_delete_container_with_cascade() {
     let (t, mut e) = setup("cascade");
     e.apply(Operation::Create {
         parent: Some("shop".into()), id: "cache".into(),
-        name: "Cache".into(), kind: "container".into(),
+        name: "Cache".into(), kind: "container".into(), container: None,
     }).unwrap();
     assert!(e.model.elements.contains_key("shop.cache"));
     e.apply(Operation::AddRelation {
@@ -615,7 +615,7 @@ fn operation_that_would_invalidate_is_refused() {
     let (_t, mut e) = setup("invalid");
     let err = e.apply(Operation::Create {
         parent: Some("shop".into()), id: "web".into(), // duplicate id
-        name: "Dup".into(), kind: "container".into(),
+        name: "Dup".into(), kind: "container".into(), container: None,
     }).unwrap_err();
     assert!(err.contains("already exists"), "{err}");
     // and a relation to a missing element fails candidate validation

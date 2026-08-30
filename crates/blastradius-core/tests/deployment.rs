@@ -197,6 +197,7 @@ fn deployment_elements_can_be_created() {
             parent: None,
             name: "Staging".into(),
             kind: "environment".into(),
+            container: None,
         })
         .expect("create an environment");
     engine
@@ -205,6 +206,7 @@ fn deployment_elements_can_be_created() {
             parent: Some("production.eu-west".into()),
             name: "Database Host".into(),
             kind: "deployment-node".into(),
+            container: None,
         })
         .expect("create a nested node");
 
@@ -216,6 +218,7 @@ fn deployment_elements_can_be_created() {
             parent: Some("production.eu-west.app-server.api".into()),
             name: "Nope".into(),
             kind: "deployment-node".into(),
+            container: None,
         })
         .unwrap_err();
     assert!(err.contains("not a container instance"), "{err}");

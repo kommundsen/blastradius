@@ -251,6 +251,7 @@ fn derived_elements_load_and_are_read_only() {
             id: "manual".into(),
             name: "Manual".into(),
             kind: "component".into(),
+            container: None,
         })
         .unwrap();
     engine
