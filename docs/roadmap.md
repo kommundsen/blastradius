@@ -1813,7 +1813,77 @@ one, H behind the ADR-0003 amendment it requires.
 (still owed, carried), macOS distribution (deferred five times), and the
 `writable()` open question from 0.7.0.
 
-## 0.10.0 — planned (2026-08-29): what a user actually meets
+## 0.11.0 — candidate pool (2026-08-30): keeping a model, not just making one
+
+Unpicked. The product can create a model, write to it, and detect when it
+rots. What it cannot do is help you *keep* it — which is the whole proposition,
+since a diagram nobody maintains is the thing this exists to replace.
+
+This is also the first pool written without the five-minute-stranger run in it.
+It was retired on 2026-08-30 rather than deferred a seventh time (see 0.10.0
+below, and `docs/prd.md`), so nothing here is a proxy for a measurement that
+is coming later. Nothing is coming later. What that costs is recorded with the
+decision.
+
+**6 — A problems panel.** Validation errors and drift findings share a chip
+that opens a list of strings, clickable since 0.9.0 to open the offending file.
+But drift is structured now: a finding knows its two elements, the canvas knows
+how to fly to either, and since 0.10.0 a C# user has findings at all. A list
+that is element-shaped — click a finding, land on it, fix it there — is the
+difference between a report and a workflow. *Draft exit*: every finding in the
+panel is actionable without leaving it, asserted in e2e against seeded drift of
+both kinds.
+
+**5 — Relation repair (E, carried twice).** The thing modelling most punishes.
+0.9.0's *Reverse it* covers the one case drift can prove; everything else about
+a relation is delete-and-retype. `direction: both | none` is a model field
+with no operation, re-pointing an endpoint means losing the label and protocol,
+and adding a relation still means finding both boxes on the canvas while
+`search.js` already ranks every element for the palette. A first-time modeller
+draws relations wrong — that is the normal shape of learning a model, not a
+defect in them. *Draft exit*: `set-relation-field` covers `direction`, an
+endpoint moves without losing the rest, and a relation can be added from the
+inspector by search — with 0.10.0's contract gates keeping the mock honest
+about every new operation.
+
+**7 — Documents and ADRs from inside the app (G, carried twice).** The
+inspector's Documents section is read-only links; there is no operation for
+docs of any kind, so recording a decision means leaving the app. The skill
+teaches "attach ADRs to the elements they govern" and the app cannot do it.
+Lowest confidence of the three on value, and the first thing to cut.
+
+**8 — Move an element (H, carried twice).** Still the one modelling operation
+the product punishes hardest: delete and recreate, losing relations, pins,
+description, `descriptions:` entries and doc links. **Blocked on a decision,
+not on effort** — a move changes an element's *path*, and ADR-0003 says the
+path is the identity. Whether that was ever right is the question, and it wants
+its own short piece weighing a stable id against the path, not an
+implementation that answers it by accident.
+
+**A — The app has no runtime test on macOS or Linux.** 0.10.0 gave Windows one:
+`tools/smoke-app.ps1` drives the packaged app over CDP on every push. WebKitGTK
+has no equivalent debugging port, which is the same asymmetry ADR-0011 was
+written about, pointing the other way. It is the only platform hole left in
+runtime coverage, and it is research with an unknown floor rather than a task
+with an estimate.
+
+**B — macOS distribution**, deferred six times. Worth the same treatment the
+five-minute metric just got: either it is planned or it is retired. A $99/year
+developer account and no evidence anyone wants it is not a plan.
+
+**Hygiene, foldable into anything**: the eleven raw NUL bytes in
+`extractors/dotnet/Program.cs` (noted in 0.10.0, behaviour-neutral to fix,
+touches the byte-exact fixture gate so it wants its own diff), the `glib`
+advisory that arrives with a Tauri bump, and the `writable()` question from
+0.7.0 — now well scoped, two jobs on one image disagreeing, both logs kept.
+
+**The shape of the list.** 6 and 5 are the same release: what you do about a
+model that has stopped being true. 7 is what the model should have been
+carrying all along. 8 is a decision wearing a feature's clothes. A and B are
+reach, and reach has lost to depth in every pool so far — worth noticing
+whether that is judgement or habit.
+
+## 0.10.0 — shipped to master, not yet cut (2026-08-30): what a user actually meets
 
 0.9.0 made the app able to write the model it can draw; this pool is
 about whether that works for someone who is not the person who built it. Three
