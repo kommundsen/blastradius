@@ -388,12 +388,12 @@ fn apply_operation_publishes_the_shapes_it_accepts() {
     let ops: Vec<&str> = branches.iter().map(|b| b["properties"]["op"]["const"].as_str().unwrap()).collect();
     for expected in [
         "create", "rename", "set-field", "delete",
-        "add-relation", "delete-relation", "set-relation-field", "pin", "unpin",
-        "show-description", "set-source", "set-view-flag",
+        "add-relation", "delete-relation", "set-relation-field", "reverse-relation",
+        "pin", "unpin", "show-description", "set-source", "set-view-flag",
     ] {
         assert!(ops.contains(&expected), "operation {expected} is not in the schema: {ops:?}");
     }
-    assert_eq!(ops.len(), 12, "a variant was added to Operation without a schema branch: {ops:?}");
+    assert_eq!(ops.len(), 13, "a variant was added to Operation without a schema branch: {ops:?}");
 
     // And a malformed call comes back naming the shape, not just serde's
     // "missing field".
