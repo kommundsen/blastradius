@@ -72,7 +72,24 @@ pub enum Operation {
     Delete { id: String },
     AddRelation { from: String, to: String, label: Option<String>, protocol: Option<String> },
     DeleteRelation { from: String, to: String, label: Option<String> },
+    /// Set one field on a relation: `label`, `protocol`, `direction`, or an
+    /// endpoint (`from` / `to`).
+    ///
+    /// Re-pointing an endpoint is a splice of that one value rather than a
+    /// delete-and-re-add, which is the whole point: everything else about the
+    /// relation — the other endpoint, label, protocol, direction, its position
+    /// in the list and any comment on it — survives because nothing touched it.
+    /// 0.9.0's *Reverse it* was a delete+add pair in the UI and silently
+    /// dropped `direction`, which is the failure this shape makes impossible.
     SetRelationField { from: String, to: String, label: Option<String>, field: String, value: String },
+    /// Swap a relation's two endpoints in place.
+    ///
+    /// Its own operation rather than two `SetRelationField`s, because a swap
+    /// done one endpoint at a time always passes through the state where both
+    /// name the same element — which is refused, and rightly. That collision is
+    /// why 0.9.0's *Reverse it* reached for delete-and-re-add in the first
+    /// place, and why it lost `direction` on the way.
+    ReverseRelation { from: String, to: String, label: Option<String> },
 }
 
 /// Every element id an operation would touch — used by the derived-element
@@ -96,9 +113,20 @@ fn op_target_ids(op: &Operation) -> Vec<&str> {
             v
         }
         Operation::SetSource { id, .. } => vec![id],
-        Operation::AddRelation { from, to, .. }
-        | Operation::DeleteRelation { from, to, .. }
-        | Operation::SetRelationField { from, to, .. } => vec![from, to],
+        Operation::AddRelation { from, to, .. } | Operation::DeleteRelation { from, to, .. } => {
+            vec![from, to]
+        }
+        // Re-pointing names a third element — the one being pointed *at* — and
+        // it needs the same guard: a relation must not be aimed at an L4
+        // element any more than it may be created against one.
+        Operation::ReverseRelation { from, to, .. } => vec![from, to],
+        Operation::SetRelationField { from, to, field, value, .. } => {
+            let mut v = vec![from.as_str(), to.as_str()];
+            if matches!(field.as_str(), "from" | "to") {
+                v.push(value);
+            }
+            v
+        }
     }
 }
 
@@ -577,6 +605,9 @@ impl SyncEngine {
             }
             Operation::SetRelationField { from, to, label, field, value } => {
                 self.compute_set_relation_field(from, to, label.as_deref(), field, value)
+            }
+            Operation::ReverseRelation { from, to, label } => {
+                self.compute_reverse_relation(from, to, label.as_deref())
             }
         }
     }
@@ -1301,14 +1332,93 @@ impl SyncEngine {
         field: &str,
         value: &str,
     ) -> Result<Vec<FileChange>, String> {
-        if !matches!(field, "label" | "protocol") {
+        if !matches!(field, "label" | "protocol" | "direction" | "from" | "to") {
             return Err(format!("field {field:?} is not editable on a relation"));
         }
         let r = self.find_relation(from, to, label).ok_or("relation not found")?;
         let file = r.file.clone();
+        let line = r.line;
+        let scope = r.scope.clone();
+
+        // `None` = the key comes out. A default is never written: the absence
+        // of `direction:` *is* forward, exactly as `SetViewFlag` treats a flag
+        // at its default and `SetField` treats an emptied scalar.
+        let write: Option<String> = match field {
+            "direction" => match value {
+                "both" | "none" => Some(value.to_string()),
+                "forward" | "" => None,
+                other => {
+                    return Err(format!(
+                        "bad direction {other:?} — expected `forward`, `both` or `none`"
+                    ))
+                }
+            },
+            "from" | "to" => {
+                if !self.model.elements.contains_key(value) {
+                    return Err(format!("unknown element {value:?}"));
+                }
+                let other = if field == "from" { to } else { from };
+                if value == other {
+                    return Err("a relation cannot start and end at the same element".into());
+                }
+                Some(self.relation_endpoint_text(value, scope.as_deref(), &file)?)
+            }
+            // label and protocol: emptying removes the key rather than
+            // writing a blank one, which is what `SetField` does for elements
+            // and what this did not do until endpoints needed the same path.
+            _ => (!value.is_empty()).then(|| value.to_string()),
+        };
+
         let text = self.files.get(&file).ok_or("file not cached")?;
-        let after = set_relation_field_text(text, &r.from, &r.to, r.label.as_deref(), field, value)?;
+        let after = match write {
+            Some(v) => set_relation_field_text(text, line, field, &v)?,
+            None => remove_relation_field_text(text, line, field)?,
+        };
         Ok(vec![self.change(&file, after)])
+    }
+
+    fn compute_reverse_relation(
+        &self,
+        from: &str,
+        to: &str,
+        label: Option<&str>,
+    ) -> Result<Vec<FileChange>, String> {
+        let r = self.find_relation(from, to, label).ok_or("relation not found")?;
+        let file = r.file.clone();
+        let line = r.line;
+        let scope = r.scope.clone();
+        let new_from = self.relation_endpoint_text(to, scope.as_deref(), &file)?;
+        let new_to = self.relation_endpoint_text(from, scope.as_deref(), &file)?;
+        let text = self.files.get(&file).ok_or("file not cached")?;
+        // Two splices on the same item. The second re-finds the item by the
+        // same line, which holds: a splice either replaces a line in place or
+        // inserts one *after* the item's first, so the item never moves.
+        let after = set_relation_field_text(text, line, "from", &new_from)?;
+        let after = set_relation_field_text(&after, line, "to", &new_to)?;
+        Ok(vec![self.change(&file, after)])
+    }
+
+    /// How to write `id` as an endpoint inside a relation whose scope is
+    /// `scope` — scope-relative where that resolves, absolute otherwise
+    /// (`Workspace::resolve` tries the absolute form first, so a cross-system
+    /// endpoint is legal in any file and needs no move).
+    ///
+    /// The candidate is checked by resolving it back rather than assumed from
+    /// the scope, so this can never write a reference that does not point at
+    /// the element the caller named.
+    fn relation_endpoint_text(
+        &self,
+        id: &str,
+        scope: Option<&str>,
+        file: &str,
+    ) -> Result<String, String> {
+        let relative = scope.and_then(|s| id.strip_prefix(&format!("{s}.")));
+        relative
+            .into_iter()
+            .chain(std::iter::once(id))
+            .find(|c| self.model.resolve(c, scope).as_deref() == Some(id))
+            .map(str::to_string)
+            .ok_or_else(|| format!("no way to write {id:?} as an endpoint in {file}"))
     }
 
     // ---- history ------------------------------------------------------------
@@ -1666,6 +1776,7 @@ fn op_label(op: &Operation) -> String {
         Operation::SetRelationField { from, to, field, .. } => {
             format!("set {field} on {from} -> {to}")
         }
+        Operation::ReverseRelation { from, to, .. } => format!("reverse {from} -> {to}"),
     }
 }
 
@@ -1785,80 +1896,114 @@ fn set_view_descriptions(text: &str, key: &str, show: bool) -> Result<Option<Str
     Ok(Some(out))
 }
 
-/// Set label/protocol on the sequence item matching raw endpoints.
+/// The line range (0-based, half-open) of the `relations:` sequence item whose
+/// first line is `item_line` (1-based, as the parser records it).
+///
+/// Anchored on the line rather than on a `relations:` key at the document root,
+/// because relations also live nested under a container and under a deployment
+/// environment (spec §3). Those files have no root `relations:` at all, so every
+/// field edit on one used to fail with "no relations section" — the inspector's
+/// label and protocol boxes were inert on the whole deployment model.
+fn relation_item_span(text: &str, item_line: u64) -> Result<(usize, usize), String> {
+    let lines: Vec<&str> = text.split_inclusive('\n').collect();
+    let start = (item_line as usize).checked_sub(1).ok_or("relation has no line")?;
+    let first = *lines.get(start).ok_or("relation line past the end of the file")?;
+    let marker = first.len() - first.trim_start().len();
+    let mut end = start + 1;
+    while let Some(line) = lines.get(end) {
+        // A blank line or a comment at the marker's own indent belongs to
+        // whatever comes next, not to this item.
+        if line.trim().is_empty() {
+            break;
+        }
+        let indent = line.len() - line.trim_start().len();
+        if indent <= marker {
+            break;
+        }
+        end += 1;
+    }
+    Ok((start, end))
+}
+
+/// The line inside the item that carries `field:`, if it has one.
+fn relation_field_line(lines: &[&str], span: (usize, usize), field: &str) -> Option<usize> {
+    let pat = format!("{field}:");
+    (span.0..span.1).find(|&i| {
+        lines[i]
+            .trim_end_matches(['\r', '\n'])
+            .trim_start()
+            .trim_start_matches("- ")
+            .starts_with(&pat)
+    })
+}
+
+/// Write `field: value` on the relation item at `item_line`, replacing the
+/// value in place when the key is there and inserting the key when it is not.
+/// An inline comment on the line survives.
 fn set_relation_field_text(
     text: &str,
-    raw_from: &str,
-    raw_to: &str,
-    raw_label: Option<&str>,
+    item_line: u64,
     field: &str,
     value: &str,
 ) -> Result<String, String> {
-    let root = marked_yaml::parse_yaml(0, text).map_err(|e| e.to_string())?;
-    let marked_yaml::Node::Mapping(map) = &root else {
-        return Err("not a mapping".into());
-    };
-    let Some(marked_yaml::Node::Sequence(seq)) = map.get_node("relations") else {
-        return Err("no relations section".into());
-    };
-    for item in seq.iter() {
-        let marked_yaml::Node::Mapping(m) = item else { continue };
-        let get = |k: &str| -> Option<String> {
-            match m.get_node(k) {
-                Some(marked_yaml::Node::Scalar(s)) => Some(s.as_str().to_string()),
-                _ => None,
-            }
-        };
-        if get("from").as_deref() == Some(raw_from)
-            && get("to").as_deref() == Some(raw_to)
-            && get("label").as_deref() == raw_label
-        {
-            let item_start = m.span().start().ok_or("no marker")?.line();
-            let item_end = {
-                // find deepest line in this item
-                let mut max = item_start;
-                for (k, v) in m.iter() {
-                    if let Some(s) = k.span().start() {
-                        max = max.max(s.line());
-                    }
-                    if let Some(s) = match v {
-                        marked_yaml::Node::Scalar(s) => s.span().start(),
-                        _ => None,
-                    } {
-                        max = max.max(s.line());
-                    }
+    let lines: Vec<&str> = text.split_inclusive('\n').collect();
+    let span = relation_item_span(text, item_line)?;
+    let mut out: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
+    let pat = format!("{field}:");
+    match relation_field_line(&lines, span, field) {
+        Some(i) => {
+            let line = lines[i];
+            let eol = line.trim_end_matches(['\r', '\n']);
+            let nl = &line[eol.len()..];
+            let kpos = eol.find(&pat).ok_or("field key vanished")?;
+            let head = format!("{}{field}: {}", &eol[..kpos], splice::yaml_scalar(value));
+            // A trailing comment keeps its column: the padding absorbs the
+            // change in the value's length, down to the one space that
+            // separates it. Taking the comment as-written instead would shift
+            // it by however much the value grew, which is how a hand-aligned
+            // column of comments comes apart one edit at a time.
+            out[i] = match eol[kpos..].find(" #") {
+                Some(p) => {
+                    let hash = kpos + p + 1;
+                    let column = eol[..hash].chars().count();
+                    let pad = column.saturating_sub(head.chars().count()).max(1);
+                    format!("{head}{}{}{nl}", " ".repeat(pad), &eol[hash..])
                 }
-                max
+                None => format!("{head}{nl}"),
             };
-            let lines: Vec<&str> = text.split_inclusive('\n').collect();
-            // existing field line inside the item?
-            let field_pat = format!("{field}:");
-            for (i, line) in lines.iter().enumerate().take(item_end).skip(item_start - 1) {
-                let eol = line.trim_end_matches(['\r', '\n']);
-                let t = eol.trim_start().trim_start_matches("- ");
-                if t.starts_with(&field_pat) {
-                    let nl = &line[eol.len()..];
-                    let kpos = eol.find(&field_pat).unwrap();
-                    let comment = eol[kpos..].find(" #").map(|p| &eol[kpos + p..]).unwrap_or("");
-                    let mut out: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
-                    out[i] = format!(
-                        "{}{field}: {}{comment}{nl}",
-                        &eol[..kpos],
-                        splice::yaml_scalar(value)
-                    );
-                    return Ok(out.concat());
-                }
-            }
-            // insert after the item's last line, aligned with item fields
-            let first = lines[item_start - 1];
+        }
+        None => {
+            // Aligned with the item's fields: two past the `-` marker.
+            let first = lines[span.0];
             let indent = first.len() - first.trim_start().len() + 2;
-            let mut out: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
             out.insert(
-                item_end,
+                span.1,
                 format!("{}{field}: {}\n", " ".repeat(indent), splice::yaml_scalar(value)),
             );
-            return Ok(out.concat());
         }
     }
-    Err("relation item not found".into())
+    Ok(out.concat())
+}
+
+/// Take `field:` off the relation item at `item_line`. A field that is not
+/// there is not an edit — the text comes back unchanged, the way unpinning
+/// what is not pinned does.
+fn remove_relation_field_text(
+    text: &str,
+    item_line: u64,
+    field: &str,
+) -> Result<String, String> {
+    let lines: Vec<&str> = text.split_inclusive('\n').collect();
+    let span = relation_item_span(text, item_line)?;
+    let Some(i) = relation_field_line(&lines, span, field) else {
+        return Ok(text.to_string());
+    };
+    // The line carrying `- ` is the item's head: removing it would hand the
+    // item's remaining fields to the sequence as a new entry.
+    if lines[i].trim_start().starts_with("- ") {
+        return Err(format!("{field} heads the relation item and cannot be removed"));
+    }
+    let mut out: Vec<String> = lines.iter().map(|s| s.to_string()).collect();
+    out.remove(i);
+    Ok(out.concat())
 }

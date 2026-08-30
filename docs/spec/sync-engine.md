@@ -75,7 +75,8 @@ text directly via markers, so no parser replacement was needed.
 | Set a source mapping | model file | write, replace or remove a component's `source:` block (spec/l4-introspection.md); refused on anything but a component |
 | Create element | model file | insert mapping under parent, id from dialog |
 | Delete element | model + views | remove node; remove layout entry; relations referencing it are removed **in the same transaction** and listed in the confirm dialog |
-| Create/edit relation | model file | insert/update sequence item |
+| Create/delete relation | model file | append/remove a `relations:` sequence item |
+| Edit a relation | model file | set `label`, `protocol`, `direction`, or an endpoint (`from` / `to`) **in place** — one value is spliced and the rest of the item, its position in the list and any comment on it are untouched. `direction: forward` and an emptied `label`/`protocol` **remove** the key rather than writing a default or a blank. An endpoint is written scope-relative where that resolves and absolute otherwise, so re-pointing across systems never moves the relation between files. Refused when it would point a relation at itself, at an unknown element, or at a derived (L4) one |
 
 Writes are atomic (temp file + rename). If disk changed under an uncommitted
 canvas operation (race with external editor), the operation is aborted with a

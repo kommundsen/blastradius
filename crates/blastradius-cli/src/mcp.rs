@@ -764,12 +764,15 @@ fn operation_schema() -> Value {
             variant("delete-relation", "Remove a relation. Pass `label` only when several relations share the same pair.",
                 json!({"from": id("source element id"), "to": id("target element id"), "label": id("disambiguates parallel relations")}),
                 vec!["from", "to"]),
-            variant("set-relation-field", "Set one field on an existing relation.",
+            variant("reverse-relation", "Swap a relation's endpoints, keeping its label, protocol and direction. Use when the dependency runs the other way — the common repair after drift reports a relation the code contradicts.",
+                json!({"from": id("current source element id"), "to": id("current target element id"), "label": id("disambiguates parallel relations")}),
+                vec!["from", "to"]),
+            variant("set-relation-field", "Set one field on an existing relation, in place. Use `from`/`to` to re-point an endpoint: everything else about the relation survives, which delete-and-re-add does not.",
                 json!({
                     "from": id("source element id"), "to": id("target element id"),
                     "label": id("identifies which relation, when the pair has several"),
-                    "field": {"type": "string", "enum": ["label", "protocol"]},
-                    "value": id("new value"),
+                    "field": {"type": "string", "enum": ["label", "protocol", "direction", "from", "to"]},
+                    "value": id("new value; for `direction` one of forward, both, none, where forward removes the key; for `from`/`to` the element id to point at; empty clears `label` or `protocol`"),
                 }), vec!["from", "to", "field", "value"]),
             variant("pin", "Place an element at fixed coordinates in one view; without a pin the layout engine decides.",
                 json!({

@@ -32,6 +32,7 @@ export const NOT_ON_THE_BOX = {
   'set-view-flag': 'a flag belongs to the whole diagram, not to the box you happen to be over — the View panel has them',
   'delete-relation': 'a relation is chosen by clicking the edge, and has its own inspector',
   'set-relation-field': 'same: a relation is not a box',
+  'reverse-relation': 'same again, and it is offered where the reason to reverse is visible: beside the drift finding that says the dependency runs the other way',
 };
 
 const article = (word) => (/^[aeiou]/i.test(word) ? 'an' : 'a');

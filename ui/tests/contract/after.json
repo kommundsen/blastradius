@@ -1309,11 +1309,10 @@
       "to": "blastradius.core.git-service"
     },
     {
-      "direction": "forward",
-      "from": "blastradius.ui.palette",
+      "direction": "none",
+      "from": "blastradius.ui.docs-panel",
       "label": "drives",
-      "protocol": "in-process",
-      "to": "blastradius.ui.canvas"
+      "to": "blastradius.ui.yaml-panel"
     },
     {
       "direction": "forward",

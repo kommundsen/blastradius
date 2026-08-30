@@ -44,9 +44,34 @@ export function applyMockOperation(snap, op) {
       !(r.from === op.from && r.to === op.to && (op.label == null || r.label === op.label)));
     snap.drift = (snap.drift ?? []).filter((d) =>
       !(d.kind === 'unbacked' && d.from === op.from && d.to === op.to));
+  } else if (op.op === 'reverse-relation') {
+    // Mirrors compute_reverse_relation: the two endpoints swap and nothing
+    // else about the relation is touched — which is the whole difference from
+    // the delete-and-re-add this replaced.
+    const r = snap.relations.find((r) => r.from === op.from && r.to === op.to
+      && (op.label == null || r.label === op.label));
+    if (!r) throw new Error('unknown relation');
+    [r.from, r.to] = [r.to, r.from];
   } else if (op.op === 'set-relation-field') {
-    const r = snap.relations.find((r) => r.from === op.from && r.to === op.to);
-    if (r) r[op.field] = op.value;
+    // Label disambiguates a pair with several relations, exactly as
+    // `find_relation` does — matching on the pair alone would edit whichever
+    // one happened to be first.
+    const r = snap.relations.find((r) => r.from === op.from && r.to === op.to
+      && (op.label == null || r.label === op.label));
+    if (!r) throw new Error('unknown relation');
+    // Mirrors compute_set_relation_field: forward is the absence of
+    // `direction:` and the snapshot spells that absence "forward", an emptied
+    // label or protocol removes the key, and an endpoint is spliced in place
+    // so everything else on the relation stays exactly as it was.
+    if (op.field === 'direction') {
+      r.direction = op.value === '' ? 'forward' : op.value;
+    } else if (op.field === 'from' || op.field === 'to') {
+      r[op.field] = op.value;
+    } else if (op.value === '') {
+      delete r[op.field];
+    } else {
+      r[op.field] = op.value;
+    }
   } else if (op.op === 'set-field') {
     const el = snap.elements.find((e) => e.id === op.id);
     if (!el) throw new Error('unknown element');

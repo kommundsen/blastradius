@@ -1842,6 +1842,26 @@ difference between a report and a workflow. *Draft exit*: every finding in the
 panel is actionable without leaving it, asserted in e2e against seeded drift of
 both kinds.
 
+### 5 — in progress: relation repair
+
+**Found on the first read, 2026-08-30**: 0.9.0's *Reverse it* is a UI-level
+`delete-relation` + `add-relation` pair (`ui/js/app.js`), carrying label and
+protocol across by hand. `AddRelation` takes only `{from, to, label,
+protocol}` — so reversing a relation that has `direction: both` silently drops
+it, and the relation is re-authored at the end of the list, losing its position
+and any inline comment on it. That is the exact class of loss this item exists
+to fix, in the one repair that already shipped.
+
+**Decision (owner, 2026-08-30): endpoint re-pointing is a real engine splice,
+not a delete-and-re-add in the UI.** `set-relation-field` grows `from` and `to`
+as editable fields, rewriting one endpoint in place and touching nothing else,
+so direction, protocol, label, list position and comments are preserved by
+construction rather than by the UI remembering to copy them. *Reverse it* then
+rebases onto that, which fixes the `direction` loss above rather than leaving
+it. The hard case is named up front: relations live in the `from` element's
+file, so re-pointing `from` can move a relation between files, and that gets
+its own test rather than being discovered later.
+
 **5 — Relation repair (E, carried twice).** The thing modelling most punishes.
 0.9.0's *Reverse it* covers the one case drift can prove; everything else about
 a relation is delete-and-retype. `direction: both | none` is a model field
