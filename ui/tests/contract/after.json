@@ -675,6 +675,11 @@
         {
           "from": "blastradius.ui.canvas.src.app",
           "kind": "imports",
+          "to": "blastradius.ui.canvas.src.mockops"
+        },
+        {
+          "from": "blastradius.ui.canvas.src.app",
+          "kind": "imports",
           "to": "blastradius.ui.canvas.src.search"
         },
         {
@@ -739,6 +744,12 @@
           "kind": "module",
           "name": "menu.js",
           "path": "ui/js/menu.js"
+        },
+        {
+          "id": "blastradius.ui.canvas.src.mockops",
+          "kind": "module",
+          "name": "mockops.js",
+          "path": "ui/js/mockops.js"
         },
         {
           "id": "blastradius.ui.canvas.src.search",
