@@ -147,12 +147,24 @@ export function summarise(orders: Order[]): number {
     if ($proc.HasExited) {
       Write-Host "    the app exited with code $($proc.ExitCode)" -ForegroundColor Yellow
     } else {
+      # Alive but portless. The two things that separate "no window could be
+      # created here" from "the window is fine and WebView2 ignored the
+      # argument": a main window handle, and whether WebView2 spawned its own
+      # browser process at all. Without those the next guess is as blind as
+      # the last one.
       Write-Host '    the app is still running but opened no port' -ForegroundColor Yellow
+      Write-Host "    main window handle: $($proc.MainWindowHandle)"
+      $kids = @(Get-Process -Name 'msedgewebview2' -ErrorAction SilentlyContinue)
+      Write-Host "    msedgewebview2 processes: $($kids.Count)"
+      $listening = & netstat -ano 2>$null | Select-String ":$Port\s"
+      Write-Host "    listening on $Port : $(if ($listening) { ($listening -join '; ').Trim() } else { 'nothing' })"
     }
     foreach ($pair in @(@('stdout', $outLog), @('stderr', $errLog))) {
-      $text = if (Test-Path $pair[1]) { (Get-Content $pair[1] -Raw) } else { '' }
+      # -Raw on an empty file returns $null, and $null.Trim() throws — which
+      # is how the first diagnostic run lost the stderr it existed to print.
+      $text = if (Test-Path $pair[1]) { [string](Get-Content $pair[1] -Raw) } else { '' }
       Write-Host "    --- app $($pair[0]) ---"
-      if ($text.Trim()) { Write-Host $text } else { Write-Host '    (empty)' }
+      if ([string]::IsNullOrWhiteSpace($text)) { Write-Host '    (empty)' } else { Write-Host $text }
     }
     Fail "the WebView never opened a debugging port on $Port"
   }
