@@ -110,9 +110,25 @@ export function summarise(orders: Order[]): number {
   Write-Host "    $scratch"
 
   # ------------------------------------------------------------ 3. launch it
+  #
+  # Reported before launching, because "no port appeared" has at least three
+  # causes and the first run of this in CI could not tell them apart: the app
+  # exiting immediately, no WebView2 runtime on the machine, and no desktop
+  # session to put a window in. Each leaves different evidence, and none of it
+  # was being collected.
   Step 3 "launch the app at the repository (CDP on $Port)"
+  $rt = @(
+    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
+    'HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+  ) | ForEach-Object { try { (Get-ItemProperty $_ -ErrorAction Stop).pv } catch { } } | Select-Object -First 1
+  Write-Host "    WebView2 runtime: $(if ($rt) { $rt } else { 'NOT REGISTERED' })"
+  Write-Host "    session $([System.Diagnostics.Process]::GetCurrentProcess().SessionId), interactive=$([Environment]::UserInteractive)"
+
+  $outLog = Join-Path ([System.IO.Path]::GetTempPath()) 'br-app-smoke.out'
+  $errLog = Join-Path ([System.IO.Path]::GetTempPath()) 'br-app-smoke.err'
   $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$Port"
-  $proc = Start-Process -FilePath $appExe -ArgumentList $scratch -PassThru
+  $proc = Start-Process -FilePath $appExe -ArgumentList $scratch -PassThru `
+    -RedirectStandardOutput $outLog -RedirectStandardError $errLog
   Remove-Item Env:\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS
 
   $deadline = (Get-Date).AddSeconds(60)
@@ -124,7 +140,22 @@ export function summarise(orders: Order[]): number {
       break
     } catch { Start-Sleep -Milliseconds 500 }
   }
-  if (-not $up) { Fail "the WebView never opened a debugging port on $Port" }
+  if (-not $up) {
+    # Whatever the window did or failed to do, say it here rather than leaving
+    # the next person to guess from a one-line "no".
+    $proc.Refresh()
+    if ($proc.HasExited) {
+      Write-Host "    the app exited with code $($proc.ExitCode)" -ForegroundColor Yellow
+    } else {
+      Write-Host '    the app is still running but opened no port' -ForegroundColor Yellow
+    }
+    foreach ($pair in @(@('stdout', $outLog), @('stderr', $errLog))) {
+      $text = if (Test-Path $pair[1]) { (Get-Content $pair[1] -Raw) } else { '' }
+      Write-Host "    --- app $($pair[0]) ---"
+      if ($text.Trim()) { Write-Host $text } else { Write-Host '    (empty)' }
+    }
+    Fail "the WebView never opened a debugging port on $Port"
+  }
   Write-Host '    attached'
 
   # --------------------------------------------------------- 4. drive the window
