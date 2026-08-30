@@ -1999,6 +1999,19 @@ be about to change it.
 we publish. That is a smaller gap than a remote-control switch in a Store app,
 and it is the whole of the difference.
 
+**Green on the fifth run**, on runtime 151.0.4129.101 — the exact build that
+was dropping the variable. The packaged app opens a repository it has never
+seen, scaffolds it, renders it, edits it and derives 3 code elements from the
+staged extractor, on every push.
+
+**Worth keeping for the next person**: two of those five runs were spent
+reading the app’s empty stdout and stderr as evidence. A
+`windows_subsystem = "windows"` binary has no console and was never going to
+print anything, so “nothing on stderr” meant nothing at all. The diagnostics
+that did work were the ones that asked the operating system rather than the
+program: the window handle, the process list, and the browser’s own command
+line.
+
 ### 4 — shipped 2026-08-30: the mock can no longer lie
 
 The e2e suite runs against a hand-written mock of the sync engine (ADR-0011),
