@@ -127,6 +127,24 @@ is considered done; anything this folder cannot express is a schema bug first.
 
 ## Success metrics
 
+> **Measurement status — decided 2026-08-30 (owner).** None of the metrics
+> below have been measured, and the activation one will not be. It was carried
+> as owed work through six releases (0.4.0 → 0.10.0) while three separate
+> proxies for it shipped; the decision is to stop listing it as planned and say
+> so here instead.
+>
+> What *is* verified, on every push since 0.10.0: the packaged app, launched at
+> a repository it has never seen, reaches a rendered model of it — scaffold,
+> canvas, an edit, and code extraction from an installed layout
+> (`tools/smoke-app.ps1`). That proves the path exists and completes. It does
+> not measure a person, and it is not a substitute for one: it cannot tell us
+> whether someone unfamiliar understands what they are looking at, or how long
+> they take, which is what the five-minute figure was about.
+>
+> The retention and commercial metrics are unmeasured for a simpler reason —
+> they are proportions of a user population that does not yet exist. They are
+> kept as targets, not claims.
+
 Activation (free tier):
 
 - Time from install → first rendered model **< 5 minutes** (template workspace

@@ -1835,6 +1835,19 @@ it — ways of asking "does this work for someone who did not build it" that can
 be answered without finding that someone. They are worth having and they are not
 the same answer.
 
+**Retired 2026-08-30 (owner): it is not happening.** A seventh deferral would
+have been the dishonest option, so it is off the list rather than at the bottom
+of it, and `docs/prd.md` now records that the activation metric is unmeasured
+and will stay that way. What replaces it is smaller and true: the packaged app
+reaching a rendered model of a repository it has never seen, asserted on every
+push. That measures the software's path, not a person's understanding, and the
+PRD says so in those words.
+
+The cost of the decision, recorded because it will not be obvious later: every
+claim this project makes about being usable by someone who did not build it now
+rests on inspection rather than evidence. Three releases of proxies raised the
+odds; none of them closed the question, and nothing now will.
+
 Draft exits:
 
 - **9** — a first-run canvas that says what it can do: the hint names
