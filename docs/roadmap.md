@@ -1815,7 +1815,15 @@ one, H behind the ADR-0003 amendment it requires.
 
 ## 0.11.0 — candidate pool (2026-08-30): keeping a model, not just making one
 
-Unpicked. The product can create a model, write to it, and detect when it
+**Picked 2026-08-30** (owner): **5 and 6**, the pair the pool argued were one
+release. Sequence **5 → 6**, which is dependency order rather than
+cheapest-first: the operations land before the panel that routes people to
+them, so the panel never ships pointing at problems the app cannot fix. 7 was
+considered and cut, which is what the pool said it was for; 8 stays blocked on
+the ADR-0003 question rather than being answered by an implementation; A and B
+lost to depth again, and this pool noticed that out loud before doing it.
+
+The product can create a model, write to it, and detect when it
 rots. What it cannot do is help you *keep* it — which is the whole proposition,
 since a diagram nobody maintains is the thing this exists to replace.
 
@@ -1883,7 +1891,7 @@ carrying all along. 8 is a decision wearing a feature's clothes. A and B are
 reach, and reach has lost to depth in every pool so far — worth noticing
 whether that is judgement or habit.
 
-## 0.10.0 — shipped to master, not yet cut (2026-08-30): what a user actually meets
+## 0.10.0 — released (2026-08-30): what a user actually meets
 
 0.9.0 made the app able to write the model it can draw; this pool is
 about whether that works for someone who is not the person who built it. Three
