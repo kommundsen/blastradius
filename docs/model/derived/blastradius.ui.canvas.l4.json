@@ -4,7 +4,7 @@
   "extractor": "blastradius-extract-ts 0.2.0",
   "component": "blastradius.ui.canvas",
   "root": "ui/js",
-  "sourceDigest": "sha256:480bc2c6e382e8b63b2315133dd2c31d30720204cab5db97c708ff94d8994e1c",
+  "sourceDigest": "sha256:6db84193c7fdc439b0ab98daae9b62d7ccd1eab420667cdad5d20e8abf95b116",
   "elements": [
     {
       "id": "app",
@@ -47,6 +47,12 @@
       "kind": "module",
       "name": "mockops.js",
       "path": "ui/js/mockops.js"
+    },
+    {
+      "id": "problems",
+      "kind": "module",
+      "name": "problems.js",
+      "path": "ui/js/problems.js"
     },
     {
       "id": "search",
@@ -96,6 +102,11 @@
     {
       "from": "app",
       "to": "mockops",
+      "kind": "imports"
+    },
+    {
+      "from": "app",
+      "to": "problems",
       "kind": "imports"
     },
     {

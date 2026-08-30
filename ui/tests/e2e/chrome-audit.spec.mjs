@@ -105,7 +105,7 @@ test('measure what the canvas overlays cover', async ({ page }) => {
                events: getComputedStyle(el).pointerEvents };
     };
     return { canvas: { w: Math.round(canvas.width), h: Math.round(canvas.height) },
-             overlays: ['.overlay-bl', '#tour', '#canvas-blank', '.diag-list'].map(of).filter(Boolean) };
+             overlays: ['.overlay-bl', '#tour', '#canvas-blank', '.problems'].map(of).filter(Boolean) };
   });
   console.log(`\ncanvas ${m.canvas.w}x${m.canvas.h}`);
   console.log('overlay          |   size    | % canvas | pointer-events');

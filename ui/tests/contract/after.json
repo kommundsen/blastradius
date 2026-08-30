@@ -680,6 +680,11 @@
         {
           "from": "blastradius.ui.canvas.src.app",
           "kind": "imports",
+          "to": "blastradius.ui.canvas.src.problems"
+        },
+        {
+          "from": "blastradius.ui.canvas.src.app",
+          "kind": "imports",
           "to": "blastradius.ui.canvas.src.search"
         },
         {
@@ -750,6 +755,12 @@
           "kind": "module",
           "name": "mockops.js",
           "path": "ui/js/mockops.js"
+        },
+        {
+          "id": "blastradius.ui.canvas.src.problems",
+          "kind": "module",
+          "name": "problems.js",
+          "path": "ui/js/problems.js"
         },
         {
           "id": "blastradius.ui.canvas.src.search",

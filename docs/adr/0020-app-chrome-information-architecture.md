@@ -141,9 +141,31 @@ object, and keeping it out of the side panel means the list survives while you
 fix what it points at — which is the whole difference between a report and a
 workflow.
 
-Consequence taken deliberately: the panel covers part of the canvas. It follows
-the tour card's rules — dismissible, and never eating a gesture aimed at a node
-beneath it.
+Consequence taken deliberately: the panel covers part of the canvas.
+
+**Amended 2026-08-30, during implementation.** This first said the panel would
+follow the tour card's rules — "dismissible, and never eating a gesture aimed at
+a node beneath it". The second half is not achievable and should not have been
+written: the tour card can be `pointer-events: none` because it is a notice, and
+a panel whose rows carry a *Declare* and a *Reverse* button has to take its own
+clicks. An e2e test caught it doing exactly what the sentence forbade — after a
+repair the layout moved a node under the panel, and `elementFromPoint` at that
+node's centre returned the panel.
+
+So the guarantee is the achievable one instead:
+
+- closed by default, and it never opens itself — the chip is a count until
+  someone asks for the list;
+- three ways out (the chip toggles, its own ✕, Escape), so a panel in the way is
+  one keystroke from gone;
+- it does not reappear after an edit: a repaint keeps the panel open only if it
+  was already open, and closes it when nothing is left to show.
+
+What remains true is that it covers part of the drawing while it is open, and
+that is now a measured cost rather than a denied one. If it proves to be the
+wrong trade, the region table above does not change — only which of the three
+homes the third row means, and a bottom drawer is the alternative that keeps the
+list and the canvas both fully usable.
 
 ### 3. The inspector renders nothing empty, and long sections collapse
 

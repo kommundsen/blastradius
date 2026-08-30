@@ -1833,6 +1833,53 @@ below, and `docs/prd.md`), so nothing here is a proxy for a measurement that
 is coming later. Nothing is coming later. What that costs is recorded with the
 decision.
 
+### 6 — shipped 2026-08-30: a problems panel
+
+*Exit met*: every finding in the panel is actionable without leaving it,
+asserted in e2e against seeded drift of both kinds.
+
+**One panel for two kinds of wrong**, because they answer the same question —
+*is this model still true?* — and differ only in what "true" means. Validation
+says the model contradicts itself and names a file and a line; drift (ADR-0019)
+says the model contradicts the *code*. They are grouped under those two
+sentences rather than merged into one list, because neither side of a drift
+finding is automatically the wrong one.
+
+**The rows are element-shaped, which was the whole point.** A drift row says
+"Exporter → Git Service", not two dotted ids, and carries the evidence path
+under it. Clicking it flies the canvas to the finding — three levels down, in
+the case that shipped — because a finding knows its two elements and the canvas
+already knew how to reach either.
+
+**And the repair is on the row.** *Declare* on an undeclared dependency,
+*Reverse* on an unbacked relation — the latter driving 0.11.0 item 5's
+`reverse-relation`, which is why one click is enough and nothing is lost doing
+it. A validation error offers only *Open*: what a dangling reference should
+become is a modelling decision, and a row that pretended a button could take it
+would be lying. Acting does not close the panel, so a person works down the
+list; the count follows each repair, and the panel closes itself when there is
+nothing left.
+
+**The chip is a count until someone asks for the list**, and there is no chip at
+all on a clean workspace — chrome that reports "0 problems" is chrome that is
+always on screen. Drift is absent while diffing or time-travelling, the same
+rule the canvas already applies to ghost edges.
+
+The rules live in `ui/js/problems.js` with no DOM and no app state, so they are
+testable in node — the shape `menu.js` and `mockops.js` already use, and for the
+same reason. 11 node tests, 9 e2e.
+
+**ADR-0020 was amended by building this.** The ADR promised the panel would
+follow the tour card's rules — "dismissible, and never eating a gesture aimed at
+a node beneath it". The second half is not achievable: the tour card can be
+`pointer-events: none` because it is a notice, and a panel whose rows carry
+buttons must take its own clicks. An e2e test caught it doing exactly what that
+sentence forbade — after a repair the layout moved a node under the panel, and
+`elementFromPoint` at that node's centre returned the panel. The guarantee is
+now the achievable one: closed by default, never opens itself, and three ways
+out (the chip, its ✕, Escape). It covers part of the drawing while open, and
+that is a measured cost rather than a denied one.
+
 **6 — A problems panel.** Validation errors and drift findings share a chip
 that opens a list of strings, clickable since 0.9.0 to open the offending file.
 But drift is structured now: a finding knows its two elements, the canvas knows

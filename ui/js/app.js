@@ -7,6 +7,7 @@ import { viewSvg, kicker, metaLine } from './svg.js';
 import { edgeLabelLines, multiplicity } from './labels.js';
 import { HELP_PAGES, helpBody, helpLinkTarget } from './help.js';
 import { searchModel, searchElements } from './search.js';
+import { problemRows, problemSummary } from './problems.js';
 import { boxMenuItems, canvasMenuItems, CHILD_KINDS } from './menu.js';
 import { applyMockOperation, mockOpLabel } from './mockops.js';
 
@@ -24,6 +25,10 @@ const invoke = tauri?.core?.invoke
         const res = await fetch('mock/snapshot.json');
         const snap = await res.json();
         if (location.search.includes('drift')) snap.drift = seededDrift();
+        // The dogfood model is valid by policy — `conformance.rs` fails the
+        // build otherwise — so a diagnostic has to be seeded to see one at
+        // all, exactly as drift does.
+        if (location.search.includes('invalid')) snap.diagnostics = seededDiagnostics();
         return snap;
       }
       if (cmd === 'workspace_root') return '(mock)';
@@ -185,6 +190,20 @@ function mockSync(cmd, args) {
   mockState.undo.push({ label, snap: before });
   mockState.redo.length = 0;
   return { label };
+}
+
+/** One error and one warning, for the problems panel to have something to
+ *  group opposite drift. Shapes copied from real `validate` output. */
+function seededDiagnostics() {
+  return [
+    { severity: 'error', file: 'model/blastradius.yaml', line: 42,
+      message: 'relation to: dangling reference "blastradius.nope"' },
+    { severity: 'warning', file: 'model/context.yaml', line: 7,
+      message: 'relation architect -> ui duplicated verbatim' },
+    // Present in this repository's own output, and not a problem — the panel
+    // must not count it (ui/tests/problems.test.mjs asserts that too).
+    { severity: 'info', file: 'README.md', line: 0, message: 'no frontmatter — ignored' },
+  ];
 }
 
 /** Two seeded findings, one of each kind (ADR-0019). The dogfood model is
@@ -565,6 +584,11 @@ async function renderCanvas({ animate = true } = {}) {
   // just changed — by a dive, a level button, or an edit. The inspector needs
   // no such thing: its subject only changes when the selection does.
   if (state.sideMode === 'view') renderViewPanel();
+  // The chip counts what this just drew — the same findings, under the same
+  // diff and time-travel rules — so they refresh together or they disagree.
+  // Guarded by a signature, so a redraw that changes no finding leaves the
+  // panel (and the reader's place in it) alone.
+  renderDiagnostics();
 }
 
 /** A view with nothing in it is a state, not a blank screen.
@@ -1009,7 +1033,7 @@ function wireChrome() {
     if (ctxMenu && !ctxMenu.contains(ev.target)) closeNodeMenu();
   }, true);
   document.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Escape') closeNodeMenu();
+    if (ev.key === 'Escape') { closeNodeMenu(); closeProblems(); }
   }, true);
   els.canvas.addEventListener('scroll', closeNodeMenu, true);
   // Right-click on empty canvas talks about the view rather than a box.
@@ -2196,33 +2220,144 @@ function renderDoc(docId) {
   }
 }
 
-// ---- diagnostics ------------------------------------------------------------
+// ---- problems (0.11.0 item 6, ADR-0020) -------------------------------------
+//
+// One panel for everything wrong with the workspace, anchored to the chip that
+// counts it. ADR-0020: a problems list is about the workspace as a whole, so it
+// belongs to neither the drawing nor the selection — and keeping it out of the
+// side panel is what lets it stay open while you fix what it points at.
+
+/** Findings for the tree being rendered. Drift is a fact about the code as it
+ *  is now, so it is absent while diffing or time-travelling — the same rule the
+ *  canvas already applies to ghost edges. */
+function currentProblems() {
+  const snap = state.snapshot ?? {};
+  const nameOf = (id) => snap.elements?.find((e) => e.id === id)?.name ?? id;
+  const drift = state.diffOn || state.travel ? [] : (snap.drift ?? []);
+  return problemRows({ diagnostics: snap.diagnostics, drift, elements: snap.elements },
+    { canEdit: canEdit(), nameOf });
+}
+
+/** What the panel last drew, so a repaint that would change nothing does not
+ *  throw away the reader's scroll position — `renderCanvas` calls this on every
+ *  redraw, which is most of them. */
+let problemsSig = null;
+
 function renderDiagnostics() {
-  const diags = state.snapshot.diagnostics ?? [];
-  const errs = diags.filter((d) => d.severity === 'error').length;
-  const warns = diags.filter((d) => d.severity === 'warning').length;
-  let html = '';
-  if (errs) html += `<button class="tag tag-danger" id="diag-btn">${errs} error${errs > 1 ? 's' : ''}</button>`;
-  else if (warns) html += `<button class="tag tag-warning" id="diag-btn">${warns} warning${warns > 1 ? 's' : ''}</button>`;
-  els.diagChips.innerHTML = html;
-  document.querySelector('.diag-list')?.remove();
-  if (html) {
-    $('diag-btn').addEventListener('click', () => {
-      const existing = document.querySelector('.diag-list');
-      if (existing) return existing.remove();
-      const list = document.createElement('div');
-      list.className = 'diag-list';
-      // Every diagnostic names a file and usually a line; until now none of
-      // them went anywhere.
-      list.innerHTML = diags
-        .filter((d) => d.severity !== 'info')
-        .map((d) => `<button class="diag-row" data-editfile="${esc(d.file)}">${esc(d.severity)}: ` +
-          `${esc(d.file)}${d.line ? ':' + d.line : ''} — ${esc(d.message)}</button>`)
-        .join('');
-      for (const btn of list.querySelectorAll('[data-editfile]')) {
-        btn.addEventListener('click', () => invoke('open_in_editor', { rel: btn.dataset.editfile }).catch(() => {}));
-      }
-      els.canvas.appendChild(list);
+  const rows = currentProblems();
+  const sum = problemSummary(rows);
+  const sig = JSON.stringify([canEdit(), rows.map((r) => [r.kind, r.title, r.subtitle])]);
+  if (sig === problemsSig) return;
+  problemsSig = sig;
+  els.diagChips.innerHTML = sum
+    ? `<button class="tag tag-${sum.tone}" id="diag-btn" aria-haspopup="dialog"
+         aria-expanded="false" title="What is wrong with this model">${esc(sum.label)}</button>`
+    : '';
+  // A panel whose findings just changed is repainted, not left showing the old
+  // ones — and a panel with nothing left to show closes itself.
+  if (document.querySelector('.problems')) {
+    closeProblems();
+    if (sum) openProblems();
+  }
+  if (sum) $('diag-btn').addEventListener('click', toggleProblems);
+}
+
+function closeProblems() {
+  document.querySelector('.problems')?.remove();
+  document.getElementById('diag-btn')?.setAttribute('aria-expanded', 'false');
+}
+
+function toggleProblems() {
+  if (document.querySelector('.problems')) return closeProblems();
+  openProblems();
+}
+
+function openProblems() {
+  const rows = currentProblems();
+  if (!rows.length) return;
+  const panel = document.createElement('div');
+  panel.className = 'problems blueprint';
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-label', 'Problems');
+
+  const group = (kind, heading, note) => {
+    const mine = rows.filter((r) => (kind === 'model' ? r.kind !== 'drift' : r.kind === 'drift'));
+    if (!mine.length) return '';
+    return `<div class="problems-group">
+      <div class="problems-head">${esc(heading)}<span class="text-muted"> · ${mine.length}</span></div>
+      <p class="problems-note text-muted">${esc(note)}</p>
+      ${mine.map((r) => {
+        const i = rows.indexOf(r);
+        return `<div class="problems-row" data-i="${i}">
+          <button class="problems-open" data-open="${i}">
+            <span class="tag tag-outline problems-kind">${esc(r.driftKind ?? r.kind)}</span>
+            <span class="problems-title">${esc(r.title)}</span>
+            <span class="problems-sub text-muted">${esc(r.subtitle)}</span>
+          </button>
+          ${r.fix ? `<button class="btn btn-secondary problems-fix" data-fix="${i}">${esc(r.fix.label)}</button>` : ''}
+        </div>`;
+      }).join('')}
+    </div>`;
+  };
+
+  panel.innerHTML = `<div class="problems-bar">
+      <span class="problems-title-main">Problems</span>
+      <button class="btn btn-ghost" id="problems-close" aria-label="Close problems">✕</button>
+    </div>
+    ${group('model', 'The model contradicts itself', 'Validation errors and warnings — these name a file and a line.')}
+    ${group('drift', 'The model and the code disagree', 'Drift (ADR-0019). Neither side is automatically right.')}`;
+
+  els.canvas.appendChild(panel);
+  document.getElementById('diag-btn')?.setAttribute('aria-expanded', 'true');
+  document.getElementById('problems-close').addEventListener('click', closeProblems);
+
+  for (const btn of panel.querySelectorAll('[data-open]')) {
+    btn.addEventListener('click', () => openProblem(rows[Number(btn.dataset.open)]));
+  }
+  for (const btn of panel.querySelectorAll('[data-fix]')) {
+    btn.addEventListener('click', () => fixProblem(rows[Number(btn.dataset.fix)]));
+  }
+}
+
+/** Land on the finding. A drift finding knows its two elements and the canvas
+ *  knows how to fly to either; a diagnostic knows a file and nothing else. */
+async function openProblem(row) {
+  if (row.focus) {
+    await focusElement(row.focus);
+    return;
+  }
+  invoke('open_in_editor', { rel: row.file }).catch(() => {});
+}
+
+/** The repair, taken from the row rather than from wherever it used to live. */
+async function fixProblem(row) {
+  if (row.fix?.op === 'open') {
+    invoke('open_in_editor', { rel: row.file }).catch(() => {});
+    return;
+  }
+  if (row.fix?.op === 'reverse') {
+    // The relation the finding is about — the label disambiguates a pair with
+    // more than one, and the engine wants it.
+    const rel = effectiveSnapshot().relations.find((r) => r.from === row.from && r.to === row.to);
+    await applyOp({ op: 'reverse-relation', from: row.from, to: row.to, label: rel?.label ?? null });
+    return;
+  }
+  if (row.fix?.op === 'declare') {
+    openDialog({
+      title: 'Declare this relation',
+      body: `<div class="dlg-field"><label for="dlg-label">Label</label>
+          <input class="input" id="dlg-label" placeholder="reads"></div>
+        <div class="dlg-field"><label for="dlg-proto">Protocol (optional)</label>
+          <input class="input" id="dlg-proto" placeholder="in-process"></div>
+        <p class="text-muted" style="font-size:var(--text-xs)">${esc(row.from)} → ${esc(row.to)}</p>`,
+      confirm: 'Declare',
+      onConfirm: () => applyOp({
+        op: 'add-relation',
+        from: row.from,
+        to: row.to,
+        label: document.getElementById('dlg-label').value.trim() || null,
+        protocol: document.getElementById('dlg-proto').value.trim() || null,
+      }),
     });
   }
 }
