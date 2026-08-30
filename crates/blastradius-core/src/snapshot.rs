@@ -98,6 +98,13 @@ pub struct SnapElement {
     /// can show and change it; the facts it governs ride in `derived`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<SnapSource>,
+    /// The modelled container a container instance runs (ADR-0018, spec §3b),
+    /// resolved. Absent on every other kind. Carried for the same reason
+    /// `source` is: a surface that cannot see a field cannot edit it, and until
+    /// 0.11.0 nothing could — an instance was uncreatable through any
+    /// operation because of it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub container: Option<String>,
 }
 
 /// A component's `source:` mapping, as the renderer sees it.
@@ -207,6 +214,10 @@ pub fn snap_element(e: &crate::model::Element) -> SnapElement {
             mode: m.mode.clone(),
             extractor: m.extractor.clone(),
         }),
+        // `validate` resolves this with no system scope, so a reference that
+        // resolves at all is already the full dotted id — there is nothing to
+        // resolve here and no workspace in hand to do it with.
+        container: e.instance_of.clone(),
     }
 }
 

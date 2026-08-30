@@ -3049,21 +3049,42 @@ function openCreateDialog({ parent: intoParent, kinds: intoKinds, into = false }
     : ['component']);
   const parent = intoParent ?? (level === 'L1' || (level === 'LD' && !state.scope) ? null : state.scope);
   const kindOptions = kinds.map((k) => `<option value="${k}">${k}</option>`).join('');
+  const containers = effectiveSnapshot().elements.filter((e) => e.kind === 'container');
+  const containerOptions = containers
+    .map((c) => `<option value="${esc(c.id)}">${esc(c.name)} — ${esc(c.id)}</option>`).join('');
   openDialog({
     title: 'New element',
     body: `<div class="dlg-field"><label for="dlg-kind">Kind</label><select class="input" id="dlg-kind">${kindOptions}</select></div>
       <div class="dlg-field"><label for="dlg-name">Name</label><input class="input" id="dlg-name" placeholder="Payment Service"></div>
       <div class="dlg-field"><label for="dlg-id">Id — immutable once created (ADR-0003)</label>
         <input class="input" id="dlg-id" style="font-family:var(--font-mono)">
-        <span class="dlg-id-preview" id="dlg-id-full"></span></div>`,
+        <span class="dlg-id-preview" id="dlg-id-full"></span></div>
+      <div class="dlg-field" id="dlg-container-field" hidden>
+        <label for="dlg-container">Container it runs</label>
+        <select class="input" id="dlg-container">${containerOptions}</select>
+        <span class="insp-hint">An instance runs a modelled container (ADR-0018).
+          Leave the name blank to take the container's own.</span></div>`,
     confirm: 'Create',
     onConfirm: async () => {
       const kind = document.getElementById('dlg-kind').value;
       const name = document.getElementById('dlg-name').value.trim();
       const id = document.getElementById('dlg-id').value.trim();
-      if (!name || !id) { toast('name and id are required'); return false; }
+      if (!id) { toast('an id is required'); return false; }
       const useParent = (kind === 'person' || kind === 'external' || kind === 'system') ? null : parent;
-      const ok = await applyOp({ op: 'create', parent: useParent, id, name, kind });
+      // `container:` is not optional in the format — an instance does not parse
+      // without it — so the dialog collects it rather than letting the engine
+      // refuse a create that could never have succeeded.
+      const container = kind === 'container-instance'
+        ? document.getElementById('dlg-container').value : null;
+      if (kind === 'container-instance' && !container) {
+        toast('there is no modelled container for an instance to run');
+        return false;
+      }
+      // An unnamed instance takes its container's name, so a blank name is a
+      // real answer here and only here.
+      if (!name && kind !== 'container-instance') { toast('a name is required'); return false; }
+      const label = name || containerName(container) || id;
+      const ok = await applyOp({ op: 'create', parent: useParent, id, name: label, kind, container });
       // Asking for a component inside a container is asking to see inside it:
       // the new element is one altitude down and invisible from here.
       if (ok && into && useParent && state.scope !== useParent) await dive(useParent);
@@ -3076,6 +3097,7 @@ function openCreateDialog({ parent: intoParent, kinds: intoKinds, into = false }
   const sync = () => {
     if (!idInput.dataset.touched) idInput.value = slugify(nameInput.value);
     const kind = document.getElementById('dlg-kind').value;
+    document.getElementById('dlg-container-field').hidden = kind !== 'container-instance';
     const useParent = (kind === 'person' || kind === 'external' || kind === 'system') ? null : parent;
     preview.textContent = useParent ? `${useParent}.${idInput.value}` : idInput.value;
   };
@@ -3340,6 +3362,11 @@ function renderRelationSide() {
     const ok = await applyOp({ op: 'delete-relation', from: r.from, to: r.to, label: r.label ?? null });
     if (ok) { state.selectedRel = null; renderSide(); }
   });
+}
+
+/** A container's own name, which an unnamed instance inherits (spec §3b). */
+function containerName(id) {
+  return effectiveSnapshot().elements.find((e) => e.id === id)?.name ?? null;
 }
 
 function shortName(id) {

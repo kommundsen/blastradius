@@ -1939,6 +1939,37 @@ belongs neither to the drawing nor to the selection — it is what you consult
 *before* there is a selection, and it must survive while you fix what it points
 at — so it is a dismissible panel anchored to the chip that counts it.
 
+### A container instance cannot be created at all (found 2026-08-30, in use)
+
+**Reported from a real modelling session** driving the MCP server, in the
+user's words: *"the create op can't set a container-instance's `container:`
+reference, so I'll write this one by hand and validate immediately."*
+
+Reproduced, and it is sharper than reported. `container:` is not optional — a
+missing one is a parse **error** and the instance does not register at all
+(spec §3b). So:
+
+- `create` with kind `container-instance` is **always refused**. The
+  invalidation guard catches it every time: *"operation would invalidate the
+  workspace: instance "api" needs `container:`"*. There is no argument that
+  makes it succeed.
+- `set-field container` is refused too — *"field "container" is not editable on
+  an element"*. So it cannot be repaired after the fact either.
+
+A container instance is therefore **uncreatable through any operation**, in the
+app and over MCP alike, and hand-editing YAML is the only route. `environment`
+and `deployment-node` are fine; the instance is the only deployment kind with a
+required cross-reference, which is exactly why it is the one that broke.
+
+The one piece of good news: the guard refuses *cleanly* and the file is left
+byte-identical. This is a dead end, not data loss.
+
+This is item 5's family — a model field with no operation — except that here it
+makes a whole element kind unreachable rather than one property awkward. Fixed
+in this release rather than pooled, because a deployment view the product
+cannot author is a worse gap than any of the fields item 5 was about, and
+because ADR-0018's whole point was that deployment is modelled, not drawn.
+
 ### 5 — shipped 2026-08-30: relation repair
 
 **Found on the first read, 2026-08-30**: 0.9.0's *Reverse it* is a UI-level
@@ -2051,6 +2082,38 @@ with an estimate.
 **B — macOS distribution**, deferred six times. Worth the same treatment the
 five-minute metric just got: either it is planned or it is retired. A $99/year
 developer account and no evidence anyone wants it is not a plan.
+
+**A JSON Schema, so editors understand the format** (raised 2026-08-30). There
+is none today — `find . -name '*.schema.json'` is empty — so a person editing
+`model/*.yaml` by hand in VS Code gets no completion, no hover, and no error
+until they run `validate`. The format is documented three times over
+(`spec/model-format.md`, `format_ref.rs`, the worked example) and none of it is
+machine-readable.
+
+The mechanism is standard and cheap: publish a JSON Schema, and either put a
+`# yaml-language-server: $schema=…` modeline at the top of the files
+`blastradius init` scaffolds — which `redhat.vscode-yaml` and the JetBrains YAML
+support both honour — or map globs to it in `.vscode/settings.json` under
+`yaml.schemas`. The modeline is the better half of that pair: it travels with
+the repository and needs no per-editor setup.
+
+Two things make it more than a morning, and they are the reason it is written
+down rather than done in passing:
+
+- **The format is polymorphic by file.** A system file, a context file, a
+  deployment file, a views file and `blastradius.yaml` are five different
+  shapes, distinguished by which top-level key they carry rather than by a
+  discriminator field. That is one schema with `oneOf` and careful
+  `required`/`additionalProperties`, or five schemas and five glob mappings.
+- **A schema is a fourth description of the format, and the first three already
+  drift.** `format_ref.rs` is pinned to reality only because a test loads its
+  worked example. A hand-written schema would need the same treatment — a test
+  that validates the dogfood workspace *and* the seeded-fault corpus against it,
+  so a schema that disagrees with the parser fails the build. Generating it from
+  the parser would be better and is a much larger piece.
+
+Worth having: it is the one place a hand-editor gets help, and hand-editing is
+explicitly allowed — the files are the source of truth.
 
 **Hygiene, foldable into anything**: the eleven raw NUL bytes in
 `extractors/dotnet/Program.cs` (noted in 0.10.0, behaviour-neutral to fix,

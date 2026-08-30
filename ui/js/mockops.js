@@ -23,7 +23,11 @@ export function applyMockOperation(snap, op) {
   } else if (op.op === 'create') {
     const id = op.parent ? op.parent + '.' + op.id : op.id;
     if (snap.elements.some((e) => e.id === id)) throw new Error('id exists');
-    snap.elements.push({ id, kind: op.kind, parent: op.parent ?? undefined, name: op.name });
+    const made = { id, kind: op.kind, parent: op.parent ?? undefined, name: op.name };
+    // A container instance carries the container it runs; the engine refuses to
+    // create one without it, so the mock never sees an instance lacking it.
+    if (op.container != null) made.container = op.container;
+    snap.elements.push(made);
     // The engine keys elements by id (a BTreeMap), so a new one sorts into
     // place rather than landing at the end.
     snap.elements.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));

@@ -66,7 +66,22 @@ pub enum Operation {
     /// tech). The MCP surface and future inspector fields route here.
     SetField { id: String, field: String, value: String },
     /// Create an element under a parent (None = context person/external).
-    Create { parent: Option<String>, id: String, name: String, kind: String },
+    ///
+    /// `container` is the modelled container a `container-instance` runs
+    /// (ADR-0018, spec §3b). It is required for that kind and refused on every
+    /// other, because `container:` is not optional in the format: without it the
+    /// instance does not parse, so a create that could not carry it was a create
+    /// that could never succeed. It could not, until 0.11.0 — the invalidation
+    /// guard refused every attempt, in the app and over MCP alike, and hand
+    /// editing was the only way to model a deployment instance.
+    Create {
+        parent: Option<String>,
+        id: String,
+        name: String,
+        kind: String,
+        #[serde(default)]
+        container: Option<String>,
+    },
     /// Delete an element; relations referencing it and its layout pins are
     /// removed in the same transaction (spec table).
     Delete { id: String },
@@ -105,10 +120,15 @@ fn op_target_ids(op: &Operation) -> Vec<&str> {
         | Operation::Rename { id, .. }
         | Operation::SetField { id, .. }
         | Operation::Delete { id } => vec![id],
-        Operation::Create { parent, id, .. } => {
+        Operation::Create { parent, id, container, .. } => {
             let mut v = vec![id.as_str()];
             if let Some(p) = parent {
                 v.push(p);
+            }
+            // The container an instance runs is a real element and must not be
+            // a derived one, the same guard a relation endpoint gets.
+            if let Some(c) = container {
+                v.push(c);
             }
             v
         }
@@ -593,8 +613,8 @@ impl SyncEngine {
             }
             Operation::SetField { id, field, value } => self.compute_set_field(id, field, value),
             Operation::SetSource { id, source } => self.compute_set_source(id, source.as_ref()),
-            Operation::Create { parent, id, name, kind } => {
-                self.compute_create(parent.as_deref(), id, name, kind)
+            Operation::Create { parent, id, name, kind, container } => {
+                self.compute_create(parent.as_deref(), id, name, kind, container.as_deref())
             }
             Operation::Delete { id } => self.compute_delete(id),
             Operation::AddRelation { from, to, label, protocol } => {
@@ -610,6 +630,24 @@ impl SyncEngine {
                 self.compute_reverse_relation(from, to, label.as_deref())
             }
         }
+    }
+
+    /// A `container:` reference has to name a real, modelled container — not a
+    /// component, not another instance, not a dangling id. Shared by create and
+    /// by re-pointing, so both refuse the same things for the same reason.
+    fn check_container_ref(&self, reference: &str) -> Result<(), String> {
+        let target = self
+            .model
+            .resolve(reference, None)
+            .ok_or_else(|| format!("unknown container {reference:?}"))?;
+        let kind = self.model.elements[&target].kind;
+        if kind != ElementKind::Container {
+            return Err(format!(
+                "an instance runs a container, and {reference:?} is a {}",
+                kind.as_str()
+            ));
+        }
+        Ok(())
     }
 
     /// File + key chain addressing an element's mapping.
@@ -927,6 +965,21 @@ impl SyncEngine {
                     },
                 }
             }
+            "container" => {
+                if el.kind != ElementKind::ContainerInstance {
+                    return Err(format!(
+                        "`container` says which container an instance runs, not a {kind}"
+                    ));
+                }
+                // Never cleared: the instance does not parse without it, so an
+                // empty value would delete the element rather than a field.
+                if value.is_empty() {
+                    return Err(
+                        "an instance always runs some container — re-point it, or delete it".into(),
+                    );
+                }
+                self.check_container_ref(&value)?;
+            }
             "external" => {
                 if el.kind != ElementKind::System {
                     return Err(format!("`external` marks a system as outside your control, not a {kind}"));
@@ -1049,9 +1102,31 @@ impl SyncEngine {
         id: &str,
         name: &str,
         kind: &str,
+        container: Option<&str>,
     ) -> Result<Vec<FileChange>, String> {
         if !is_valid_slug(id) {
             return Err(format!("bad id {id:?} — lowercase slug required (ADR-0003)"));
+        }
+        // `container:` belongs to exactly one kind, and that kind cannot parse
+        // without it (spec §3b). Checked here rather than left to the
+        // invalidation guard, so the error says what to pass instead of
+        // reporting a file that would not load.
+        match (kind, container) {
+            ("container-instance", None) => {
+                return Err(
+                    "a container instance needs `container` — the modelled container it runs (spec §3b)"
+                        .into(),
+                )
+            }
+            ("container-instance", Some(reference)) => {
+                self.check_container_ref(reference)?;
+            }
+            (_, Some(_)) => {
+                return Err(format!(
+                    "`container` says which container an instance runs, and {kind:?} is not one"
+                ))
+            }
+            (_, None) => {}
         }
         let full_id = match parent {
             Some(p) => format!("{p}.{id}"),
@@ -1157,12 +1232,25 @@ impl SyncEngine {
                 // environments(0) -> env(2) -> nodes(4) -> node(6) … two spaces
                 // per level, and the chain already counts them.
                 let owner_indent = chain.len();
+                let mut fields: Vec<(&str, &str)> = Vec::new();
+                if let Some(reference) = container {
+                    fields.push(("container", reference));
+                }
+                // An unnamed instance takes its container's name (spec §3b), so
+                // writing that name states nothing — the same rule every other
+                // default in this engine follows.
+                let inherited = container
+                    .and_then(|r| self.model.resolve(r, None))
+                    .and_then(|t| self.model.elements.get(&t).map(|c| c.name.clone()));
+                if inherited.as_deref() != Some(name) {
+                    fields.push(("name", name));
+                }
                 let after = splice::insert_entry(
                     text,
                     &chain_refs,
                     Some((&owner_chain, owner_indent)),
                     id,
-                    &[("name", name)],
+                    &fields,
                 )?;
                 Ok(vec![self.change(&rel, after)])
             }

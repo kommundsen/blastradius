@@ -627,3 +627,39 @@ test('a relation is added from the inspector without hunting for the other box',
   await expect(page.locator('.insp-rel', { hasText: 'shells out to' })).toBeVisible();
   expect(page.errors).toEqual([]);
 });
+
+// ---- container instances (0.11.0, found in use) -----------------------------
+
+test('a container instance is created with the container it runs', async ({ page }) => {
+  // Reported from a real modelling session: the create op could not set a
+  // `container:` reference, and since an instance does not parse without one,
+  // the engine refused every attempt. A whole element kind was unreachable.
+  await page.locator('#level-seg .seg-opt', { hasText: 'D' }).click();
+  await expect(page.locator('#breadcrumb')).toContainText('Deployment');
+  await node(page, 'Developer Machine').first().dblclick();
+
+  await page.locator('#add-btn').click();
+  await page.locator('#dlg-kind').selectOption('container-instance');
+  // The field appears only for the kind that runs one.
+  await expect(page.locator('#dlg-container-field')).toBeVisible();
+  await page.locator('#dlg-container').selectOption('blastradius.cli');
+  await page.locator('#dlg-id').fill('cli-here');
+  await page.locator('#dlg-ok').click();
+
+  // It exists, and it took the container's own name (CLI) rather than
+  // needing one of its own — which is the spec §3b rule, and the reason the
+  // name field is the one thing an instance may leave blank.
+  await expect(page.locator('.tree-row', { hasText: 'CLI' }).first()).toBeVisible();
+  expect(page.errors).toEqual([]);
+});
+
+test('the container field is offered to no other kind', async ({ page }) => {
+  await page.locator('#level-seg .seg-opt', { hasText: 'D' }).click();
+  await node(page, 'Developer Machine').first().dblclick();
+  await page.locator('#add-btn').click();
+  await page.locator('#dlg-kind').selectOption('deployment-node');
+  await expect(page.locator('#dlg-container-field')).toBeHidden();
+  await page.locator('#dlg-kind').selectOption('container-instance');
+  await expect(page.locator('#dlg-container-field')).toBeVisible();
+  expect(page.errors).toEqual([]);
+});

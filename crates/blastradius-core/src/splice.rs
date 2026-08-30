@@ -233,7 +233,13 @@ fn flow_field_pos(line: &str, field: &str) -> Option<(usize, usize)> {
     let rel = inner.find(&pat)?;
     let start = open + 1 + rel;
     let after = &line[start + pat.len()..close];
-    let len = after.find(',').unwrap_or(after.len());
+    // Stop at the value, not at whatever follows it. Running to the comma (or
+    // to `}`) swallowed the space in front of it, so replacing the *last*
+    // field of a flow mapping turned `{ container: shop.web }` into
+    // `{ container: shop.api}` — a formatting change from an edit that was
+    // supposed to preserve formatting.
+    let end = after.find(',').unwrap_or(after.len());
+    let len = after[..end].trim_end().len();
     Some((start, start + pat.len() + len))
 }
 

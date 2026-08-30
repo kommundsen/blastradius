@@ -725,6 +725,7 @@ fn operation_schema() -> Value {
                     // compute_create matches.
                     "kind": {"type": "string", "enum": ["person", "external", "system", "container", "component", "environment", "deployment-node", "container-instance"],
                              "description": "must be legal inside the parent: containers in systems, components in containers, deployment-node under an environment or another node"},
+                    "container": id("for `container-instance` only, and required there: the dotted id of the modelled container this instance runs (ADR-0018)"),
                 }), vec!["id", "name", "kind"]),
             variant("rename", "Change an element's display name. Ids never change.",
                 json!({"id": id("element id"), "name": id("new display name")}), vec!["id", "name"]),
