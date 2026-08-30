@@ -6,7 +6,7 @@ import { layoutView, GRID, groupDivs, fitGroupBoxes, nodeSize } from './layout.j
 import { viewSvg, kicker, metaLine } from './svg.js';
 import { edgeLabelLines, multiplicity } from './labels.js';
 import { HELP_PAGES, helpBody, helpLinkTarget } from './help.js';
-import { searchModel } from './search.js';
+import { searchModel, searchElements } from './search.js';
 import { boxMenuItems, canvasMenuItems, CHILD_KINDS } from './menu.js';
 import { applyMockOperation, mockOpLabel } from './mockops.js';
 
@@ -1089,18 +1089,27 @@ function wireChrome() {
 // half: type a few letters, get elements, code-level detail, documents and
 // relations ranked together, press Enter, land on it.
 
-function openPalette() {
+/**
+ * The search overlay, once. Two callers want the same list-with-a-query: the
+ * find-anything palette, and picking the element at the end of a relation.
+ * They differ only in what they search and what they do with the answer, so
+ * that is all they pass — a second copy of this would be a second set of
+ * keyboard rules to keep in step.
+ *
+ * opts: { ariaLabel, placeholder, footer, search(query) -> rows, choose(row) }
+ */
+function openPicker({ ariaLabel, placeholder, footer, search, choose }) {
   closePalette();
   state.palette = true;
   const wrap = document.createElement('div');
   wrap.className = 'dialog-backdrop palette-backdrop';
   wrap.id = 'app-palette';
-  wrap.innerHTML = `<div class="palette blueprint" role="dialog" aria-modal="true" aria-label="Find in the model">
+  wrap.innerHTML = `<div class="palette blueprint" role="dialog" aria-modal="true" aria-label="${esc(ariaLabel)}">
     <input class="input palette-input" id="palette-q" type="text" autocomplete="off" spellcheck="false"
-      placeholder="Find an element, document or relation…" aria-controls="palette-list"
+      placeholder="${esc(placeholder)}" aria-controls="palette-list"
       role="combobox" aria-expanded="true" aria-autocomplete="list">
     <div class="palette-list" id="palette-list" role="listbox"></div>
-    <div class="palette-foot text-muted">↑↓ to move · Enter to open · Esc to close</div>
+    <div class="palette-foot text-muted">${esc(footer)}</div>
   </div>`;
   document.body.appendChild(wrap);
   wrap.addEventListener('click', (ev) => { if (ev.target === wrap) closePalette(); });
@@ -1111,7 +1120,7 @@ function openPalette() {
   let active = 0;
 
   const paint = () => {
-    results = searchModel(effectiveSnapshot(), input.value);
+    results = search(input.value);
     active = 0;
     list.innerHTML = results.length
       ? results
@@ -1126,7 +1135,7 @@ function openPalette() {
           .join('')
       : `<div class="palette-empty text-muted">Nothing matches “${esc(input.value)}”.</div>`;
     for (const row of list.querySelectorAll('[data-i]')) {
-      row.addEventListener('click', () => choose(Number(row.dataset.i)));
+      row.addEventListener('click', () => pick(Number(row.dataset.i)));
     }
   };
 
@@ -1139,19 +1148,11 @@ function openPalette() {
     }
   };
 
-  const choose = async (i) => {
+  const pick = async (i) => {
     const r = results[i];
     if (!r) return;
     closePalette();
-    if (r.kind === 'relation') {
-      selectRelation(r.relation);
-    } else if (r.kind === 'doc') {
-      state.help = null;
-      state.doc = r.id;
-      renderSide();
-    } else {
-      await focusElement(r.id);
-    }
+    await choose(r);
   };
 
   input.addEventListener('input', paint);
@@ -1166,7 +1167,7 @@ function openPalette() {
       highlight();
     } else if (ev.key === 'Enter') {
       ev.preventDefault();
-      choose(active);
+      pick(active);
     } else if (ev.key === 'Escape') {
       ev.preventDefault();
       closePalette();
@@ -1180,6 +1181,42 @@ function openPalette() {
 function closePalette() {
   document.getElementById('app-palette')?.remove();
   state.palette = false;
+}
+
+/** Find anything in the model and go to it. */
+function openPalette() {
+  openPicker({
+    ariaLabel: 'Find in the model',
+    placeholder: 'Find an element, document or relation…',
+    footer: '↑↓ to move · Enter to open · Esc to close',
+    search: (q) => searchModel(effectiveSnapshot(), q),
+    choose: async (r) => {
+      if (r.kind === 'relation') {
+        selectRelation(r.relation);
+      } else if (r.kind === 'doc') {
+        state.help = null;
+        state.doc = r.id;
+        renderSide();
+      } else {
+        await focusElement(r.id);
+      }
+    },
+  });
+}
+
+/**
+ * Choose an element by name. This is what replaces hunting for two boxes on the
+ * canvas: `search.js` has ranked every element since 0.7.0, and until now only
+ * the palette could ask it.
+ */
+function pickElement({ ariaLabel, placeholder, exclude = [], onPick }) {
+  openPicker({
+    ariaLabel,
+    placeholder,
+    footer: '↑↓ to move · Enter to choose · Esc to cancel',
+    search: (q) => searchElements(effectiveSnapshot(), q, exclude),
+    choose: (r) => onPick(r.id),
+  });
 }
 
 // ---- panel resize (design-system contract: JS writes --panel-*-w) -----------
@@ -1665,15 +1702,26 @@ function renderSide() {
   }
   html += canEdit() ? propertiesHtml(el) : readOnlyProperties(el);
 
-  if (rels.length) {
+  if (rels.length || canEdit()) {
     html += `<div class="insp-section">Relations</div>`;
     for (const r of rels) {
       const out = r.from === id;
-      const arrow = r.direction === 'both' ? '↔' : out ? '→' : '←';
+      const arrow = r.direction === 'both' ? '↔' : r.direction === 'none' ? '—' : out ? '→' : '←';
       const other = out ? r.to : r.from;
-      html += `<div class="insp-rel">${arrow} ${esc(nameOf(other))}` +
+      // A row opens the relation's own inspector, where its fields are. Until
+      // now the only way to reach one was to find and click its edge on the
+      // canvas, which is the same hunt this release is removing elsewhere.
+      html += `<button class="insp-rel" data-rel="${esc(JSON.stringify({ from: r.from, to: r.to, label: r.label ?? null }))}">` +
+        `${arrow} ${esc(nameOf(other))}` +
         (r.label ? ` <span class="text-muted">· ${esc(r.label)}</span>` : '') +
-        (r.protocol ? ` <span class="proto">[${esc(r.protocol)}]</span>` : '') + `</div>`;
+        (r.protocol ? ` <span class="proto">[${esc(r.protocol)}]</span>` : '') + `</button>`;
+    }
+    if (!rels.length) {
+      html += `<span class="text-muted" style="font-size:var(--text-sm)">None yet.</span>`;
+    }
+    if (canEdit()) {
+      html += `<div class="insp-actions">
+        <button class="btn btn-secondary" id="insp-connect">Add a relation…</button></div>`;
     }
   }
 
@@ -1692,6 +1740,20 @@ function renderSide() {
   for (const btn of els.sideBody.querySelectorAll('[data-doc]')) {
     btn.addEventListener('click', () => { state.doc = btn.dataset.doc; renderSide(); });
   }
+  for (const btn of els.sideBody.querySelectorAll('[data-rel]')) {
+    btn.addEventListener('click', () => selectRelation(JSON.parse(btn.dataset.rel)));
+  }
+  // Connect mode asks you to find the other box on the canvas, which is fine
+  // when you can see it and useless when you cannot. Same dialog, same
+  // operation — the target is named instead of hunted.
+  document.getElementById('insp-connect')?.addEventListener('click', () => {
+    pickElement({
+      ariaLabel: 'Choose what to connect to',
+      placeholder: 'Connect to…',
+      exclude: [id],
+      onPick: (toId) => { state.connectFrom = id; finishConnect(toId); },
+    });
+  });
   for (const btn of els.sideBody.querySelectorAll('[data-editfile]')) {
     btn.addEventListener('click', () => invoke('open_in_editor', { rel: btn.dataset.editfile }).catch(() => {}));
   }
@@ -3019,37 +3081,90 @@ function renderRelationSide() {
   els.sideTitle.textContent = '';
   els.sideBack.hidden = true;
   const editable = canEdit();
+  const snapRel = relOf(r);
+  const direction = snapRel?.direction ?? 'forward';
+  const endpoint = (end, id) => `<div class="insp-field">
+    <label for="rel-${end}">${end === 'from' ? 'From' : 'To'}</label>
+    ${editable
+      ? `<button class="btn btn-secondary insp-endpoint" id="rel-${end}" data-end="${end}">
+           ${esc(shortName(id))}<span class="text-muted"> · change…</span></button>`
+      : `<span class="insp-desc">${esc(shortName(id))}</span>`}
+    <span class="insp-hint" style="font-family:var(--font-mono)">${esc(id)}</span>
+  </div>`;
+
   els.sideBody.innerHTML = `<div class="insp">
     <span class="insp-kicker">Relation</span>
     <span class="insp-title">${esc(shortName(r.from))} → ${esc(shortName(r.to))}</span>
     <span style="font-family:var(--font-mono);font-size:var(--text-2xs)" class="text-muted">${esc(r.from)} → ${esc(r.to)}</span>
+    <div class="insp-section">Endpoints</div>
+    ${endpoint('from', r.from)}
+    ${endpoint('to', r.to)}
+    ${editable ? '<div class="insp-actions"><button class="btn btn-secondary" id="rel-reverse">Reverse the arrow</button></div>' : ''}
     <div class="insp-section">Label</div>
     <input class="input" id="rel-label" aria-label="Relation label" value="${esc(r.label ?? '')}" ${editable ? '' : 'disabled'}>
     <div class="insp-section">Protocol</div>
     <input class="input" id="rel-proto" aria-label="Relation protocol" value="${esc(relProtocol(r) ?? '')}" ${editable ? '' : 'disabled'}>
+    <div class="insp-section">Direction</div>
+    <select class="input" id="rel-direction" aria-label="Relation direction" ${editable ? '' : 'disabled'}>
+      <option value="forward"${direction === 'forward' ? ' selected' : ''}>Forward (default)</option>
+      <option value="both"${direction === 'both' ? ' selected' : ''}>Both</option>
+      <option value="none"${direction === 'none' ? ' selected' : ''}>None</option>
+    </select>
+    <span class="insp-hint">The arrow is the dependency, not the flow of data.</span>
     ${r.unbacked ? `<div class="insp-section">Drift</div>
       <p class="insp-desc">Declared, and no code reference supports it. Our own
         model got this wrong once: the dependency ran the other way and the
-        relation had been written as a data flow.</p>
-      ${editable ? '<div class="insp-actions"><button class="btn btn-secondary" id="rel-reverse">Reverse it</button></div>' : ''}` : ''}
+        relation had been written as a data flow — <em>Reverse the arrow</em>
+        above is the usual repair.</p>` : ''}
     ${editable ? '<div class="insp-section"></div><button class="btn btn-danger" id="rel-delete">Delete relation</button>' : ''}
   </div>`;
   if (!editable) return;
+
+  const set = (field, value) =>
+    applyOp({ op: 'set-relation-field', from: r.from, to: r.to, label: r.label ?? null, field, value });
+
   const commit = (field) => async (ev) => {
     const value = ev.target.value.trim();
-    await applyOp({ op: 'set-relation-field', from: r.from, to: r.to, label: r.label ?? null, field, value });
+    await set(field, value);
     if (field === 'label') state.selectedRel.label = value || null;
   };
   document.getElementById('rel-label').addEventListener('change', commit('label'));
   document.getElementById('rel-proto').addEventListener('change', commit('protocol'));
-  // One transaction, so one undo puts the relation back the way it was — and
-  // the label and protocol ride across rather than being retyped.
+  document.getElementById('rel-direction').addEventListener('change', commit('direction'));
+
+  // Re-pointing is a splice of the one value, so the label, the protocol, the
+  // direction and the relation's place in the file all stay put — which is
+  // what made this worth an operation rather than a delete and a retype.
+  for (const btn of els.sideBody.querySelectorAll('.insp-endpoint')) {
+    btn.addEventListener('click', () => {
+      const end = btn.dataset.end;
+      const other = end === 'from' ? r.to : r.from;
+      pickElement({
+        ariaLabel: `Choose the ${end === 'from' ? 'source' : 'target'} of this relation`,
+        placeholder: 'Point it at…',
+        // The far end would make the relation point at itself; the engine
+        // refuses that, so the picker does not offer it.
+        exclude: [other],
+        onPick: async (id) => {
+          const ok = await set(end, id);
+          if (ok) {
+            state.selectedRel = end === 'from'
+              ? { from: id, to: r.to, label: r.label ?? null }
+              : { from: r.from, to: id, label: r.label ?? null };
+            renderSide();
+          }
+        },
+      });
+    });
+  }
+
+  // One operation now, not a delete and an add: a swap done an endpoint at a
+  // time would pass through pointing at itself, which is refused. Reaching for
+  // the pair is how 0.9.0's version came to drop `direction`.
   document.getElementById('rel-reverse')?.addEventListener('click', async () => {
-    const protocol = relProtocol(r) ?? null;
-    const ok = await applyOps([
-      { op: 'delete-relation', from: r.from, to: r.to, label: r.label ?? null },
-      { op: 'add-relation', from: r.to, to: r.from, label: r.label ?? null, protocol },
-    ]);
+    const ok = await applyOp({
+      op: 'reverse-relation', from: r.from, to: r.to, label: r.label ?? null,
+    });
     if (ok) { state.selectedRel = { from: r.to, to: r.from, label: r.label ?? null }; renderSide(); }
   });
   document.getElementById('rel-delete').addEventListener('click', async () => {
@@ -3063,9 +3178,15 @@ function shortName(id) {
   return snap.elements.find((e) => e.id === id)?.name ?? id;
 }
 
+/** The selected edge's row in the snapshot — where its fields actually live. */
+function relOf(r) {
+  return effectiveSnapshot().relations.find(
+    (x) => x.from === r.from && x.to === r.to && x.label === r.label
+  );
+}
+
 function relProtocol(r) {
-  const snap = effectiveSnapshot();
-  return snap.relations.find((x) => x.from === r.from && x.to === r.to && x.label === r.label)?.protocol;
+  return relOf(r)?.protocol;
 }
 
 // ---- share (phase 4) --------------------------------------------------------

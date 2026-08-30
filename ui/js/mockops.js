@@ -52,6 +52,14 @@ export function applyMockOperation(snap, op) {
       && (op.label == null || r.label === op.label));
     if (!r) throw new Error('unknown relation');
     [r.from, r.to] = [r.to, r.from];
+    // The engine recomputes drift from the facts, where reversing a relation
+    // the code contradicts is exactly what makes both findings go away: the
+    // declaration nothing backed is gone, and the dependency nothing declared
+    // is now declared. The delete-and-add pair got this by accident, one half
+    // from each operation; one operation has to say it.
+    snap.drift = (snap.drift ?? []).filter((d) =>
+      !(d.kind === 'unbacked' && d.from === op.from && d.to === op.to)
+      && !(d.kind === 'undeclared' && d.from === op.to && d.to === op.from));
   } else if (op.op === 'set-relation-field') {
     // Label disambiguates a pair with several relations, exactly as
     // `find_relation` does — matching on the pair alone would edit whichever

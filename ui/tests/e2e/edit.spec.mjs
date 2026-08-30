@@ -520,3 +520,109 @@ test('drift is not drawn over a diff, where it would be about another tree', asy
   await expect(page.locator('#edges path.edge.is-drift')).toHaveCount(0);
   expect(page.errors).toEqual([]);
 });
+
+// ---- relation repair (0.11.0 item 5) ---------------------------------------
+//
+// Everything about a relation except its label and protocol used to be
+// delete-and-retype. These drive the surfaces; that the file keeps its comments
+// and its ordering through each one is the Rust suite's job (tests/relations.rs).
+
+/** Open a relation's inspector from the element that has it, which is the new
+ *  way in — before this the only route was finding its edge on the canvas. */
+const openRelationFrom = async (page, elementName, relText) => {
+  await node(page, elementName).first().click();
+  await page.locator('.insp-rel', { hasText: relText }).first().click();
+  await expect(page.locator('#side-body')).toContainText('Endpoints');
+};
+
+test('a relation opens from the element that has it', async ({ page }) => {
+  await node(page, 'Blastradius').dblclick();
+  await node(page, 'Core').first().dblclick();
+  await node(page, 'Exporter').first().click();
+  // The rows are buttons now, and each lands on the relation's own inspector.
+  const row = page.locator('.insp-rel').first();
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page.locator('#side-body')).toContainText('Relation');
+  await expect(page.locator('#rel-from')).toBeVisible();
+  await expect(page.locator('#rel-to')).toBeVisible();
+  expect(page.errors).toEqual([]);
+});
+
+test('direction is a control, not a field only a text editor can reach', async ({ page }) => {
+  await page.goto('/index.html?nogit&drift');
+  await expect(page.locator('#nodes .node')).not.toHaveCount(0);
+  await node(page, 'Blastradius').dblclick();
+  await node(page, 'Core').first().dblclick();
+  await edgeHit(page, 'blastradius.core.exporter', 'blastradius.core.model-service')
+    .dispatchEvent('click');
+
+  const direction = page.locator('#rel-direction');
+  await expect(direction).toHaveValue('forward');
+  await direction.selectOption('both');
+  // The arrow the model draws follows the field: the element's own list says so.
+  await node(page, 'Exporter').first().click();
+  await expect(page.locator('.insp-rel', { hasText: 'Model Service' })).toHaveText(/^↔/);
+  await page.locator('#undo-btn').click();
+  await node(page, 'Exporter').first().click();
+  await expect(page.locator('.insp-rel', { hasText: 'Model Service' })).toHaveText(/^→/);
+  expect(page.errors).toEqual([]);
+});
+
+test('an endpoint is re-pointed by name, and the rest of the relation stays', async ({ page }) => {
+  await page.goto('/index.html?nogit&drift');
+  await expect(page.locator('#nodes .node')).not.toHaveCount(0);
+  await node(page, 'Blastradius').dblclick();
+  await node(page, 'Core').first().dblclick();
+  await edgeHit(page, 'blastradius.core.exporter', 'blastradius.core.model-service')
+    .dispatchEvent('click');
+
+  // Give it a protocol first, so there is something to lose.
+  await page.locator('#rel-proto').fill('in-process');
+  await page.locator('#rel-proto').press('Enter');
+  await expect(page.locator('#side-body')).toContainText('Endpoints');
+
+  await page.locator('#rel-to').click();
+  await page.locator('#palette-q').fill('git service');
+  await page.locator('.palette-row', { hasText: 'Git Service' }).first().click();
+
+  // The endpoint moved. The protocol — and the label with it — did not.
+  await expect(page.locator('#side-body')).toContainText('Git Service');
+  await expect(page.locator('#rel-proto')).toHaveValue('in-process');
+  expect(page.errors).toEqual([]);
+});
+
+test('the picker will not offer the endpoint that would point a relation at itself', async ({ page }) => {
+  await page.goto('/index.html?nogit&drift');
+  await expect(page.locator('#nodes .node')).not.toHaveCount(0);
+  await node(page, 'Blastradius').dblclick();
+  await node(page, 'Core').first().dblclick();
+  await edgeHit(page, 'blastradius.core.exporter', 'blastradius.core.model-service')
+    .dispatchEvent('click');
+
+  await page.locator('#rel-to').click();
+  await page.locator('#palette-q').fill('exporter');
+  // `from` is the Exporter, so it is absent from the list of things `to` may
+  // become — the engine refuses that relation, so the picker never offers it.
+  await expect(page.locator('.palette-row', { hasText: 'Exporter' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  expect(page.errors).toEqual([]);
+});
+
+test('a relation is added from the inspector without hunting for the other box', async ({ page }) => {
+  await node(page, 'Blastradius').dblclick();
+  await node(page, 'Core').first().dblclick();
+  await node(page, 'Exporter').first().click();
+  const before = await page.locator('.insp-rel').count();
+
+  await page.locator('#insp-connect').click();
+  await page.locator('#palette-q').fill('model service');
+  await page.locator('.palette-row', { hasText: 'Model Service' }).first().click();
+  await page.locator('#dlg-label').fill('shells out to');
+  await page.locator('#dlg-ok').click();
+
+  await node(page, 'Exporter').first().click();
+  await expect(page.locator('.insp-rel')).toHaveCount(before + 1);
+  await expect(page.locator('.insp-rel', { hasText: 'shells out to' })).toBeVisible();
+  expect(page.errors).toEqual([]);
+});

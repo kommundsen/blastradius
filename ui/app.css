@@ -72,8 +72,17 @@ body { margin: 0; overflow: hidden; }
 .insp-section { margin-top: var(--space-2); font-size: var(--text-2xs);
   letter-spacing: var(--tracking-label); text-transform: uppercase; font-weight: 600;
   color: var(--color-text-muted); }
-.insp-rel { font-size: var(--text-sm); padding: 2px 0; }
+/* A row, not a control that looks like one: the button is there so a relation
+   can be opened from the element that has it, and it must read as the line of
+   text it was before it became clickable. */
+.insp-rel { font-size: var(--text-sm); padding: 2px 0; display: block; width: 100%;
+  text-align: left; font-family: inherit; background: none; border: 0; cursor: pointer;
+  color: inherit; }
+.insp-rel:hover { text-decoration: underline; text-underline-offset: 3px; }
 .insp-rel .proto { color: var(--color-text-muted); font-size: var(--text-xs); }
+/* The endpoint picker sits in a field, so it fills it rather than shrinking to
+   its label the way a button otherwise would. */
+.insp-endpoint { width: 100%; text-align: left; }
 .doc-link { display: flex; align-items: center; gap: var(--space-2);
   width: 100%; text-align: left; font: inherit; font-size: var(--text-sm);
   padding: var(--row-py) 0; background: none; border: 0; cursor: pointer;

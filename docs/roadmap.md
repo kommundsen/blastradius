@@ -1842,7 +1842,7 @@ difference between a report and a workflow. *Draft exit*: every finding in the
 panel is actionable without leaving it, asserted in e2e against seeded drift of
 both kinds.
 
-### 5 — in progress: relation repair
+### 5 — shipped 2026-08-30: relation repair
 
 **Found on the first read, 2026-08-30**: 0.9.0's *Reverse it* is a UI-level
 `delete-relation` + `add-relation` pair (`ui/js/app.js`), carrying label and
@@ -1861,6 +1861,62 @@ rebases onto that, which fixes the `direction` loss above rather than leaving
 it. The hard case is named up front: relations live in the `from` element's
 file, so re-pointing `from` can move a relation between files, and that gets
 its own test rather than being discovered later.
+
+*Exit met.* `set-relation-field` covers `direction`, an endpoint moves without
+losing the rest, and a relation can be added from the inspector by search —
+with 0.10.0's contract gate keeping the mock honest, which it did on the first
+new operation.
+
+**What shipped, engine side.** `direction`, `from` and `to` are fields of
+`set-relation-field`, each an in-place splice of one value: nothing else on the
+item is read or rewritten, which is how the label, the protocol, the other
+endpoint, the relation's place in the list and any comment on it survive — not
+by remembering to copy them. `direction: forward` and an emptied
+`label`/`protocol` remove the key rather than writing a default or a blank,
+which is what `SetField` and `SetViewFlag` have always done and what this had
+not.
+
+**Reversal became its own operation.** A swap done one endpoint at a time
+passes through the state where both endpoints name the same element, which is
+refused — and that collision is exactly why 0.9.0 reached for delete-and-add,
+and therefore why it dropped `direction`. One operation, one splice pair, one
+undo, everything kept.
+
+**Two bugs fell out, neither about endpoints.** Field edits had *never* worked
+on a nested relation: the splice looked for a `relations:` key at the document
+root, so every relation under a container or a deployment environment answered
+"no relations section" — the inspector's label and protocol boxes were inert on
+the whole deployment model. And an aligned trailing comment lost its column on
+any value edit, collapsing its padding to one space; a hand-aligned column came
+apart one edit at a time. Both fixed by anchoring the splice on the item's line,
+which the parser already records.
+
+**The hard case named at the decision turned out not to exist.**
+`Workspace::resolve` tries the absolute form first, so a cross-system endpoint
+is legal in the file the relation already sits in and nothing has to move
+between files. Endpoints are written scope-relative where that resolves and
+absolute otherwise, and the candidate is checked by resolving it back rather
+than assumed from the scope, so the splice cannot write a dangling reference.
+
+**What shipped, on screen.** The relation inspector gained an Endpoints section
+where either end is re-pointed by name, a Direction control, and *Reverse the
+arrow* — now always available rather than only beside a drift finding, since
+the reason to reverse is not always drift. The element inspector's relation
+rows became buttons that open the relation, and it gained *Add a relation…*,
+which names the other element instead of hunting for its box: `search.js` has
+ranked every element since 0.7.0 and only the palette could ask it. The palette
+itself is now one `openPicker`, so the find-anything overlay and the endpoint
+picker share one set of keyboard rules rather than two copies drifting apart.
+
+18 Rust tests, each a byte comparison against the fixture with one substring
+changed, because "nothing else moved" is the claim; 5 new e2e; 108 e2e green
+in WebKit including the a11y scans over the changed inspector.
+
+**Deliberately not done**: the picker excludes the far endpoint, because the
+engine refuses a relation pointing at itself, but it does not exclude an
+endpoint that would produce a duplicate relation — that is a validate warning
+with a line number, and hiding the choice would be a worse answer than the
+warning already given.
 
 **5 — Relation repair (E, carried twice).** The thing modelling most punishes.
 0.9.0's *Reverse it* covers the one case drift can prove; everything else about

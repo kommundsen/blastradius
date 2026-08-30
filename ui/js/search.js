@@ -141,6 +141,38 @@ export function searchModel(snapshot, query, limit = 25) {
     .map((x) => x.r);
 }
 
+/**
+ * Elements a relation may point at, ranked for a picker.
+ *
+ * Not `searchModel` with a filter over the top. An empty query there answers
+ * with the context altitude, which is the right opening for "find me
+ * something" and the wrong one for "which box does this edge end at" — an
+ * endpoint is usually a container or a component, and those are exactly what
+ * that opening leaves out. Derived (L4) elements are absent because the engine
+ * refuses a relation aimed at one, and offering what will be refused is worse
+ * than not offering it.
+ *
+ * `exclude` takes the ids that would make the relation meaningless: the
+ * endpoint being replaced is fine to re-choose, the other one is not.
+ */
+export function searchElements(snapshot, query, exclude = [], limit = 25) {
+  const skip = new Set(exclude);
+  const q = (query ?? '').trim().toLowerCase();
+  const index = searchIndex(snapshot).filter((r) => r.kind === 'element' && !skip.has(r.id));
+  if (!q) return index.slice().sort((a, b) => a.id.localeCompare(b.id)).slice(0, limit);
+  return index
+    .map((r) => ({ r, score: rank(q, r.match) }))
+    .filter((x) => x.score !== null)
+    .sort(
+      (a, b) =>
+        a.score - b.score ||
+        a.r.title.localeCompare(b.r.title) ||
+        a.r.id.localeCompare(b.r.id)
+    )
+    .slice(0, limit)
+    .map((x) => x.r);
+}
+
 /** Where a result lives, for the callers that have to navigate to it: the
  * derived graph an L4 hit belongs to, or null. */
 export function graphOf(snapshot, result) {
